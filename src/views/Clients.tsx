@@ -43,10 +43,10 @@ const Clients = () => {
   };
 
   return (
-    <div className='space-y-6'>
-      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+    <div className='space-y-4 sm:space-y-6'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='font-display text-2xl font-bold md:text-3xl'>Clients</h1>
+          <h1 className='font-display text-xl font-bold sm:text-2xl md:text-3xl'>Clients</h1>
           <p className='text-sm text-muted-foreground'>Manage your client base</p>
         </div>
         <div className='relative w-full sm:w-72'>
@@ -64,7 +64,7 @@ const Clients = () => {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className='pb-3 sm:pb-6'>
           <CardTitle className='flex items-center gap-2 text-base'>
             <Users size={18} className='text-primary' />
             All Clients ({loading ? '...' : filtered.length})
@@ -101,7 +101,7 @@ const Clients = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className='flex flex-col gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between'
+                  className='flex flex-col gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:p-4'
                 >
                   <div className='flex items-center gap-3'>
                     <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
@@ -115,7 +115,7 @@ const Clients = () => {
                       <p className='truncate text-sm text-muted-foreground'>{client.email}</p>
                     </div>
                   </div>
-                  <div className='flex items-center justify-between gap-4 sm:justify-end'>
+                  <div className='flex items-center justify-between gap-3 sm:justify-end sm:gap-4'>
                     <span className='font-display text-sm font-semibold'>
                       ${client.price.toLocaleString()}
                     </span>

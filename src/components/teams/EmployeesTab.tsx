@@ -78,7 +78,7 @@ const EmployeesTab = () => {
   return (
     <div className='mt-4 space-y-4'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-        <div className='relative max-w-xs flex-1'>
+        <div className='relative w-full flex-1 sm:max-w-xs'>
           <Search
             size={16}
             className='absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground'
@@ -115,11 +115,11 @@ const EmployeesTab = () => {
                       .map((n) => n[0])
                       .join('')}
                   </div>
-                  <div>
+                  <div className='min-w-0'>
                     <p className='font-medium'>{emp.fullName}</p>
                     <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
                       <span className='flex items-center gap-1'>
-                        <Mail size={12} /> {emp.email}
+                        <Mail size={12} /> <span className='truncate'>{emp.email}</span>
                       </span>
                       <span className='flex items-center gap-1'>
                         <Phone size={12} /> {emp.phone}
@@ -175,7 +175,7 @@ const EmployeesTab = () => {
 
       {/* Add Employee Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>Add New Employee</DialogTitle>
           </DialogHeader>
@@ -238,7 +238,7 @@ const EmployeesTab = () => {
 
       {/* Employee Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={(open) => !open && setShowDetail(null)}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Employee Details</DialogTitle>
           </DialogHeader>
@@ -256,7 +256,7 @@ const EmployeesTab = () => {
                   <Badge variant='outline'>{showDetail.role}</Badge>
                 </div>
               </div>
-              <div className='grid grid-cols-2 gap-3 rounded-lg border border-border p-4'>
+              <div className='grid grid-cols-1 gap-3 rounded-lg border border-border p-4 sm:grid-cols-2'>
                 <div>
                   <p className='text-xs text-muted-foreground'>Email</p>
                   <p className='text-sm font-medium'>{showDetail.email}</p>

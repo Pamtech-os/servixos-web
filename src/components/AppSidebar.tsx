@@ -157,8 +157,9 @@ const AppSidebar = () => {
       <div className='fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b border-border bg-card px-3 py-2.5 md:hidden'>
         <SidebarLogo compact />
         <button
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
           onClick={toggleMobileSidebar}
-          className='rounded-lg p-1.5 text-foreground'
+          className='rounded-lg border border-border bg-muted/60 p-1.5 text-foreground shadow-sm'
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>

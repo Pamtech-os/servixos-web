@@ -158,10 +158,10 @@ const AIAdvisor = () => {
   const showWelcome = messages.length === 0 && !isTyping;
 
   return (
-    <div className='flex h-full max-h-[70vh] min-h-0 flex-col overflow-hidden'>
+    <div className='flex h-full min-h-0 flex-col overflow-hidden'>
       {/* Header */}
-      <div className='mb-3 shrink-0'>
-        <h1 className='font-display text-xl font-bold md:text-2xl flex items-center gap-2'>
+      <div className='mb-2 shrink-0 sm:mb-3'>
+        <h1 className='font-display flex items-center gap-2 text-xl font-bold md:text-2xl'>
           <Bot size={24} className='text-primary' />
           AI Business Advisor
         </h1>
@@ -172,34 +172,36 @@ const AIAdvisor = () => {
 
       {/* Chat area */}
       <Card className='flex min-h-0 flex-1 flex-col overflow-hidden border-border'>
-        <div ref={scrollRef} className='flex-1 min-h-0 overflow-y-auto p-4 md:p-6'>
+        <div ref={scrollRef} className='min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-6'>
           {showWelcome && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className='flex h-full flex-col items-center justify-center text-center'
             >
-              <div className='mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-lg'>
+              <div className='mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-lg sm:mb-6 sm:h-16 sm:w-16'>
                 <Sparkles size={32} />
               </div>
-              <h2 className='mb-2 font-display text-xl font-bold'>How can I help your business?</h2>
-              <p className='mb-8 max-w-md text-sm text-muted-foreground'>
+              <h2 className='mb-2 font-display text-lg font-bold sm:text-xl'>
+                How can I help your business?
+              </h2>
+              <p className='mb-6 max-w-md text-xs text-muted-foreground sm:mb-8 sm:text-sm'>
                 Ask me about pricing, marketing strategies, or operations optimization. I will
                 analyze your business data and provide actionable insights.
               </p>
-              <div className='grid w-full max-w-lg gap-3 sm:grid-cols-3'>
+              <div className='grid w-full max-w-lg gap-2 sm:grid-cols-3 sm:gap-3'>
                 {quickTopics.map((topic) => (
                   <motion.button
                     key={topic.label}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
                     onClick={() => handleSend(topic.prompt)}
-                    className={`flex flex-col items-center gap-3 rounded-xl border border-border p-5 transition-all hover:shadow-md ${topic.bg}`}
+                    className={`flex items-center justify-start gap-3 rounded-xl border border-border p-3 text-left transition-all hover:shadow-md sm:flex-col sm:items-center sm:p-5 sm:text-center ${topic.bg}`}
                   >
                     <div
-                      className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${topic.color} text-primary-foreground`}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${topic.color} text-primary-foreground sm:h-11 sm:w-11`}
                     >
-                      <topic.icon size={22} />
+                      <topic.icon size={20} />
                     </div>
                     <span className={`text-sm font-semibold ${topic.textColor}`}>
                       {topic.label}
@@ -221,7 +223,7 @@ const AIAdvisor = () => {
                 className={`mb-4 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`flex max-w-[80%] gap-3 ${
+                  className={`flex max-w-[92%] gap-3 sm:max-w-[80%] ${
                     msg.role === 'user' ? 'flex-row-reverse' : ''
                   }`}
                 >
@@ -307,7 +309,7 @@ const AIAdvisor = () => {
         </div>
 
         {/* Input */}
-        <div className='border-t border-border p-4'>
+        <div className='border-t border-border p-3 sm:p-4'>
           {messages.length > 0 && (
             <div className='mb-3 flex flex-wrap gap-2'>
               {quickTopics.map((topic) => (

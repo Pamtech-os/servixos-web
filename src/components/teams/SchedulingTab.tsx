@@ -82,7 +82,7 @@ const SchedulingTab = () => {
 
   return (
     <div className='mt-4 space-y-4'>
-      <div className='flex items-center justify-between'>
+      <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
         <h3 className='font-display text-lg font-semibold'>Weekly Schedule</h3>
         <Button size='sm' className='gap-1.5' onClick={() => setShowAdd(true)}>
           <Plus size={14} /> Add Shift
@@ -91,7 +91,7 @@ const SchedulingTab = () => {
 
       <Card>
         <CardContent className='overflow-x-auto p-0'>
-          <div className='min-w-[900px]'>
+          <div className='min-w-[760px] sm:min-w-[900px]'>
             {/* Header */}
             <div className='grid grid-cols-8 border-b border-border'>
               <div className='border-r border-border p-3 text-xs font-semibold text-muted-foreground'>
@@ -147,7 +147,7 @@ const SchedulingTab = () => {
 
       {/* Add Shift Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>Add Shift</DialogTitle>
           </DialogHeader>
@@ -185,7 +185,7 @@ const SchedulingTab = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className='grid grid-cols-2 gap-3'>
+            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
               <div>
                 <Label>Start Time *</Label>
                 <Input
@@ -224,7 +224,7 @@ const SchedulingTab = () => {
 
       {/* Shift Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={(open) => !open && setShowDetail(null)}>
-        <DialogContent className='sm:max-w-sm'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-sm'>
           <DialogHeader>
             <DialogTitle>Shift Details</DialogTitle>
           </DialogHeader>
@@ -239,7 +239,7 @@ const SchedulingTab = () => {
                   <p className='text-xs text-muted-foreground'>Day</p>
                   <p className='font-medium'>{showDetail.day}</p>
                 </div>
-                <div className='flex gap-4'>
+                <div className='flex flex-col gap-2 sm:flex-row sm:gap-4'>
                   <div>
                     <p className='text-xs text-muted-foreground'>Start</p>
                     <p className='font-medium'>{showDetail.startTime}</p>

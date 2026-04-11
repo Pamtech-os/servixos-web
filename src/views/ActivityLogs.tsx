@@ -311,7 +311,7 @@ const ActivityLogs = () => {
 
       {/* Filters */}
       <div className='flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center'>
-        <div className='relative flex-1 max-w-sm'>
+        <div className='relative w-full sm:max-w-sm sm:flex-1'>
           <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
           <Input
             placeholder='Search logs...'
@@ -330,7 +330,7 @@ const ActivityLogs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[150px]'>
+          <SelectTrigger className='w-full sm:w-[150px]'>
             <SelectValue placeholder='All Categories' />
           </SelectTrigger>
           <SelectContent>
@@ -351,7 +351,7 @@ const ActivityLogs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[140px]'>
+          <SelectTrigger className='w-full sm:w-[140px]'>
             <SelectValue placeholder='All Roles' />
           </SelectTrigger>
           <SelectContent>
@@ -366,7 +366,7 @@ const ActivityLogs = () => {
             <Button
               variant='outline'
               className={cn(
-                'w-[160px] justify-start text-left font-normal',
+                'w-full justify-start text-left font-normal sm:w-[160px]',
                 !dateFilter && 'text-muted-foreground'
               )}
             >
@@ -391,6 +391,7 @@ const ActivityLogs = () => {
           <Button
             variant='ghost'
             size='sm'
+            className='self-start'
             onClick={() => {
               setDateFilter(undefined);
               setPage(1);
@@ -422,7 +423,46 @@ const ActivityLogs = () => {
             </div>
           ) : (
             <>
-              <div className='overflow-x-auto'>
+              <div className='space-y-3 md:hidden'>
+                {paginated.map((log, i) => {
+                  const config = categoryConfig[log.category];
+                  const Icon = config.icon;
+                  return (
+                    <motion.div
+                      key={log.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      className='rounded-lg border border-border p-3'
+                    >
+                      <div className='flex items-start justify-between gap-2'>
+                        <div className='min-w-0'>
+                          <p className='truncate text-sm font-medium'>{log.user}</p>
+                          <p className='mt-1 text-xs text-muted-foreground'>
+                            {format(new Date(log.timestamp), "MMM dd, yyyy 'at' hh:mm a")}
+                          </p>
+                        </div>
+                        <Badge variant='outline' className={roleColor(log.role)}>
+                          {log.role.charAt(0).toUpperCase() + log.role.slice(1)}
+                        </Badge>
+                      </div>
+                      <div className='mt-3 flex items-start gap-2'>
+                        <div className={cn('mt-0.5 rounded-md p-1.5', config.color.split(' ')[0])}>
+                          <Icon size={14} className={config.color.split(' ').slice(1).join(' ')} />
+                        </div>
+                        <p className='text-sm leading-snug'>{log.action}</p>
+                      </div>
+                      <div className='mt-3'>
+                        <Badge variant='outline' className={config.color}>
+                          {config.label}
+                        </Badge>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              <div className='hidden overflow-x-auto md:block'>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -480,12 +520,12 @@ const ActivityLogs = () => {
               </div>
 
               {/* Pagination */}
-              <div className='mt-4 flex items-center justify-between'>
+              <div className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                 <p className='text-xs text-muted-foreground'>
                   Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
                   {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
                 </p>
-                <div className='flex gap-1'>
+                <div className='flex gap-1 self-end sm:self-auto'>
                   <Button
                     size='icon'
                     variant='outline'

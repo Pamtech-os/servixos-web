@@ -83,7 +83,7 @@ const SubscriptionTab = () => {
   return (
     <div className='space-y-6'>
       {/* Billing toggle */}
-      <div className='flex items-center justify-center gap-3'>
+      <div className='flex flex-col items-center justify-center gap-2 md:gap-3'>
         <div className='flex items-center gap-3 rounded-full border border-border bg-muted/50 px-4 py-2'>
           <Label
             htmlFor='billing-toggle'
@@ -107,7 +107,7 @@ const SubscriptionTab = () => {
           <motion.p
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            className='text-sm font-medium text-primary'
+            className='text-center text-sm font-medium text-primary'
           >
             Save 20% with annual billing
           </motion.p>
@@ -115,7 +115,7 @@ const SubscriptionTab = () => {
       </div>
 
       {/* Plans grid */}
-      <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3'>
         {plans.map((plan, i) => {
           const isCurrent = plan.id === currentPlanId;
           const price = isYearly ? plan.yearlyPrice : plan.monthlyPrice;
@@ -142,7 +142,7 @@ const SubscriptionTab = () => {
                     </span>
                   </div>
                 )}
-                <CardContent className={`flex flex-col h-full p-6 ${plan.popular ? 'pt-10' : ''}`}>
+                <CardContent className={`flex h-full flex-col p-5 lg:p-6 ${plan.popular ? 'pt-10 lg:pt-10' : ''}`}>
                   <div className='flex-1 space-y-4'>
                     <div>
                       <h3 className='text-lg font-bold font-display'>{plan.name}</h3>
@@ -153,7 +153,7 @@ const SubscriptionTab = () => {
 
                     <div className='flex items-baseline gap-1'>
                       <span
-                        className={`font-display text-4xl font-bold ${
+                        className={`font-display text-3xl font-bold lg:text-4xl ${
                           plan.popular ? 'text-primary' : ''
                         }`}
                       >

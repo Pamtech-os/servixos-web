@@ -63,7 +63,7 @@ const CommunicationsTab = () => {
   return (
     <div className='mt-4 grid gap-6 lg:grid-cols-2'>
       {/* Team Chat */}
-      <Card className='flex flex-col h-[500px]'>
+      <Card className='flex h-[420px] flex-col sm:h-[500px]'>
         <CardHeader className='pb-3'>
           <CardTitle className='text-base'>Team Chat</CardTitle>
         </CardHeader>
@@ -121,12 +121,12 @@ const CommunicationsTab = () => {
 
       {/* Announcements */}
       <div className='space-y-4'>
-        <div className='flex items-center justify-between'>
+        <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
           <h3 className='font-display text-base font-semibold'>Announcements</h3>
           <Button
             size='sm'
             variant='outline'
-            className='gap-1.5'
+            className='w-full gap-1.5 sm:w-auto'
             onClick={() => setShowAnnouncement(true)}
           >
             <Plus size={14} /> New Announcement
@@ -147,7 +147,7 @@ const CommunicationsTab = () => {
                       <Megaphone size={14} className='text-primary' />
                     </div>
                     <div className='flex-1'>
-                      <div className='flex items-center justify-between'>
+                      <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
                         <p className='text-sm font-semibold'>{ann.title}</p>
                         <span className='text-[10px] text-muted-foreground'>{ann.createdAt}</span>
                       </div>
@@ -164,7 +164,7 @@ const CommunicationsTab = () => {
 
       {/* Create Announcement Dialog */}
       <Dialog open={showAnnouncement} onOpenChange={setShowAnnouncement}>
-        <DialogContent className='sm:max-w-md'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>New Announcement</DialogTitle>
           </DialogHeader>

@@ -19,17 +19,17 @@ const Teams = () => {
   };
 
   return (
-    <div className='space-y-6'>
-      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+    <div className='space-y-4 sm:space-y-6'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='font-display text-2xl font-bold'>Teams</h1>
+          <h1 className='font-display text-xl font-bold sm:text-2xl'>Teams</h1>
           <p className='text-sm text-muted-foreground'>
             Manage your team, schedules, tasks, and communications.
           </p>
         </div>
         <Button
           onClick={handleConferenceCall}
-          className='gap-2 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90'
+          className='w-full gap-2 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90 sm:w-auto'
         >
           <Video size={16} /> Conference Call
         </Button>
@@ -37,12 +37,22 @@ const Teams = () => {
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Tabs defaultValue='employees'>
-          <TabsList className='w-full flex-wrap justify-start'>
-            <TabsTrigger value='employees'>Employees</TabsTrigger>
-            <TabsTrigger value='scheduling'>Scheduling</TabsTrigger>
-            <TabsTrigger value='time-tracking'>Time Tracking</TabsTrigger>
-            <TabsTrigger value='tasks'>Tasks</TabsTrigger>
-            <TabsTrigger value='communications'>Communications</TabsTrigger>
+          <TabsList className='w-full justify-start overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden [scrollbar-width:none]'>
+            <TabsTrigger value='employees' className='shrink-0'>
+              Employees
+            </TabsTrigger>
+            <TabsTrigger value='scheduling' className='shrink-0'>
+              Scheduling
+            </TabsTrigger>
+            <TabsTrigger value='time-tracking' className='shrink-0'>
+              Time Tracking
+            </TabsTrigger>
+            <TabsTrigger value='tasks' className='shrink-0'>
+              Tasks
+            </TabsTrigger>
+            <TabsTrigger value='communications' className='shrink-0'>
+              Communications
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value='employees'>
