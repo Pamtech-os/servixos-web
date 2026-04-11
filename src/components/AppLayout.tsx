@@ -6,9 +6,12 @@ import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUiState } from '@/common/state/ui-context';
+import { cn } from '@/lib/utils';
 
 const AppLayout = ({ children }: PropsWithChildren) => {
   const { auth, isHydrated } = useAuth();
+  const { isAiSuggestionsOpen } = useUiState();
   const pathname = usePathname();
   const router = useRouter();
   const isAIAdvisorRoute = pathname === '/ai-advisor';
@@ -91,7 +94,12 @@ const AppLayout = ({ children }: PropsWithChildren) => {
             <AppHeader />
             <NewBusinessBanner />
             <main className='flex-1 overflow-hidden'>
-              <div className='mx-auto h-full min-h-0 w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8'>
+              <div
+                className={cn(
+                  'mx-auto h-full min-h-0 w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8',
+                  isAiSuggestionsOpen && 'xl:pr-[420px] 2xl:pr-[440px]'
+                )}
+              >
                 {children}
               </div>
             </main>
@@ -101,7 +109,14 @@ const AppLayout = ({ children }: PropsWithChildren) => {
             <AppHeader />
             <NewBusinessBanner />
             <main>
-              <div className='mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8'>{children}</div>
+              <div
+                className={cn(
+                  'mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8',
+                  isAiSuggestionsOpen && 'xl:pr-[420px] 2xl:pr-[440px]'
+                )}
+              >
+                {children}
+              </div>
             </main>
           </div>
         )}

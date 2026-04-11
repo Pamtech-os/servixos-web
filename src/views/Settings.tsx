@@ -102,17 +102,17 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue='business' className='space-y-6'>
-        <TabsList className='grid w-full grid-cols-4 lg:w-[520px]'>
-          <TabsTrigger value='business' className='gap-2'>
+        <TabsList className='flex h-auto w-full min-h-0 flex-nowrap justify-start gap-1 overflow-x-auto p-1 lg:w-[520px]'>
+          <TabsTrigger value='business' className='shrink-0 gap-1.5 px-3'>
             <Building2 size={16} /> Business
           </TabsTrigger>
-          <TabsTrigger value='notifications' className='gap-2'>
+          <TabsTrigger value='notifications' className='shrink-0 gap-1.5 px-3'>
             <Bell size={16} /> Notifications
           </TabsTrigger>
-          <TabsTrigger value='account' className='gap-2'>
+          <TabsTrigger value='account' className='shrink-0 gap-1.5 px-3'>
             <Shield size={16} /> Account
           </TabsTrigger>
-          <TabsTrigger value='subscription' className='gap-2'>
+          <TabsTrigger value='subscription' className='shrink-0 gap-1.5 px-3'>
             <CreditCard size={16} /> Subscription
           </TabsTrigger>
         </TabsList>
@@ -182,7 +182,9 @@ const Settings = () => {
                 />
               </div>
               <div className='flex justify-end'>
-                <Button onClick={handleBusinessSave}>Save Changes</Button>
+                <Button onClick={handleBusinessSave} className='w-full sm:w-auto'>
+                  Save Changes
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -196,7 +198,7 @@ const Settings = () => {
               <CardDescription>Choose which notifications you would like to receive.</CardDescription>
             </CardHeader>
             <CardContent className='space-y-6'>
-              <div className='flex items-center justify-between'>
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                 <div className='space-y-0.5'>
                   <Label>Email Notifications</Label>
                   <p className='text-sm text-muted-foreground'>
@@ -209,7 +211,7 @@ const Settings = () => {
                 />
               </div>
               <Separator />
-              <div className='flex items-center justify-between'>
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                 <div className='space-y-0.5'>
                   <Label>New Client Alert</Label>
                   <p className='text-sm text-muted-foreground'>
@@ -222,7 +224,7 @@ const Settings = () => {
                 />
               </div>
               <Separator />
-              <div className='flex items-center justify-between'>
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
                 <div className='space-y-0.5'>
                   <Label>Payment Alert</Label>
                   <p className='text-sm text-muted-foreground'>
@@ -235,7 +237,9 @@ const Settings = () => {
                 />
               </div>
               <div className='flex justify-end pt-4'>
-                <Button onClick={handleNotificationSave}>Save Preferences</Button>
+                <Button onClick={handleNotificationSave} className='w-full sm:w-auto'>
+                  Save Preferences
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -281,7 +285,9 @@ const Settings = () => {
                 </div>
               </div>
               <div className='flex justify-end'>
-                <Button onClick={handlePasswordUpdate}>Update Password</Button>
+                <Button onClick={handlePasswordUpdate} className='w-full sm:w-auto'>
+                  Update Password
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -294,7 +300,11 @@ const Settings = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant='destructive' onClick={() => setShowDeleteConfirm(true)}>
+              <Button
+                variant='destructive'
+                className='w-full sm:w-auto'
+                onClick={() => setShowDeleteConfirm(true)}
+              >
                 Delete Account
               </Button>
             </CardContent>
@@ -337,9 +347,10 @@ const Settings = () => {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className='flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
             <Button
               variant='outline'
+              className='w-full sm:w-auto'
               onClick={() => {
                 setShowPasswordConfirm(false);
                 setDeletePassword('');
@@ -347,7 +358,7 @@ const Settings = () => {
             >
               Cancel
             </Button>
-            <Button variant='destructive' onClick={handleFinalDelete}>
+            <Button variant='destructive' className='w-full sm:w-auto' onClick={handleFinalDelete}>
               Delete My Account
             </Button>
           </DialogFooter>

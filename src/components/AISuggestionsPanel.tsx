@@ -88,15 +88,25 @@ const AISuggestionsPanel = () => {
       {/* Panel */}
       <AnimatePresence>
         {isOpen && (
+          <>
+            <motion.button
+              type='button'
+              aria-label='Close AI suggestions panel'
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAiSuggestionsOpen(false)}
+              className='fixed inset-0 z-30 hidden bg-background/35 backdrop-blur-[1px] md:block xl:hidden'
+            />
             <motion.aside
-              initial={{ x: 340 }}
+              initial={{ x: 420 }}
               animate={{ x: 0 }}
-              exit={{ x: 340 }}
+              exit={{ x: 420 }}
               transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-              className='fixed right-0 top-0 z-40 hidden h-screen w-[88vw] max-w-[320px] border-l border-border bg-card shadow-2xl md:flex md:w-[320px] md:max-w-none'
+              className='fixed right-0 top-0 z-40 hidden h-screen w-[88vw] max-w-[360px] flex-col border-l border-border bg-card shadow-2xl md:flex md:w-[360px] md:max-w-none lg:w-[380px] xl:w-[400px] 2xl:w-[420px]'
             >
             {/* Header */}
-            <div className='flex items-center justify-between border-b border-border px-4 py-4'>
+            <div className='flex items-center justify-between border-b border-border px-3 py-3 md:px-4 md:py-4'>
               <div className='flex items-center gap-2'>
                 <Sparkles size={18} className='text-primary' />
                 <span className='font-display text-sm font-bold'>AI Suggestions</span>
@@ -115,7 +125,7 @@ const AISuggestionsPanel = () => {
             </div>
 
             {/* Suggestions list */}
-            <div className='flex-1 overflow-y-auto p-4 space-y-3'>
+            <div className='flex-1 space-y-3 overflow-y-auto p-3 md:p-4'>
               <AnimatePresence>
                 {suggestions.map((suggestion) => (
                   <motion.div
@@ -125,7 +135,7 @@ const AISuggestionsPanel = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
                     transition={{ type: 'spring', damping: 20 }}
-                    className='rounded-xl border border-border bg-background p-4 space-y-3'
+                    className='space-y-3 rounded-xl border border-border bg-background p-3 md:p-4'
                   >
                     <div className='flex items-start gap-3'>
                       <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10'>
@@ -133,7 +143,7 @@ const AISuggestionsPanel = () => {
                       </div>
                       <p className='text-sm leading-relaxed'>{suggestion.text}</p>
                     </div>
-                    <div className='flex items-center justify-between'>
+                    <div className='flex flex-wrap items-center justify-between gap-2'>
                       <span
                         className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${suggestion.tagColor}`}
                       >
@@ -169,7 +179,8 @@ const AISuggestionsPanel = () => {
                 </div>
               )}
             </div>
-          </motion.aside>
+            </motion.aside>
+          </>
         )}
       </AnimatePresence>
 

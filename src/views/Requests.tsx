@@ -499,7 +499,7 @@ const Requests = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className='flex flex-col gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between'
+                      className='flex flex-col gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-muted/30 lg:flex-row lg:items-center lg:justify-between'
                     >
                       <div className='flex-1 min-w-0'>
                         <div className='flex items-center gap-2 flex-wrap'>
@@ -519,11 +519,11 @@ const Requests = () => {
                         <p className='text-sm text-muted-foreground mt-0.5'>{req.service}</p>
                         <p className='text-xs text-muted-foreground mt-0.5'>{req.createdAt}</p>
                       </div>
-                      <div className='flex items-center gap-2'>
+                      <div className='flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end'>
                         <Button
                           variant='outline'
                           size='sm'
-                          className='gap-1.5'
+                          className='flex-1 gap-1.5 lg:flex-none'
                           onClick={() => openDetail(req)}
                         >
                           <Eye size={14} /> View
@@ -531,7 +531,7 @@ const Requests = () => {
                         <Button
                           variant='outline'
                           size='sm'
-                          className='gap-1.5 relative'
+                          className='relative flex-1 gap-1.5 lg:flex-none'
                           onClick={() => openChat(req)}
                         >
                           <MessageCircle size={14} /> Chat
@@ -545,7 +545,7 @@ const Requests = () => {
                           <>
                             <Button
                               size='sm'
-                              className='gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-primary-foreground'
+                              className='flex-1 gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 lg:flex-none'
                               onClick={() => {
                                 setSelectedRequest(req);
                                 setPricingValue(req.pricing?.toString() || '');
@@ -557,7 +557,7 @@ const Requests = () => {
                             <Button
                               variant='destructive'
                               size='sm'
-                              className='gap-1.5'
+                              className='flex-1 gap-1.5 lg:flex-none'
                               onClick={() =>
                                 setConfirmAction({ type: 'cancel', requestId: req.id })
                               }
@@ -577,11 +577,11 @@ const Requests = () => {
                 )}
               </div>
               {totalPages > 1 && (
-                <div className='mt-4 flex items-center justify-between'>
+                <div className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                   <p className='text-sm text-muted-foreground'>
                     Page {page} of {totalPages}
                   </p>
-                  <div className='flex gap-2'>
+                  <div className='flex gap-2 self-end sm:self-auto'>
                     <Button
                       variant='outline'
                       size='sm'
@@ -608,19 +608,19 @@ const Requests = () => {
 
       {/* Detail Dialog - without chat */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className='max-w-lg backdrop-blur-xl'>
+        <DialogContent className='max-h-[90vh] overflow-y-auto backdrop-blur-xl sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Request Details</DialogTitle>
           </DialogHeader>
           {selectedRequest && (
             <div className='space-y-4'>
-              <div className='grid grid-cols-2 gap-4'>
+              <div className='grid gap-4 sm:grid-cols-2'>
                 <div>
                   <p className='text-xs font-medium text-muted-foreground'>Client</p>
                   <p className='text-sm font-semibold'>{selectedRequest.clientName}</p>
                   <p className='text-xs text-muted-foreground'>{selectedRequest.clientEmail}</p>
                 </div>
-                <div className='flex gap-4'>
+                <div className='flex flex-wrap gap-4'>
                   <div>
                     <p className='text-xs font-medium text-muted-foreground'>Service</p>
                     <p className='text-sm font-semibold'>{selectedRequest.service}</p>
@@ -639,7 +639,7 @@ const Requests = () => {
 
               {/* Date Adjustment */}
               <div className='space-y-2'>
-                <div className='grid grid-cols-2 gap-2'>
+                <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
                   <div>
                     <p className='text-xs font-medium text-muted-foreground mb-1'>Start Date</p>
                     <Popover>
@@ -694,8 +694,8 @@ const Requests = () => {
 
               {/* Pricing */}
               <div className='rounded-lg border border-border p-3 space-y-2'>
-                <div className='flex items-center justify-between'>
-                  <p className='text-xs font-semibold flex items-center gap-1.5'>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <p className='flex items-center gap-1.5 text-xs font-semibold'>
                     <DollarSign size={14} className='text-primary' /> Pricing
                     {selectedRequest.status === 'pending' && (
                       <span className='text-destructive'>*</span>
@@ -750,11 +750,11 @@ const Requests = () => {
               </div>
 
               {/* Actions */}
-              <div className='flex gap-2'>
+              <div className='flex flex-col gap-2 sm:flex-row'>
                 {!isChatDisabled(selectedRequest) && (
                   <Button
                     variant='outline'
-                    className='flex-1 gap-1.5'
+                    className='w-full gap-1.5 sm:flex-1'
                     onClick={() => {
                       setDetailOpen(false);
                       openChat(selectedRequest);
@@ -766,7 +766,7 @@ const Requests = () => {
                 {selectedRequest.status === 'pending' && (
                   <>
                     <Button
-                      className='flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-primary-foreground'
+                      className='w-full gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 sm:flex-1'
                       onClick={() =>
                         setConfirmAction({ type: 'accept', requestId: selectedRequest.id })
                       }
@@ -775,7 +775,7 @@ const Requests = () => {
                     </Button>
                     <Button
                       variant='destructive'
-                      className='flex-1 gap-1.5'
+                      className='w-full gap-1.5 sm:flex-1'
                       onClick={() =>
                         setConfirmAction({ type: 'cancel', requestId: selectedRequest.id })
                       }

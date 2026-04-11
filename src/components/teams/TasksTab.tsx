@@ -246,7 +246,7 @@ const TasksTab = () => {
             Closed
           </Button>
         </div>
-        <Button size='sm' className='gap-1.5' onClick={() => setShowCreate(true)}>
+        <Button size='sm' className='w-full gap-1.5 sm:w-auto' onClick={() => setShowCreate(true)}>
           <Plus size={14} /> Create Task
         </Button>
       </div>
@@ -356,7 +356,7 @@ const TasksTab = () => {
 
       {/* Create Task Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Create Task</DialogTitle>
           </DialogHeader>
@@ -378,7 +378,7 @@ const TasksTab = () => {
                 rows={3}
               />
             </div>
-            <div className='grid grid-cols-2 gap-3'>
+            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
               <div>
                 <Label>Assignee *</Label>
                 <Select
@@ -415,7 +415,7 @@ const TasksTab = () => {
                 </Select>
               </div>
             </div>
-            <div className='grid grid-cols-2 gap-3'>
+            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
               <div>
                 <Label>Due Date</Label>
                 <Popover>
@@ -477,21 +477,21 @@ const TasksTab = () => {
 
       {/* Task Detail Dialog - ClickUp style two-column layout */}
       <Dialog open={!!showDetail} onOpenChange={(open) => !open && setShowDetail(null)}>
-        <DialogContent className='sm:max-w-4xl p-0 overflow-hidden h-[85vh] flex flex-col'>
+        <DialogContent className='flex h-[90dvh] max-w-[95vw] flex-col overflow-hidden p-0 sm:max-w-4xl'>
           {showDetail && (
             <>
-              <div className='flex items-center justify-between border-b border-border px-6 py-4'>
+              <div className='flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-4'>
                 <h2 className='text-base font-semibold'>task_details</h2>
               </div>
 
-              <div className='flex flex-1 overflow-hidden'>
+              <div className='flex flex-1 flex-col overflow-hidden lg:flex-row'>
                 {/* Left side - Task details */}
-                <div className='flex-1 overflow-y-auto p-6 space-y-5 border-r border-border'>
+                <div className='flex-1 space-y-5 overflow-y-auto border-b border-border p-4 lg:border-b-0 lg:border-r lg:p-6'>
                   <h3 className='text-xl font-bold'>{showDetail.title}</h3>
 
                   {/* Meta fields */}
                   <div className='rounded-lg border border-border p-4 space-y-3'>
-                    <div className='grid grid-cols-2 gap-4'>
+                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>stage</span>
                         <Select
@@ -523,7 +523,7 @@ const TasksTab = () => {
                         </div>
                       </div>
                     </div>
-                    <div className='grid grid-cols-2 gap-4'>
+                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>start_date</span>
                         <span className='flex items-center gap-1 text-sm'>
@@ -678,7 +678,7 @@ const TasksTab = () => {
                 </div>
 
                 {/* Right side - Activity / Comments timeline */}
-                <div className='w-[380px] flex flex-col bg-muted/20'>
+                <div className='flex h-[42dvh] flex-col bg-muted/20 lg:h-auto lg:w-[380px]'>
                   <div className='px-4 py-3 border-b border-border'>
                     <h4 className='text-sm font-bold'>activity</h4>
                   </div>

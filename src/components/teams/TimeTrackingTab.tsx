@@ -56,10 +56,10 @@ const TimeTrackingTab = () => {
                       {emp.clockHistory.slice(0, 3).map((record) => (
                         <div
                           key={record.id}
-                          className='flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs'
+                          className='flex flex-col gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between'
                         >
                           <span className='font-medium'>{record.date}</span>
-                          <div className='flex items-center gap-3'>
+                          <div className='flex flex-wrap items-center gap-2 sm:gap-3'>
                             <span className='flex items-center gap-1 text-emerald-600'>
                               <Clock size={10} /> {record.clockIn}
                             </span>

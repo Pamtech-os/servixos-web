@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, MousePointerClick, TrendingUp, Target, RefreshCw } from 'lucide-react';
+import { Eye, MousePointerClick, TrendingUp, Target } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -79,16 +78,13 @@ const Analytics = () => {
 
   return (
     <div className='space-y-6'>
-      <div className='flex items-center justify-between'>
+      <div>
         <div>
           <h1 className='font-display text-2xl font-bold md:text-3xl'>Analytics</h1>
           <p className='text-sm text-muted-foreground'>
             Track your website performance and traffic.
           </p>
         </div>
-        <Button variant='outline' size='sm' className='gap-2'>
-          <RefreshCw size={14} /> Refresh
-        </Button>
       </div>
 
       {/* Stat Cards */}

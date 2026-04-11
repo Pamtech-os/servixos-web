@@ -266,21 +266,21 @@ const Jobs = () => {
   };
 
   return (
-    <div className='space-y-6'>
+    <div className='space-y-4 sm:space-y-6'>
       {/* Header */}
-      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Jobs</h1>
+          <h1 className='text-xl font-bold tracking-tight sm:text-2xl'>Jobs</h1>
           <p className='text-sm text-muted-foreground'>Manage and track all jobs</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className='gap-2'>
+        <Button onClick={() => setCreateOpen(true)} className='w-full gap-2 sm:w-auto'>
           <Plus size={16} /> New Job
         </Button>
       </div>
 
       {/* Filters */}
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
-        <div className='relative flex-1 max-w-sm'>
+        <div className='relative w-full flex-1 sm:max-w-sm'>
           <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
           <Input
             placeholder='Search jobs...'
@@ -299,7 +299,7 @@ const Jobs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[180px]'>
+          <SelectTrigger className='w-full sm:w-[180px]'>
             <SelectValue placeholder='All Clients' />
           </SelectTrigger>
           <SelectContent>
@@ -318,7 +318,7 @@ const Jobs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[160px]'>
+          <SelectTrigger className='w-full sm:w-[160px]'>
             <SelectValue placeholder='All Statuses' />
           </SelectTrigger>
           <SelectContent>
@@ -338,45 +338,34 @@ const Jobs = () => {
           ))}
         </div>
       ) : (
-        <Card className='card-shadow overflow-hidden'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Title</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className='text-right'>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className='py-10 text-center text-muted-foreground'>
-                    <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' /> No jobs found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginated.map((job, i) => {
-                  const client = mockClients.find((c) => c.id === job.clientId);
-                  return (
-                    <motion.tr
-                      key={job.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.03 }}
-                      className='border-b transition-colors hover:bg-muted/50'
-                    >
-                      <TableCell className='font-medium'>{job.title}</TableCell>
-                      <TableCell>{client?.fullName ?? 'Unknown'}</TableCell>
-                      <TableCell>{job.date}</TableCell>
-                      <TableCell>
-                        <Badge variant='outline' className={statusColor(job.status)}>
-                          {statusLabel(job.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className='text-right'>
-                        <div className='flex justify-end gap-1'>
+        <>
+          <div className='space-y-3 md:hidden'>
+            {paginated.length === 0 ? (
+              <Card className='card-shadow p-6 text-center text-sm text-muted-foreground'>
+                <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' />
+                No jobs found.
+              </Card>
+            ) : (
+              paginated.map((job, i) => {
+                const client = mockClients.find((c) => c.id === job.clientId);
+                return (
+                  <motion.div
+                    key={job.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <Card className='card-shadow p-3'>
+                      <div className='space-y-2'>
+                        <div className='flex items-start justify-between gap-2'>
+                          <p className='text-sm font-medium leading-tight'>{job.title}</p>
+                          <Badge variant='outline' className={statusColor(job.status)}>
+                            {statusLabel(job.status)}
+                          </Badge>
+                        </div>
+                        <p className='text-xs text-muted-foreground'>{client?.fullName ?? 'Unknown'}</p>
+                        <p className='text-xs text-muted-foreground'>{job.date}</p>
+                        <div className='flex justify-end gap-1 pt-1'>
                           <Button variant='ghost' size='icon' onClick={() => setViewJob(job)}>
                             <Eye size={16} />
                           </Button>
@@ -389,15 +378,75 @@ const Jobs = () => {
                             <Trash2 size={16} />
                           </Button>
                         </div>
-                      </TableCell>
-                    </motion.tr>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                      </div>
+                    </Card>
+                  </motion.div>
+                );
+              })
+            )}
+          </div>
+
+          <Card className='card-shadow hidden overflow-hidden md:block'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job Title</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className='text-right'>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className='py-10 text-center text-muted-foreground'>
+                      <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' /> No jobs found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginated.map((job, i) => {
+                    const client = mockClients.find((c) => c.id === job.clientId);
+                    return (
+                      <motion.tr
+                        key={job.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className='border-b transition-colors hover:bg-muted/50'
+                      >
+                        <TableCell className='font-medium'>{job.title}</TableCell>
+                        <TableCell>{client?.fullName ?? 'Unknown'}</TableCell>
+                        <TableCell>{job.date}</TableCell>
+                        <TableCell>
+                          <Badge variant='outline' className={statusColor(job.status)}>
+                            {statusLabel(job.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className='text-right'>
+                          <div className='flex justify-end gap-1'>
+                            <Button variant='ghost' size='icon' onClick={() => setViewJob(job)}>
+                              <Eye size={16} />
+                            </Button>
+                            <Button
+                              variant='ghost'
+                              size='icon'
+                              onClick={() => setDeleteTarget(job)}
+                              className='text-destructive hover:text-destructive'
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </Card>
           {totalPages > 1 && (
-            <div className='flex items-center justify-between border-t px-4 py-3'>
+            <div className='flex items-center justify-between gap-2 border-t px-1 py-3 sm:px-2 md:rounded-b-lg md:border md:px-4'>
               <p className='text-sm text-muted-foreground'>
                 Page {page} of {totalPages}
               </p>
@@ -421,7 +470,7 @@ const Jobs = () => {
               </div>
             </div>
           )}
-        </Card>
+        </>
       )}
 
       {/* Delete modal */}
@@ -444,7 +493,7 @@ const Jobs = () => {
           if (!open) setViewJob(null);
         }}
       >
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Job Details</DialogTitle>
             <DialogDescription>View job information and take actions</DialogDescription>
@@ -594,7 +643,7 @@ const Jobs = () => {
         }}
       >
         <DialogContent
-          className='sm:max-w-2xl max-h-[85vh] flex flex-col'
+          className='flex max-h-[90dvh] flex-col sm:max-w-2xl'
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
@@ -637,7 +686,7 @@ const Jobs = () => {
           if (!open) resetForm();
         }}
       >
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Create New Job</DialogTitle>
             <DialogDescription>Fill in the details to create a new job</DialogDescription>
