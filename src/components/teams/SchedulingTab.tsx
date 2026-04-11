@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Clock } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Plus } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -24,18 +22,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { mockShifts, mockEmployees, days, timeSlots, Shift } from '@/lib/team-mock-data';
 import { toast } from 'sonner';
 
-const dayToIndex: Record<string, number> = {
-  Sunday: 0,
-  Monday: 1,
-  Tuesday: 2,
-  Wednesday: 3,
-  Thursday: 4,
-  Friday: 5,
-  Saturday: 6,
-};
-
 const parseTime = (t: string): number => {
-  const [h, m] = t.split(':').map(Number);
+  const [h] = t.split(':').map(Number);
   return h;
 };
 
@@ -120,8 +108,6 @@ const SchedulingTab = () => {
             </div>
             {/* Body */}
             {timeSlots.map((slot, slotIndex) => {
-              const hour =
-                parseInt(slot) + (slot.includes('PM') && !slot.startsWith('12') ? 12 : 0);
               const actualHour = slotIndex + 8;
               return (
                 <div key={slot} className='grid grid-cols-8 border-b border-border last:border-b-0'>

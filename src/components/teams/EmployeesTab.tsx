@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -11,7 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +36,7 @@ import { toast } from 'sonner';
 const PAGE_SIZE = 5;
 
 const EmployeesTab = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -279,7 +279,7 @@ const EmployeesTab = () => {
                 className='w-full'
                 onClick={() => {
                   setShowDetail(null);
-                  navigate(`/teams/clock-history/${showDetail.id}`);
+                  router.push(`/teams/clock-history/${showDetail.id}`);
                 }}
               >
                 View Clock History

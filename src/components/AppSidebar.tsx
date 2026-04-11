@@ -1,5 +1,7 @@
 import { useState, useEffect, memo } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import Image from 'next/image';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClock } from '@/contexts/ClockContext';
+import { useUiActions, useUiState } from '@/common/state/ui-context';
 import ConfirmModal from '@/components/ConfirmModal';
 import servixLogo from '@/assets/servix-logo.png';
 
@@ -44,21 +47,36 @@ const navItems = [
   { label: 'Settings', href: '/settings', icon: Settings },
 ];
 
+type SidebarLogoProps = {
+  compact?: boolean;
+};
+
 // Extracted as a stable component so the logo img element never unmounts
-const SidebarLogo = memo(() => (
-  <div className='flex items-center gap-2 px-4 py-5'>
-    <img src={servixLogo} alt='Servix OS' className='h-8 w-8' />
-    <span className='font-display text-lg font-bold'>Servix OS</span>
+const SidebarLogo = memo(({ compact = false }: SidebarLogoProps) => (
+  <div className={compact ? 'flex items-center gap-2' : 'flex items-center gap-2 px-4 py-5'}>
+    <Image
+      src={servixLogo}
+      alt='Servix OS'
+      width={compact ? 28 : 32}
+      height={compact ? 28 : 32}
+      className={compact ? 'h-7 w-7' : 'h-8 w-8'}
+    />
+    {compact ? (
+      <span className='font-display text-base font-bold max-[380px]:hidden'>Servix OS</span>
+    ) : (
+      <span className='font-display text-lg font-bold'>Servix OS</span>
+    )}
   </div>
 ));
 SidebarLogo.displayName = 'SidebarLogo';
 
 const AppSidebar = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const pathname = usePathname() ?? '';
+  const router = useRouter();
   const { logout } = useAuth();
   const { status } = useClock();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { isMobileSidebarOpen: mobileOpen } = useUiState();
+  const { setMobileSidebarOpen, toggleMobileSidebar } = useUiActions();
   const [dark, setDark] = useState(false);
   const [showClockWarning, setShowClockWarning] = useState(false);
 
@@ -88,7 +106,7 @@ const AppSidebar = () => {
       return;
     }
     logout();
-    navigate('/login');
+    router.push('/login');
   };
 
   return (
@@ -100,11 +118,11 @@ const AppSidebar = () => {
           <nav className='flex-1 space-y-1 overflow-y-auto px-3 py-4'>
             {navItems.map((item) => {
               const isActive =
-                location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+                pathname === item.href || pathname.startsWith(item.href + '/');
               return (
                 <Link
                   key={item.href}
-                  to={item.href}
+                  href={item.href}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-primary/10 text-primary'
@@ -136,11 +154,11 @@ const AppSidebar = () => {
       </aside>
 
       {/* Mobile header */}
-      <div className='fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden'>
-        <SidebarLogo />
+      <div className='fixed left-0 right-0 top-0 z-50 flex items-center justify-between border-b border-border bg-card px-3 py-2.5 md:hidden'>
+        <SidebarLogo compact />
         <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className='rounded-lg p-2 text-foreground'
+          onClick={toggleMobileSidebar}
+          className='rounded-lg p-1.5 text-foreground'
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -155,7 +173,7 @@ const AppSidebar = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className='fixed inset-0 z-50 bg-background/60 backdrop-blur-sm md:hidden'
-              onClick={() => setMobileOpen(false)}
+              onClick={() => setMobileSidebarOpen(false)}
             />
             <motion.aside
               initial={{ x: -260 }}
@@ -169,13 +187,12 @@ const AppSidebar = () => {
                 <nav className='flex-1 space-y-1 overflow-y-auto px-3 py-4'>
                   {navItems.map((item) => {
                     const isActive =
-                      location.pathname === item.href ||
-                      location.pathname.startsWith(item.href + '/');
+                      pathname === item.href || pathname.startsWith(item.href + '/');
                     return (
                       <Link
                         key={item.href}
-                        to={item.href}
-                        onClick={() => setMobileOpen(false)}
+                        href={item.href}
+                        onClick={() => setMobileSidebarOpen(false)}
                         className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                           isActive
                             ? 'bg-primary/10 text-primary'

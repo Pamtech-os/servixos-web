@@ -1,6 +1,6 @@
-import { useState, useRef, DragEvent } from 'react';
+import { useState, type DragEvent } from 'react';
 import { format, parse } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Plus,
   MessageSquare,
@@ -13,7 +13,6 @@ import {
   Paperclip,
   Smile,
   MoreHorizontal,
-  User,
   CalendarIcon,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,7 +38,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -193,19 +191,9 @@ const TasksTab = () => {
     setNewSubtask('');
   };
 
-  const toggleTaskStatus = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId ? { ...t, status: t.status === 'active' ? 'closed' : 'active' } : t
-      )
-    );
-    toast.success('Task status updated.');
-  };
-
   // Drag and drop handlers
-  const handleDragStart = (e: DragEvent, taskId: string) => {
+  const handleDragStart = (taskId: string) => {
     setDraggedTaskId(taskId);
-    e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: DragEvent, stageKey: string) => {
@@ -298,7 +286,7 @@ const TasksTab = () => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: draggedTaskId === task.id ? 0.5 : 1 }}
                       draggable
-                      onDragStart={(e: any) => handleDragStart(e, task.id)}
+                      onDragStart={() => handleDragStart(task.id)}
                       onDragEnd={handleDragEnd}
                       className='cursor-grab active:cursor-grabbing'
                     >

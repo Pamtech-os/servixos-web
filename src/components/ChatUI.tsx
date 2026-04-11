@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Smile, Paperclip, X, Image, FileIcon } from 'lucide-react';
+import { Send, Smile, Paperclip, X, ImageIcon, FileIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -85,7 +85,7 @@ const ChatUI = ({
     setAttachment(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -174,7 +174,7 @@ const ChatUI = ({
       {attachment && (
         <div className='mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2'>
           {attachment.type.startsWith('image/') ? (
-            <Image size={14} className='text-primary shrink-0' />
+            <ImageIcon size={14} className='text-primary shrink-0' />
           ) : (
             <FileIcon size={14} className='text-primary shrink-0' />
           )}

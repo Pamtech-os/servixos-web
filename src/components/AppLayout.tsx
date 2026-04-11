@@ -1,17 +1,74 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import type { PropsWithChildren } from 'react';
+import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar from '@/components/AppSidebar';
 import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
 import { useAuth } from '@/contexts/AuthContext';
 
-const AppLayout = () => {
-  const { auth } = useAuth();
-  const location = useLocation();
-  const isAIAdvisorRoute = location.pathname === '/ai-advisor';
+const AppLayout = ({ children }: PropsWithChildren) => {
+  const { auth, isHydrated } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const isAIAdvisorRoute = pathname === '/ai-advisor';
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
 
-  if (!auth.isLoggedIn) return <Navigate to='/login' replace />;
-  if (!auth.isPinVerified) return <Navigate to='/pin' replace />;
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+    if (!auth.isLoggedIn) {
+      router.replace('/login');
+      return;
+    }
+    if (!auth.isPinVerified) {
+      router.replace('/pin');
+    }
+  }, [auth.isLoggedIn, auth.isPinVerified, isHydrated, router]);
+
+  useEffect(() => {
+    setIsRouteLoading(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const link = target?.closest('a[href]') as HTMLAnchorElement | null;
+      if (!link) return;
+      if (link.target && link.target !== '_self') return;
+
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+        return;
+      }
+
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      const nextPath = `${destination.pathname}${destination.search}${destination.hash}`;
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (nextPath === currentPath) return;
+
+      setIsRouteLoading(true);
+    };
+
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => document.removeEventListener('click', handleDocumentClick, true);
+  }, []);
+
+  useEffect(() => {
+    if (!isRouteLoading) return;
+    const timeout = window.setTimeout(() => setIsRouteLoading(false), 10000);
+    return () => window.clearTimeout(timeout);
+  }, [isRouteLoading]);
+
+  if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified) {
+    return null;
+  }
 
   return (
     <div
@@ -19,6 +76,14 @@ const AppLayout = () => {
         isAIAdvisorRoute ? 'h-dvh overflow-hidden bg-background' : 'min-h-screen bg-background'
       }
     >
+      <div
+        aria-hidden='true'
+        className={`pointer-events-none fixed left-0 right-0 top-0 z-[90] h-1 overflow-hidden transition-opacity duration-200 ${
+          isRouteLoading ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        <div className='route-progress-indicator h-full w-1/3 bg-gradient-to-r from-primary via-secondary to-accent' />
+      </div>
       <AppSidebar />
       <div className='md:ml-60'>
         {isAIAdvisorRoute ? (
@@ -26,8 +91,8 @@ const AppLayout = () => {
             <AppHeader />
             <NewBusinessBanner />
             <main className='flex-1 overflow-hidden'>
-              <div className='container mx-auto h-full min-h-0 p-4 md:p-6 lg:p-8'>
-                <Outlet />
+              <div className='mx-auto h-full min-h-0 w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8'>
+                {children}
               </div>
             </main>
           </div>
@@ -36,9 +101,7 @@ const AppLayout = () => {
             <AppHeader />
             <NewBusinessBanner />
             <main>
-              <div className='container mx-auto p-4 md:p-6 lg:p-8'>
-                <Outlet />
-              </div>
+              <div className='mx-auto w-full max-w-7xl p-3 sm:p-4 md:p-6 lg:p-8'>{children}</div>
             </main>
           </div>
         )}

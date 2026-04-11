@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 export default {
   darkMode: ['class', 'html'],
@@ -19,8 +20,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ["'Space Grotesk'", 'sans-serif'],
-        body: ["'DM Sans'", 'sans-serif'],
+        display: ['var(--font-display)', 'sans-serif'],
+        body: ['var(--font-body)', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',
@@ -108,5 +109,5 @@ export default {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [tailwindcssAnimate],
 } satisfies Config;

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, ChevronLeft, ChevronRight, X, Target, TrendingUp, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ConfirmModal from '@/components/ConfirmModal';
+import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from 'sonner';
 
 interface Suggestion {
@@ -52,7 +53,8 @@ const initialSuggestions: Suggestion[] = [
 ];
 
 const AISuggestionsPanel = () => {
-  const [isOpen, setIsOpen] = useState(false);
+  const { isAiSuggestionsOpen: isOpen } = useUiState();
+  const { setAiSuggestionsOpen } = useUiActions();
   const [suggestions, setSuggestions] = useState<Suggestion[]>(initialSuggestions);
   const [confirmAction, setConfirmAction] = useState<{ id: string } | null>(null);
 
@@ -71,27 +73,28 @@ const AISuggestionsPanel = () => {
   return (
     <>
       {/* Toggle Button — fixed on the right edge */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className='fixed right-0 top-1/2 z-50 -translate-y-1/2 rounded-l-xl border border-r-0 border-border bg-card p-2.5 shadow-lg transition-all hover:bg-muted'
-        style={{ display: isOpen ? 'none' : 'flex' }}
-      >
-        <div className='flex flex-col items-center gap-1'>
-          <Sparkles size={18} className='text-primary' />
-          <ChevronLeft size={14} className='text-muted-foreground' />
-        </div>
-      </button>
+      {!isOpen && (
+        <button
+          onClick={() => setAiSuggestionsOpen(true)}
+          className='fixed right-0 top-1/2 z-50 hidden -translate-y-1/2 rounded-l-xl border border-r-0 border-border bg-card p-2.5 shadow-lg transition-all hover:bg-muted md:flex'
+        >
+          <div className='flex flex-col items-center gap-1'>
+            <Sparkles size={18} className='text-primary' />
+            <ChevronLeft size={14} className='text-muted-foreground' />
+          </div>
+        </button>
+      )}
 
       {/* Panel */}
       <AnimatePresence>
         {isOpen && (
-          <motion.aside
-            initial={{ x: 340 }}
-            animate={{ x: 0 }}
-            exit={{ x: 340 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-            className='fixed right-0 top-0 z-40 h-screen w-[320px] border-l border-border bg-card shadow-2xl flex flex-col'
-          >
+            <motion.aside
+              initial={{ x: 340 }}
+              animate={{ x: 0 }}
+              exit={{ x: 340 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+              className='fixed right-0 top-0 z-40 hidden h-screen w-[88vw] max-w-[320px] border-l border-border bg-card shadow-2xl md:flex md:w-[320px] md:max-w-none'
+            >
             {/* Header */}
             <div className='flex items-center justify-between border-b border-border px-4 py-4'>
               <div className='flex items-center gap-2'>
@@ -104,7 +107,7 @@ const AISuggestionsPanel = () => {
                 )}
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => setAiSuggestionsOpen(false)}
                 className='rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
               >
                 <ChevronRight size={18} />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, ReactNode, useCallback } from 'react';
 
 export type ClockStatus = 'clocked_out' | 'clocked_in' | 'on_break';
 
@@ -24,39 +24,38 @@ export const ClockProvider = ({ children }: { children: ReactNode }) => {
   const [clockedInAt, setClockedInAt] = useState<Date | null>(null);
   const [history, setHistory] = useState<ClockEntry[]>([]);
 
-  const addEntry = (type: ClockEntry['type']) => {
+  const addEntry = useCallback((type: ClockEntry['type']) => {
     setHistory((prev) => [...prev, { type, time: new Date() }]);
-  };
+  }, []);
 
-  const clockIn = () => {
+  const clockIn = useCallback(() => {
     setStatus('clocked_in');
     setClockedInAt(new Date());
     addEntry('clock_in');
-  };
+  }, [addEntry]);
 
-  const clockOut = () => {
+  const clockOut = useCallback(() => {
     setStatus('clocked_out');
     setClockedInAt(null);
     addEntry('clock_out');
-  };
+  }, [addEntry]);
 
-  const startBreak = () => {
+  const startBreak = useCallback(() => {
     setStatus('on_break');
     addEntry('break_start');
-  };
+  }, [addEntry]);
 
-  const endBreak = () => {
+  const endBreak = useCallback(() => {
     setStatus('clocked_in');
     addEntry('break_end');
-  };
+  }, [addEntry]);
 
-  return (
-    <ClockContext.Provider
-      value={{ status, clockIn, clockOut, startBreak, endBreak, clockedInAt, history }}
-    >
-      {children}
-    </ClockContext.Provider>
+  const value = useMemo(
+    () => ({ status, clockIn, clockOut, startBreak, endBreak, clockedInAt, history }),
+    [clockIn, clockOut, clockedInAt, endBreak, history, startBreak, status]
   );
+
+  return <ClockContext.Provider value={value}>{children}</ClockContext.Provider>;
 };
 
 export const useClock = () => {

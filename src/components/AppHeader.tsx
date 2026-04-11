@@ -6,7 +6,6 @@ import { useClock } from '@/contexts/ClockContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 const allOnlineTeam = [
   { name: 'Alice Morgan', initials: 'AM' },
@@ -115,9 +114,9 @@ const AppHeader = () => {
   }, [status, clockedInAt]);
 
   return (
-    <header className='sticky top-0 z-40 flex items-center justify-between border-b border-border bg-card/95 backdrop-blur-sm px-4 py-3 md:px-6'>
+    <header className='sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 backdrop-blur-sm sm:px-4 sm:py-3 md:px-6'>
       {/* Left: Clock Controls */}
-      <div className='flex items-center gap-2'>
+      <div className='flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2'>
         <AnimatePresence mode='wait'>
           {status === 'clocked_out' ? (
             <motion.div
@@ -128,10 +127,12 @@ const AppHeader = () => {
             >
               <Button
                 size='sm'
-                className='gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-primary-foreground'
+                aria-label='Clock in'
+                className='gap-1.5 whitespace-nowrap bg-emerald-600 px-2 text-primary-foreground hover:bg-emerald-700 sm:px-3'
                 onClick={clockIn}
               >
-                <Clock size={14} /> Clock In
+                <Clock size={14} />
+                <span className='hidden sm:inline'>Clock In</span>
               </Button>
             </motion.div>
           ) : (
@@ -143,26 +144,37 @@ const AppHeader = () => {
               className='flex items-center gap-2'
             >
               {status === 'clocked_in' ? (
-                <Button size='sm' variant='outline' className='gap-1.5' onClick={startBreak}>
-                  <Coffee size={14} /> Take Break
+                <Button
+                  size='sm'
+                  variant='outline'
+                  aria-label='Take break'
+                  className='gap-1.5 whitespace-nowrap px-2 sm:px-3'
+                  onClick={startBreak}
+                >
+                  <Coffee size={14} />
+                  <span className='hidden sm:inline'>Take Break</span>
                 </Button>
               ) : (
                 <Button
                   size='sm'
                   variant='outline'
-                  className='gap-1.5 border-amber-500/50 text-amber-600'
+                  aria-label='End break'
+                  className='gap-1.5 whitespace-nowrap border-amber-500/50 px-2 text-amber-600 sm:px-3'
                   onClick={endBreak}
                 >
-                  <Coffee size={14} /> End Break
+                  <Coffee size={14} />
+                  <span className='hidden sm:inline'>End Break</span>
                 </Button>
               )}
               <Button
                 size='sm'
                 variant='outline'
-                className='gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10'
+                aria-label='Clock out'
+                className='gap-1.5 whitespace-nowrap border-destructive/50 px-2 text-destructive hover:bg-destructive/10 sm:px-3'
                 onClick={clockOut}
               >
-                <LogOutIcon size={14} /> Clock Out
+                <LogOutIcon size={14} />
+                <span className='hidden sm:inline'>Clock Out</span>
               </Button>
             </motion.div>
           )}
@@ -175,10 +187,12 @@ const AppHeader = () => {
       </div>
 
       {/* Center: Online Team */}
-      <OnlineTeamSection />
+      <div className='hidden lg:block'>
+        <OnlineTeamSection />
+      </div>
 
       {/* Right: Business Avatar */}
-      <div className='flex items-center gap-3'>
+      <div className='ml-2 flex shrink-0 items-center gap-2 sm:gap-3'>
         <div className='hidden sm:block text-right'>
           <p className='text-sm font-semibold'>Business Owner</p>
           <p className='text-xs text-muted-foreground'>

@@ -57,9 +57,9 @@ const NewBusinessBanner = () => {
   if (!visible) return null;
 
   return (
-    <div className='relative flex items-center gap-3 border-b border-primary/20 bg-primary/5 px-4 py-2.5 text-sm'>
+    <div className='relative flex flex-wrap items-start gap-2 border-b border-primary/20 bg-primary/5 px-3 py-2 text-xs sm:flex-nowrap sm:items-center sm:gap-3 sm:px-4 sm:py-2.5 sm:text-sm'>
       <Megaphone size={16} className='shrink-0 text-primary' />
-      <p className='flex-1 text-foreground/80'>
+      <p className='min-w-0 flex-1 text-foreground/80'>
         <span className='font-semibold text-foreground'>Welcome!</span> Start getting clients now —
         share your website on <span className='font-medium text-foreground'>Facebook</span>,{' '}
         <span className='font-medium text-foreground'>Instagram</span>,{' '}
