@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import ChatUI, { type ChatMessage } from '@/components/ChatUI';
 import {
   mockClients,
   mockInvoices,
@@ -51,6 +52,61 @@ const ClientDetail = () => {
   }, []);
 
   const client = mockClients.find((c) => c.id === id);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    const clientMessages = mockMessages.filter((m) => m.clientId === id);
+    const businessName = 'Servix Team';
+    const convertedMessages: ChatMessage[] = [...clientMessages].reverse().map((msg) => {
+      const isBusinessSender = /servix|team|business|support/i.test(msg.sender);
+      return {
+        id: `chat-${msg.id}`,
+        sender: isBusinessSender ? 'business' : 'client',
+        senderName: msg.sender,
+        content: msg.content,
+        timestamp: msg.timeSent,
+      };
+    });
+
+    const hasClientMessage = convertedMessages.some((msg) => msg.sender === 'client');
+    if (!hasClientMessage && client) {
+      convertedMessages.unshift({
+        id: `chat-${id}-client-intro`,
+        sender: 'client',
+        senderName: client.fullName,
+        content: 'Hi Servix Team, I wanted to check in on the latest update for my project.',
+        timestamp: 'Yesterday',
+      });
+    }
+
+    if (convertedMessages.length === 0 && client) {
+      convertedMessages.push({
+        id: `chat-${id}-welcome`,
+        sender: 'business',
+        senderName: businessName,
+        content: `Hello ${client.fullName.split(' ')[0]}, this is the start of your conversation history with ${businessName}.`,
+        timestamp: 'Now',
+      });
+    }
+
+    setChatMessages(convertedMessages);
+  }, [client, id]);
+
+  const handleSendMessage = (content: string) => {
+    const text = content.trim();
+    if (!text) return;
+
+    const newMessage: ChatMessage = {
+      id: `chat-${Date.now()}`,
+      sender: 'business',
+      senderName: 'Servix Team',
+      content: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setChatMessages((prev) => [...prev, newMessage]);
+  };
+
   if (!client && !loading) {
     return (
       <div className='flex flex-col items-center justify-center py-20'>
@@ -69,7 +125,6 @@ const ClientDetail = () => {
   const jobs = mockJobs.filter((j) => j.clientId === id);
   const files = mockFiles.filter((f) => f.clientId === id);
   const contracts = mockContracts.filter((c) => c.clientId === id);
-  const messages = mockMessages.filter((m) => m.clientId === id);
 
   const formatStatus = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -398,33 +453,23 @@ const ClientDetail = () => {
           </TabsContent>
 
           {/* Messages */}
-          <TabsContent value='messages'>
+          <TabsContent value='messages' className='mt-1'>
             <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>Messages</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className='p-0'>
                 {loading ? (
-                  <div className='space-y-3'>
+                  <div className='space-y-3 px-6 pb-6 pt-4'>
                     {[...Array(2)].map((_, i) => (
                       <Skeleton key={i} className='h-16 w-full' />
                     ))}
                   </div>
-                ) : messages.length === 0 ? (
-                  <p className='py-4 text-center text-sm text-muted-foreground'>
-                    No messages found.
-                  </p>
                 ) : (
-                  <div className='space-y-3'>
-                    {messages.map((msg) => (
-                      <div key={msg.id} className='rounded-lg border border-border p-4'>
-                        <div className='mb-1 flex items-center justify-between'>
-                          <p className='text-sm font-medium'>{msg.sender}</p>
-                          <p className='text-xs text-muted-foreground'>{msg.timeSent}</p>
-                        </div>
-                        <p className='text-sm text-muted-foreground'>{msg.content}</p>
-                      </div>
-                    ))}
+                  <div className='h-[400px] px-4 pb-4 pt-2 sm:h-[440px] sm:px-6 sm:pb-6 sm:pt-3'>
+                    <ChatUI
+                      messages={chatMessages}
+                      onSendMessage={handleSendMessage}
+                      clientName={client?.fullName ?? 'Client'}
+                      className='h-full border-border/70'
+                    />
                   </div>
                 )}
               </CardContent>
