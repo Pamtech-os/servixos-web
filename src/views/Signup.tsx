@@ -35,7 +35,38 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
+import OtpVerify from '@/components/OtpVerify';
+import PhoneInput, {
+  emptyPhone,
+  getDefaultCountry,
+  phoneError as getPhoneError,
+} from '@/components/PhoneInput';
+import type { PhoneValue } from '@/components/PhoneInput';
 import { toast } from 'sonner';
+
+const ONBOARDING_KEY = 'servixos-onboarding';
+
+interface SavedProgress {
+  step: number;
+  subStep: 'emailVerify' | 'pin' | null;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  phoneCountry: string;
+  bizName: string;
+  websiteGenerated: boolean;
+  websiteUrl: string;
+}
+
+const saveProgress = (data: Partial<SavedProgress>) => {
+  try {
+    const current = JSON.parse(localStorage.getItem(ONBOARDING_KEY) ?? '{}') as Partial<SavedProgress>;
+    localStorage.setItem(ONBOARDING_KEY, JSON.stringify({ ...current, ...data }));
+  } catch {}
+};
+
+const clearProgress = () => localStorage.removeItem(ONBOARDING_KEY);
 
 const STEPS = ['Registration', 'Business Setup', 'Website Builder'];
 
@@ -86,13 +117,16 @@ const Signup = () => {
     firstName: '',
     lastName: '',
     email: '',
-    phone: '',
     password: '',
     confirmPassword: '',
   });
+  const [phone, setPhone] = useState<PhoneValue>(() => emptyPhone('US'));
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [regErrors, setRegErrors] = useState<Record<string, string>>({});
+
+  // Email OTP verification after registration
+  const [showEmailVerify, setShowEmailVerify] = useState(false);
 
   // PIN entry within registration
   const [showPinStep, setShowPinStep] = useState(false);
@@ -149,6 +183,11 @@ const Signup = () => {
     setPinError('');
   }, [pinPhase]);
 
+  // Set locale-based default country once on client
+  useEffect(() => {
+    setPhone((p) => ({ ...p, country: getDefaultCountry() }));
+  }, []);
+
   useEffect(() => {
     if (!showPinStep) return;
     const handler = (e: KeyboardEvent) => {
@@ -173,6 +212,7 @@ const Signup = () => {
           setPin([]);
         } else {
           toast.success('PIN created successfully!');
+          saveProgress({ subStep: null, step: 1 });
           setShowPinStep(false);
           setStep(1);
         }
@@ -180,14 +220,50 @@ const Signup = () => {
     }
   }, [pin, confirmPin, pinPhase]);
 
+  // Restore saved onboarding progress on mount
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ONBOARDING_KEY) ?? 'null') as SavedProgress | null;
+      if (!saved?.email) return;
+      setReg((r) => ({ ...r, email: saved.email, firstName: saved.firstName ?? '', lastName: saved.lastName ?? '' }));
+      if (saved.phone || saved.phoneCountry) {
+        setPhone((p) => ({
+          ...p,
+          country: (saved.phoneCountry as PhoneValue['country']) ?? p.country,
+          nationalNumber: saved.phone ?? '',
+          isValid: false,
+          e164: saved.phone ?? '',
+        }));
+      }
+      if (saved.bizName) setBizName(saved.bizName);
+      if (saved.websiteGenerated) {
+        setWebsiteGenerated(true);
+        setWebsiteUrl(saved.websiteUrl ?? '');
+      }
+      if (saved.subStep === 'emailVerify') {
+        setShowEmailVerify(true);
+        toast.info('Welcome back!', { description: 'Please verify your email to continue.' });
+      } else if (saved.subStep === 'pin') {
+        login(saved.email);
+        setShowPinStep(true);
+        toast.info('Welcome back!', { description: 'Continue setting up your security PIN.' });
+      } else if (saved.step >= 1) {
+        login(saved.email);
+        setStep(saved.step);
+        toast.info('Welcome back!', { description: 'Continuing your business setup.' });
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const validateRegistration = () => {
     const errs: Record<string, string> = {};
     if (!reg.firstName.trim()) errs.firstName = 'First name is required';
     if (!reg.lastName.trim()) errs.lastName = 'Last name is required';
     if (!reg.email) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email)) errs.email = 'Invalid email';
-    if (!reg.phone) errs.phone = 'Phone is required';
-    else if (!/^\+?[\d\s()-]{7,15}$/.test(reg.phone)) errs.phone = 'Invalid phone number';
+    const phoneErr = getPhoneError(phone);
+    if (phoneErr) errs.phone = phoneErr;
     if (!reg.password) errs.password = 'Password is required';
     else if (reg.password.length < 8) errs.password = 'Minimum 8 characters';
     if (reg.password !== reg.confirmPassword) errs.confirmPassword = 'Passwords do not match';
@@ -200,8 +276,16 @@ const Signup = () => {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 1000));
     setLoading(false);
-    toast.success('Account created!', { description: 'Now set up your security PIN.' });
+    toast.success('Account created!', { description: 'Check your email for a verification code.' });
+    saveProgress({ step: 0, subStep: 'emailVerify', email: reg.email, firstName: reg.firstName, lastName: reg.lastName, phone: phone.e164, phoneCountry: phone.country });
+    setShowEmailVerify(true);
+  };
+
+  const handleEmailVerified = () => {
     login(reg.email);
+    saveProgress({ subStep: 'pin' });
+    toast.success('Email verified!', { description: 'Now set up your security PIN.' });
+    setShowEmailVerify(false);
     setShowPinStep(true);
   };
 
@@ -238,6 +322,7 @@ const Signup = () => {
     }
     setAiGenerating(false);
     toast.success('Business created!', { description: 'Your business profile is ready.' });
+    saveProgress({ step: 2, bizName });
     setStep(2);
   };
 
@@ -270,15 +355,18 @@ const Signup = () => {
     setWebsiteGenerating(false);
     setWebsiteGenerated(true);
     setShowWebsiteModal(false);
+    saveProgress({ websiteGenerated: true, websiteUrl: url });
     toast.success('Website generated!', { description: `Live at ${url}` });
   };
 
   const handleFinish = () => {
+    clearProgress();
     verifyPin();
     router.push('/dashboard');
   };
 
   const handleSkipWebsite = () => {
+    clearProgress();
     verifyPin();
     router.push('/dashboard');
   };
@@ -339,18 +427,18 @@ const Signup = () => {
       </div>
 
       <div className='space-y-1.5'>
-        <Label htmlFor='phone' className='flex items-center gap-1.5 text-xs'>
+        <Label className='flex items-center gap-1.5 text-xs'>
           <Phone size={12} /> Phone Number
         </Label>
-        <Input
+        <PhoneInput
           id='phone'
-          type='tel'
-          placeholder='+1 (555) 000-0000'
-          value={reg.phone}
-          onChange={(e) => setReg((p) => ({ ...p, phone: e.target.value }))}
-          className={regErrors.phone ? 'border-destructive' : ''}
+          value={phone}
+          onChange={(v) => {
+            setPhone(v);
+            if (regErrors.phone) setRegErrors((e) => ({ ...e, phone: '' }));
+          }}
+          error={regErrors.phone}
         />
-        {regErrors.phone && <p className='text-[10px] text-destructive'>{regErrors.phone}</p>}
       </div>
 
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
@@ -475,6 +563,14 @@ const Signup = () => {
         </Link>
       </p>
     </motion.div>
+  );
+
+  const renderEmailVerify = () => (
+    <OtpVerify
+      email={reg.email}
+      onVerified={handleEmailVerified}
+      title='Verify Your Email'
+    />
   );
 
   const renderPinEntry = () => (
@@ -983,7 +1079,7 @@ const Signup = () => {
         className='relative z-10 w-full max-w-lg'
       >
         {/* Step indicator */}
-        {!showPinStep && (
+        {!showPinStep && !showEmailVerify && (
           <div className='mb-4 flex items-center justify-center gap-1.5 sm:mb-6 sm:gap-2'>
             {STEPS.map((s, i) => (
               <div key={s} className='flex items-center gap-1.5 sm:gap-2'>
@@ -1069,7 +1165,7 @@ const Signup = () => {
                   <Sparkles className='h-4 w-4 text-accent' />
                 </motion.div>
               </div>
-              {!showPinStep && (
+              {!showPinStep && !showEmailVerify && (
                 <>
                   <h1 className='font-display text-xl font-bold'>{STEPS[step]}</h1>
                   <p className='text-xs text-muted-foreground text-center'>
@@ -1083,6 +1179,8 @@ const Signup = () => {
             <AnimatePresence mode='wait'>
               {showPinStep
                 ? renderPinEntry()
+                : showEmailVerify
+                ? renderEmailVerify()
                 : step === 0
                 ? renderRegistrationForm()
                 : renderWebsiteBuilder()}
