@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ClockProvider } from '@/contexts/ClockContext';
 import { UiProvider } from '@/common/state/ui-context';
+import { UpgradePlanProvider } from '@/common/state/upgrade-plan-context';
 import { AppQueryProvider } from '@/common/providers/query-provider';
 
 export function AppProviders({ children }: PropsWithChildren) {
@@ -17,7 +18,9 @@ export function AppProviders({ children }: PropsWithChildren) {
           <AuthProvider>
             <ClockProvider>
               <UiProvider>
-                {children}
+                <UpgradePlanProvider>
+                  {children}
+                </UpgradePlanProvider>
                 <Toaster richColors closeButton />
               </UiProvider>
             </ClockProvider>
