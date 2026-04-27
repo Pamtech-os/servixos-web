@@ -1,11 +1,14 @@
+'use client';
+
 import { useState, useEffect, memo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Clock, Coffee, LogOut as LogOutIcon, Circle, Users } from 'lucide-react';
+import { Clock, Coffee, LogOut as LogOutIcon, Circle, Users, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClock } from '@/contexts/ClockContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useUpgradePlan } from '@/common/state/upgrade-plan-context';
 
 const allOnlineTeam = [
   { name: 'Alice Morgan', initials: 'AM' },
@@ -90,6 +93,7 @@ OnlineTeamSection.displayName = 'OnlineTeamSection';
 
 const AppHeader = () => {
   const { status, clockIn, clockOut, startBreak, endBreak, clockedInAt } = useClock();
+  const { showUpgradeModal } = useUpgradePlan();
   const [elapsed, setElapsed] = useState('');
 
   useEffect(() => {
@@ -193,6 +197,22 @@ const AppHeader = () => {
 
       {/* Right: Business Avatar */}
       <div className='ml-2 flex shrink-0 items-center gap-2 sm:gap-3'>
+        {/* TODO: remove — temporary upgrade modal preview */}
+        <Button
+          size='sm'
+          variant='outline'
+          className='gap-1.5 border-primary/40 text-primary hover:bg-primary/10'
+          onClick={() =>
+            showUpgradeModal({
+              featureName: 'Advanced Analytics',
+              currentPlan: 'Starter',
+              requiredPlan: 'Pro',
+            })
+          }
+        >
+          <Sparkles size={14} />
+          <span className='hidden sm:inline'>Preview Modal</span>
+        </Button>
         <div className='hidden sm:block text-right'>
           <p className='text-sm font-semibold'>Business Owner</p>
           <p className='text-xs text-muted-foreground'>
