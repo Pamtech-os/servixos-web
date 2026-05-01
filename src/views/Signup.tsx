@@ -55,6 +55,8 @@ import type { PhoneValue } from '@/components/PhoneInput';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ONBOARDING_KEY = 'servixos-onboarding';
+const MAX_BUSINESS_NAME_LENGTH = 30;
+const MAX_BUSINESS_DESCRIPTION_LENGTH = 300;
 
 const FONT_NAME_MAP: Record<string, string> = {
   modern: 'Inter',
@@ -323,7 +325,9 @@ const Signup = () => {
           e164: saved.phone ?? '',
         }));
       }
-      if (saved.bizName) setBizName(saved.bizName);
+      if (saved.bizName) {
+        setBizName(saved.bizName.slice(0, MAX_BUSINESS_NAME_LENGTH));
+      }
       if (saved.websiteGenerated) {
         setWebsiteGenerated(true);
         setWebsiteUrl(saved.websiteUrl ?? '');
@@ -426,6 +430,18 @@ const Signup = () => {
     }
     if (!bizDescription.trim()) {
       toast.error('Please enter a business description');
+      return;
+    }
+    if (bizName.length > MAX_BUSINESS_NAME_LENGTH) {
+      toast.error(
+        `Business name cannot exceed ${MAX_BUSINESS_NAME_LENGTH} characters`,
+      );
+      return;
+    }
+    if (bizDescription.length > MAX_BUSINESS_DESCRIPTION_LENGTH) {
+      toast.error(
+        `Business description cannot exceed ${MAX_BUSINESS_DESCRIPTION_LENGTH} characters`,
+      );
       return;
     }
 
@@ -571,6 +587,10 @@ const Signup = () => {
   );
   const selectedCategoryLabel =
     apiCategories.find((c) => c._id === bizCategory)?.name ?? '';
+  const isBusinessInfoComplete =
+    Boolean(bizCategory) &&
+    Boolean(bizName.trim()) &&
+    Boolean(bizDescription.trim());
 
   const renderRegistrationForm = () => (
     <motion.div
@@ -924,6 +944,7 @@ const Signup = () => {
           <div className='space-y-2 relative'>
             <Label className='text-xs font-semibold flex items-center gap-1.5'>
               <Building2 size={12} /> Business Category
+              <span className='text-destructive'>*</span>
             </Label>
             <div className='relative'>
               <Input
@@ -931,6 +952,8 @@ const Signup = () => {
                 value={
                   categoryDropdownOpen ? categorySearch : selectedCategoryLabel
                 }
+                required
+                aria-required='true'
                 onChange={(e) => {
                   setCategorySearch(e.target.value);
                   setCategoryDropdownOpen(true);
@@ -984,19 +1007,55 @@ const Signup = () => {
           </div>
 
           <div className='space-y-1.5'>
-            <Label className='text-xs'>Business Name</Label>
+            <div className='flex items-center justify-between'>
+              <Label className='text-xs'>
+                Business Name <span className='text-destructive'>*</span>
+              </Label>
+              <p
+                className={`text-[10px] ${
+                  bizName.length >= MAX_BUSINESS_NAME_LENGTH
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                {bizName.length}/{MAX_BUSINESS_NAME_LENGTH}
+              </p>
+            </div>
             <Input
               placeholder='e.g. Omega Services'
               value={bizName}
-              onChange={(e) => setBizName(e.target.value)}
+              required
+              maxLength={MAX_BUSINESS_NAME_LENGTH}
+              onChange={(e) =>
+                setBizName(e.target.value.slice(0, MAX_BUSINESS_NAME_LENGTH))
+              }
             />
           </div>
           <div className='space-y-1.5'>
-            <Label className='text-xs'>Business Description</Label>
+            <div className='flex items-center justify-between'>
+              <Label className='text-xs'>
+                Business Description <span className='text-destructive'>*</span>
+              </Label>
+              <p
+                className={`text-[10px] ${
+                  bizDescription.length >= MAX_BUSINESS_DESCRIPTION_LENGTH
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                {bizDescription.length}/{MAX_BUSINESS_DESCRIPTION_LENGTH}
+              </p>
+            </div>
             <Textarea
               placeholder='What does your business do?'
               value={bizDescription}
-              onChange={(e) => setBizDescription(e.target.value)}
+              required
+              maxLength={MAX_BUSINESS_DESCRIPTION_LENGTH}
+              onChange={(e) =>
+                setBizDescription(
+                  e.target.value.slice(0, MAX_BUSINESS_DESCRIPTION_LENGTH),
+                )
+              }
               rows={2}
             />
           </div>
@@ -1089,7 +1148,9 @@ const Signup = () => {
               onClick={handleBusinessNext}
               className='gradient-bg w-full text-primary-foreground'
               size='lg'
-              disabled={createBusinessMutation.isPending}
+              disabled={
+                createBusinessMutation.isPending || !isBusinessInfoComplete
+              }
             >
               {createBusinessMutation.isPending ? (
                 <Loader2 className='h-5 w-5 animate-spin' />

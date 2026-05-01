@@ -394,8 +394,14 @@ export const auth = {
     }).catch(() => {});
   },
 
-  forgotPassword: (email: string) =>
-    publicCall<null>('/auth/forgot-password', { email }),
+  forgotPassword: async (email: string): Promise<string> => {
+    const envelope = await requestEnvelope<null>({
+      method: 'POST',
+      path: '/auth/forgot-password',
+      body: { email },
+    });
+    return envelope.message;
+  },
 
   resetPassword: (input: ResetPasswordInput) =>
     publicCall<null>('/auth/reset-password', input),
