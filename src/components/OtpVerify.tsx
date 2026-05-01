@@ -4,6 +4,7 @@ import { useState, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'r
 import { motion } from 'framer-motion';
 import { KeyRound, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getApiErrorMessage } from '@/common/network/http-client';
 
 interface OtpVerifyProps {
   email: string;
@@ -57,12 +58,14 @@ const OtpVerify = ({
     setLoading(true);
     try {
       if (onResend) await onResend();
-    } finally {
-      setLoading(false);
       setCountdown(120);
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
       setOtpError('');
+    } catch (err) {
+      setOtpError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,7 +80,7 @@ const OtpVerify = ({
       if (onVerify) await onVerify(code);
       onVerified(code);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Verification failed. Please try again.';
+      const msg = getApiErrorMessage(err);
       setOtpError(msg);
       setOtp(['', '', '', '', '', '']);
       document.getElementById('otp-field-0')?.focus();

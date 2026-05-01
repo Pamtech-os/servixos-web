@@ -5,7 +5,8 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
   ? `https://${process.env.NEXT_PUBLIC_API_BASE_URL}`
   : 'https://api-dev.servixos.com/api';
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? '';
+const CLIENT_TOKEN_PATH = '/auth/client-token';
+const CLIENT_TOKEN_REFRESH_BUFFER_MS = 5_000;
 
 // ─── Response envelope ────────────────────────────────────────────────────────
 
@@ -99,6 +100,11 @@ export interface BusinessCategory {
   slug: string;
 }
 
+interface ClientTokenData {
+  token: string;
+  expiresAt: number;
+}
+
 // ─── JWT helpers ──────────────────────────────────────────────────────────────
 
 export function decodeJwt(token: string): JwtPayload {
@@ -117,24 +123,162 @@ export function isTokenExpired(token: string): boolean {
 
 // ─── Request helpers ──────────────────────────────────────────────────────────
 
-function publicHeaders(): Record<string, string> {
-  return { 'x-api-key': API_KEY };
+let _clientToken: ClientTokenData | null = null;
+let _clientTokenPromise: Promise<ClientTokenData> | null = null;
+
+function isClientTokenValid(tokenData: ClientTokenData | null): tokenData is ClientTokenData {
+  if (!tokenData) return false;
+  return Date.now() < tokenData.expiresAt - CLIENT_TOKEN_REFRESH_BUFFER_MS;
+}
+
+async function getClientToken(forceRefresh = false): Promise<ClientTokenData> {
+  if (!forceRefresh && isClientTokenValid(_clientToken)) return _clientToken;
+  if (_clientTokenPromise) return _clientTokenPromise;
+
+  _clientTokenPromise = (async () => {
+    const envelope = await fetchJson<ApiEnvelope<ClientTokenData>>(
+      `${BASE_URL}${CLIENT_TOKEN_PATH}`,
+      { method: 'GET' }
+    );
+    _clientToken = envelope.data;
+    return envelope.data;
+  })().finally(() => {
+    _clientTokenPromise = null;
+  });
+
+  return _clientTokenPromise;
+}
+
+function buildPathWithQuery(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+}
+
+function buildCanonicalBody(body: unknown): string {
+  if (body == null) return '';
+
+  if (typeof body === 'string') {
+    const trimmed = body.trim();
+    if (!trimmed) return '';
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) return '';
+      return JSON.stringify(parsed);
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (typeof body === 'object') {
+    return Object.keys(body).length > 0 ? JSON.stringify(body) : '';
+  }
+
+  return JSON.stringify(body);
+}
+
+function buildCanonicalString(
+  method: string,
+  pathWithQuery: string,
+  timestamp: string,
+  body: string
+): string {
+  return [method.toUpperCase(), pathWithQuery, timestamp, body].join('\n');
+}
+
+async function hmacSha256Hex(payload: string, secret: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('Web Crypto API is unavailable for request signing.');
+  }
+
+  const encoder = new TextEncoder();
+  const key = await globalThis.crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signatureBuffer = await globalThis.crypto.subtle.sign(
+    'HMAC',
+    key,
+    encoder.encode(payload)
+  );
+
+  return Array.from(new Uint8Array(signatureBuffer))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function isSignatureTokenError(err: HttpError): boolean {
+  if (err.status !== 401) return false;
+  const message = err.message.toLowerCase();
+  if (!message) return true;
+  if (message.includes('signature') || message.includes('client token')) return true;
+  if (message.includes('invalid') && message.includes('token')) return true;
+  if (message.includes('expired') && message.includes('token')) return true;
+  return false;
+}
+
+type RequestOptions = {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  skipSigning?: boolean;
+};
+
+async function requestEnvelope<T>({
+  method,
+  path,
+  body,
+  headers = {},
+  skipSigning = false,
+}: RequestOptions): Promise<ApiEnvelope<T>> {
+  const url = `${BASE_URL}${path}`;
+  const bodyString = body === undefined ? undefined : JSON.stringify(body);
+
+  const send = async (forceRefreshClientToken = false): Promise<ApiEnvelope<T>> => {
+    const requestHeaders: Record<string, string> = { ...headers };
+
+    if (!skipSigning) {
+      const { token } = await getClientToken(forceRefreshClientToken);
+      const timestamp = Date.now().toString();
+      const canonical = buildCanonicalString(
+        method,
+        buildPathWithQuery(url),
+        timestamp,
+        buildCanonicalBody(body)
+      );
+
+      requestHeaders['x-client-token'] = token;
+      requestHeaders['x-timestamp'] = timestamp;
+      requestHeaders['x-signature'] = await hmacSha256Hex(canonical, token);
+    }
+
+    return fetchJson<ApiEnvelope<T>>(url, {
+      method,
+      body: bodyString,
+      headers: requestHeaders,
+    });
+  };
+
+  try {
+    return await send(false);
+  } catch (err) {
+    if (!skipSigning && err instanceof HttpError && isSignatureTokenError(err)) {
+      return send(true);
+    }
+    throw err;
+  }
 }
 
 async function publicGet<T>(path: string): Promise<T> {
-  const envelope = await fetchJson<ApiEnvelope<T>>(`${BASE_URL}${path}`, {
-    method: 'GET',
-    headers: publicHeaders(),
-  });
+  const envelope = await requestEnvelope<T>({ method: 'GET', path });
   return envelope.data;
 }
 
 async function publicCall<T>(path: string, body: unknown): Promise<T> {
-  const envelope = await fetchJson<ApiEnvelope<T>>(`${BASE_URL}${path}`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: publicHeaders(),
-  });
+  const envelope = await requestEnvelope<T>({ method: 'POST', path, body });
   return envelope.data;
 }
 
@@ -149,14 +293,11 @@ async function silentRefresh(): Promise<string> {
     const refreshToken = tokenStore.getRefreshToken();
     if (!refreshToken) throw new Error('Session expired. Please log in again.');
 
-    const envelope = await fetchJson<ApiEnvelope<{ accessToken: string }>>(
-      `${BASE_URL}/auth/refresh`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ refreshToken }),
-        headers: { 'x-api-key': API_KEY },
-      }
-    );
+    const envelope = await requestEnvelope<{ accessToken: string }>({
+      method: 'POST',
+      path: '/auth/refresh',
+      body: { refreshToken },
+    });
     const newToken = envelope.data.accessToken;
     tokenStore.setAccessToken(newToken);
     return newToken;
@@ -181,11 +322,11 @@ async function protectedCall<T>(
   const token = await resolveToken();
 
   const makeRequest = (t: string) =>
-    fetchJson<ApiEnvelope<T>>(`${BASE_URL}${path}`, {
+    requestEnvelope<T>({
       method: 'POST',
-      body: JSON.stringify(body),
+      path,
+      body,
       headers: {
-        'x-api-key': API_KEY,
         Authorization: `Bearer ${t}`,
         'x-business-id': businessId,
       },
@@ -229,29 +370,27 @@ export const auth = {
   login: (input: LoginInput) => publicCall<SessionData>('/auth/login', input),
 
   verifyPin: async (pin: string, token: string): Promise<string> => {
-    const envelope = await fetchJson<ApiEnvelope<{ accessToken: string }>>(
-      `${BASE_URL}/auth/verify-pin`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ pin }),
-        headers: { 'x-api-key': API_KEY, Authorization: `Bearer ${token}` },
-      }
-    );
+    const envelope = await requestEnvelope<{ accessToken: string }>({
+      method: 'POST',
+      path: '/auth/verify-pin',
+      body: { pin },
+      headers: { Authorization: `Bearer ${token}` },
+    });
     return envelope.data.accessToken;
   },
 
   refresh: (refreshToken: string) =>
-    fetchJson<ApiEnvelope<{ accessToken: string }>>(`${BASE_URL}/auth/refresh`, {
+    requestEnvelope<{ accessToken: string }>({
       method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-      headers: { 'x-api-key': API_KEY },
+      path: '/auth/refresh',
+      body: { refreshToken },
     }).then((env) => env.data.accessToken),
 
   logout: (refreshToken: string): void => {
-    void fetchJson(`${BASE_URL}/auth/logout`, {
+    void requestEnvelope<null>({
       method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-      headers: { 'x-api-key': API_KEY },
+      path: '/auth/logout',
+      body: { refreshToken },
     }).catch(() => {});
   },
 

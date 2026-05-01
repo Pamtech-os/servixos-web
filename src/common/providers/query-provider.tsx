@@ -1,9 +1,16 @@
 'use client';
 
-import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { useState, type PropsWithChildren } from 'react';
 import { toast } from '@/components/ui/sonner';
-import { NetworkOfflineError, RequestTimeoutError } from '@/common/network/http-client';
+import {
+  NetworkOfflineError,
+  RequestTimeoutError,
+} from '@/common/network/http-client';
 
 function createQueryClient() {
   return new QueryClient({
@@ -32,12 +39,12 @@ function createQueryClient() {
       queries: {
         staleTime: 60_000,
         gcTime: 300_000,
-        retry: 2,
+        retry: 0,
         refetchOnWindowFocus: false,
         networkMode: 'offlineFirst',
       },
       mutations: {
-        retry: 1,
+        retry: 0,
         networkMode: 'offlineFirst',
       },
     },
@@ -47,5 +54,7 @@ function createQueryClient() {
 export function AppQueryProvider({ children }: PropsWithChildren) {
   const [queryClient] = useState(createQueryClient);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }

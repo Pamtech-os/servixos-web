@@ -34,10 +34,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCreateAccount, useCreateBusiness, useGenerateWebsite } from '@/hooks/mutations/use-onboarding';
+import {
+  useCreateAccount,
+  useCreateBusiness,
+  useGenerateWebsite,
+} from '@/hooks/mutations/use-onboarding';
 import { useBusinessCategories } from '@/hooks/queries/use-business-categories';
 import { onboarding, auth as authApi } from '@/lib/api-client';
-import { HttpError } from '@/common/network/http-client';
+import { getApiErrorMessage } from '@/common/network/http-client';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 import OtpVerify from '@/components/OtpVerify';
@@ -77,9 +81,12 @@ interface SavedProgress {
 const saveProgress = (data: Partial<SavedProgress>) => {
   try {
     const current = JSON.parse(
-      localStorage.getItem(ONBOARDING_KEY) ?? '{}'
+      localStorage.getItem(ONBOARDING_KEY) ?? '{}',
     ) as Partial<SavedProgress>;
-    localStorage.setItem(ONBOARDING_KEY, JSON.stringify({ ...current, ...data }));
+    localStorage.setItem(
+      ONBOARDING_KEY,
+      JSON.stringify({ ...current, ...data }),
+    );
   } catch {}
 };
 
@@ -91,10 +98,30 @@ const STEPS = ['Registration', 'Business Setup', 'Website Builder'];
 
 const colorSchemes = [
   { id: 'blue', label: 'Ocean Blue', primary: '#3B82F6', secondary: '#8B5CF6' },
-  { id: 'green', label: 'Forest Green', primary: '#10B981', secondary: '#059669' },
-  { id: 'purple', label: 'Royal Purple', primary: '#8B5CF6', secondary: '#EC4899' },
-  { id: 'orange', label: 'Sunset Orange', primary: '#F59E0B', secondary: '#EF4444' },
-  { id: 'teal', label: 'Teal Breeze', primary: '#14B8A6', secondary: '#3B82F6' },
+  {
+    id: 'green',
+    label: 'Forest Green',
+    primary: '#10B981',
+    secondary: '#059669',
+  },
+  {
+    id: 'purple',
+    label: 'Royal Purple',
+    primary: '#8B5CF6',
+    secondary: '#EC4899',
+  },
+  {
+    id: 'orange',
+    label: 'Sunset Orange',
+    primary: '#F59E0B',
+    secondary: '#EF4444',
+  },
+  {
+    id: 'teal',
+    label: 'Teal Breeze',
+    primary: '#14B8A6',
+    secondary: '#3B82F6',
+  },
   { id: 'pink', label: 'Pink Glow', primary: '#EC4899', secondary: '#8B5CF6' },
 ];
 
@@ -122,7 +149,8 @@ const Signup = () => {
   const [step, setStep] = useState(0);
 
   // Queries
-  const { data: apiCategories = [], isLoading: categoriesLoading } = useBusinessCategories();
+  const { data: apiCategories = [], isLoading: categoriesLoading } =
+    useBusinessCategories();
 
   // Mutations
   const createAccountMutation = useCreateAccount();
@@ -154,7 +182,9 @@ const Signup = () => {
   const [pinLoading, setPinLoading] = useState(false);
   // Held temporarily so we can call verify-pin silently after business creation.
   const [savedPin, setSavedPin] = useState('');
-  const [shuffledNumbers] = useState(() => shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+  const [shuffledNumbers] = useState(() =>
+    shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+  );
 
   const gridNumbers = useMemo(() => {
     const top9 = shuffledNumbers.filter((n) => n !== 0);
@@ -193,7 +223,7 @@ const Signup = () => {
         return [...prev, digit.toString()];
       });
     },
-    [pinPhase]
+    [pinPhase],
   );
 
   const removeDigit = useCallback(() => {
@@ -216,39 +246,48 @@ const Signup = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [showPinStep, addDigit, removeDigit]);
 
-  // Auto-advance / submit PIN phases
+  // Auto-advance / submit PIN phases.
+  // Every setTimeout returns a cleanup so React StrictMode's double-invocation
+  // (and any other re-run) cancels the pending timer before scheduling a new one.
   useEffect(() => {
     if (pinLoading) return;
 
     if (pinPhase === 'create' && pin.length === 4) {
-      setTimeout(() => setPinPhase('confirm'), 400);
-      return;
+      const timer = setTimeout(() => setPinPhase('confirm'), 400);
+      return () => clearTimeout(timer);
     }
 
     if (pinPhase === 'confirm' && confirmPin.length === 4) {
       if (pin.join('') !== confirmPin.join('')) {
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           setPinError('PINs do not match. Try again.');
           setConfirmPin([]);
           setPinPhase('create');
           setPin([]);
         }, 400);
-        return;
+        return () => clearTimeout(timer);
       }
 
       const pinValue = pin.join('');
-      setTimeout(async () => {
+      const timer = setTimeout(async () => {
         setPinLoading(true);
         try {
-          await onboarding.setPin({ email: reg.email, pin: pinValue, confirmPin: pinValue });
+          await onboarding.setPin({
+            email: reg.email,
+            pin: pinValue,
+            confirmPin: pinValue,
+          });
           setSavedPin(pinValue);
           toast.success('PIN created successfully!');
           saveProgress({ subStep: null, step: 1 });
+          // Clear pin state before pinLoading→false so the effect cannot re-trigger.
+          setPin([]);
+          setConfirmPin([]);
+          setPinPhase('create');
           setShowPinStep(false);
           setStep(1);
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Failed to set PIN.';
-          setPinError(message);
+          setPinError(getApiErrorMessage(err));
           setConfirmPin([]);
           setPinPhase('create');
           setPin([]);
@@ -256,6 +295,7 @@ const Signup = () => {
           setPinLoading(false);
         }
       }, 400);
+      return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin, confirmPin, pinPhase, pinLoading]);
@@ -264,7 +304,7 @@ const Signup = () => {
   useEffect(() => {
     try {
       const saved = JSON.parse(
-        localStorage.getItem(ONBOARDING_KEY) ?? 'null'
+        localStorage.getItem(ONBOARDING_KEY) ?? 'null',
       ) as SavedProgress | null;
       if (!saved?.email) return;
 
@@ -290,13 +330,19 @@ const Signup = () => {
       }
       if (saved.subStep === 'emailVerify') {
         setShowEmailVerify(true);
-        toast.info('Welcome back!', { description: 'Please verify your email to continue.' });
+        toast.info('Welcome back!', {
+          description: 'Please verify your email to continue.',
+        });
       } else if (saved.subStep === 'pin') {
         setShowPinStep(true);
-        toast.info('Welcome back!', { description: 'Continue setting up your security PIN.' });
+        toast.info('Welcome back!', {
+          description: 'Continue setting up your security PIN.',
+        });
       } else if (saved.step >= 1) {
         setStep(saved.step);
-        toast.info('Welcome back!', { description: 'Continuing your business setup.' });
+        toast.info('Welcome back!', {
+          description: 'Continuing your business setup.',
+        });
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,14 +355,18 @@ const Signup = () => {
     if (!reg.firstName.trim()) errs.firstName = 'First name is required';
     if (!reg.lastName.trim()) errs.lastName = 'Last name is required';
     if (!reg.email) errs.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email)) errs.email = 'Invalid email';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email))
+      errs.email = 'Invalid email';
     const phoneErr = getPhoneError(phone);
     if (phoneErr) errs.phone = phoneErr;
     if (!reg.password) errs.password = 'Password is required';
     else if (reg.password.length < 8) errs.password = 'Minimum 8 characters';
-    else if (!/[A-Z]/.test(reg.password)) errs.password = 'Must contain at least one uppercase letter';
-    else if (!/\d/.test(reg.password)) errs.password = 'Must contain at least one number';
-    if (reg.password !== reg.confirmPassword) errs.confirmPassword = 'Passwords do not match';
+    else if (!/[A-Z]/.test(reg.password))
+      errs.password = 'Must contain at least one uppercase letter';
+    else if (!/\d/.test(reg.password))
+      errs.password = 'Must contain at least one number';
+    if (reg.password !== reg.confirmPassword)
+      errs.confirmPassword = 'Passwords do not match';
     setRegErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -333,9 +383,7 @@ const Signup = () => {
         password: reg.password,
         confirmPassword: reg.confirmPassword,
       });
-      toast.success('Account created!', {
-        description: 'Check your email for a verification code.',
-      });
+      toast.success('Check your email for a verification code.');
       saveProgress({
         step: 0,
         subStep: 'emailVerify',
@@ -347,18 +395,15 @@ const Signup = () => {
       });
       setShowEmailVerify(true);
     } catch (err) {
-      if (err instanceof HttpError && err.status === 409) {
-        setRegErrors({ email: 'This email is already registered.' });
-      } else {
-        const message = err instanceof Error ? err.message : 'Failed to create account.';
-        toast.error('Account creation failed', { description: message });
-      }
+      toast.error(getApiErrorMessage(err));
     }
   };
 
   const handleEmailVerified = () => {
     saveProgress({ subStep: 'pin' });
-    toast.success('Email verified!', { description: 'Now set up your security PIN.' });
+    toast.success('Email verified!', {
+      description: 'Now set up your security PIN.',
+    });
     setShowEmailVerify(false);
     setShowPinStep(true);
   };
@@ -384,7 +429,8 @@ const Signup = () => {
       return;
     }
 
-    const colorScheme = colorSchemes.find((c) => c.id === selectedColor) ?? colorSchemes[0];
+    const colorScheme =
+      colorSchemes.find((c) => c.id === selectedColor) ?? colorSchemes[0];
     const fontName = FONT_NAME_MAP[selectedFont] ?? 'Inter';
     const timezone =
       typeof Intl !== 'undefined'
@@ -425,7 +471,10 @@ const Signup = () => {
 
       // Silently verify PIN so the stored token has pinVerified: true.
       if (savedPin) {
-        const verifiedToken = await authApi.verifyPin(savedPin, session.accessToken);
+        const verifiedToken = await authApi.verifyPin(
+          savedPin,
+          session.accessToken,
+        );
         setSession({ ...session, accessToken: verifiedToken });
         setSavedPin(''); // clear from memory
       } else {
@@ -438,12 +487,11 @@ const Signup = () => {
 
       clearInterval(stageInterval);
       setAiProgress(100);
-      toast.success('Business created!', { description: 'Your business profile is ready.' });
+      toast.success('Business created successfully!');
       saveProgress({ step: 2, bizName });
       setStep(2);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create business.';
-      toast.error('Business setup failed', { description: message });
+      toast.error(getApiErrorMessage(err));
     } finally {
       clearInterval(stageInterval);
       setAiGenerating(false);
@@ -483,7 +531,9 @@ const Signup = () => {
 
     try {
       const result = await generateWebsiteMutation.mutateAsync(businessId);
-      const url = result.url.startsWith('https://') ? result.url : `https://${result.url}`;
+      const url = result.url.startsWith('https://')
+        ? result.url
+        : `https://${result.url}`;
 
       clearInterval(stageInterval);
       setWebsiteProgress(100);
@@ -492,13 +542,13 @@ const Signup = () => {
       setWebsiteGenerated(true);
       setShowWebsiteModal(false);
       saveProgress({ websiteGenerated: true, websiteUrl: url });
-      toast.success('Website generated!', { description: `Live at ${result.subdomain}.servixos.com` });
+      toast.success(`Website live at ${result.subdomain}.servixos.com`);
     } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
       clearInterval(stageInterval);
       setWebsiteGenerating(false);
       setShowWebsiteModal(false);
-      const message = err instanceof Error ? err.message : 'Please try again.';
-      toast.error('Website generation failed', { description: message });
     }
   };
 
@@ -517,9 +567,10 @@ const Signup = () => {
   const [categorySearch, setCategorySearch] = useState('');
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const filteredCategories = apiCategories.filter((c) =>
-    c.name.toLowerCase().includes(categorySearch.toLowerCase())
+    c.name.toLowerCase().includes(categorySearch.toLowerCase()),
   );
-  const selectedCategoryLabel = apiCategories.find((c) => c._id === bizCategory)?.name ?? '';
+  const selectedCategoryLabel =
+    apiCategories.find((c) => c._id === bizCategory)?.name ?? '';
 
   const renderRegistrationForm = () => (
     <motion.div
@@ -529,29 +580,41 @@ const Signup = () => {
     >
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1.5'>
-          <Label htmlFor='firstName' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='firstName'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <User size={12} /> First Name
           </Label>
           <Input
             id='firstName'
             placeholder='John'
             value={reg.firstName}
-            onChange={(e) => setReg((p) => ({ ...p, firstName: e.target.value }))}
+            onChange={(e) =>
+              setReg((p) => ({ ...p, firstName: e.target.value }))
+            }
             className={regErrors.firstName ? 'border-destructive' : ''}
           />
           {regErrors.firstName && (
-            <p className='text-[10px] text-destructive'>{regErrors.firstName}</p>
+            <p className='text-[10px] text-destructive'>
+              {regErrors.firstName}
+            </p>
           )}
         </div>
         <div className='space-y-1.5'>
-          <Label htmlFor='lastName' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='lastName'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <User size={12} /> Last Name
           </Label>
           <Input
             id='lastName'
             placeholder='Doe'
             value={reg.lastName}
-            onChange={(e) => setReg((p) => ({ ...p, lastName: e.target.value }))}
+            onChange={(e) =>
+              setReg((p) => ({ ...p, lastName: e.target.value }))
+            }
             className={regErrors.lastName ? 'border-destructive' : ''}
           />
           {regErrors.lastName && (
@@ -572,7 +635,9 @@ const Signup = () => {
           onChange={(e) => setReg((p) => ({ ...p, email: e.target.value }))}
           className={regErrors.email ? 'border-destructive' : ''}
         />
-        {regErrors.email && <p className='text-[10px] text-destructive'>{regErrors.email}</p>}
+        {regErrors.email && (
+          <p className='text-[10px] text-destructive'>{regErrors.email}</p>
+        )}
       </div>
 
       <div className='space-y-1.5'>
@@ -592,7 +657,10 @@ const Signup = () => {
 
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1.5'>
-          <Label htmlFor='password' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='password'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <Lock size={12} /> Password
           </Label>
           <div className='relative'>
@@ -601,8 +669,12 @@ const Signup = () => {
               type={showPassword ? 'text' : 'password'}
               placeholder='••••••••'
               value={reg.password}
-              onChange={(e) => setReg((p) => ({ ...p, password: e.target.value }))}
-              className={regErrors.password ? 'border-destructive pr-9' : 'pr-9'}
+              onChange={(e) =>
+                setReg((p) => ({ ...p, password: e.target.value }))
+              }
+              className={
+                regErrors.password ? 'border-destructive pr-9' : 'pr-9'
+              }
             />
             <button
               type='button'
@@ -617,7 +689,10 @@ const Signup = () => {
           )}
         </div>
         <div className='space-y-1.5'>
-          <Label htmlFor='confirmPw' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='confirmPw'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <Lock size={12} /> Confirm Password
           </Label>
           <div className='relative'>
@@ -626,8 +701,12 @@ const Signup = () => {
               type={showConfirm ? 'text' : 'password'}
               placeholder='••••••••'
               value={reg.confirmPassword}
-              onChange={(e) => setReg((p) => ({ ...p, confirmPassword: e.target.value }))}
-              className={regErrors.confirmPassword ? 'border-destructive pr-9' : 'pr-9'}
+              onChange={(e) =>
+                setReg((p) => ({ ...p, confirmPassword: e.target.value }))
+              }
+              className={
+                regErrors.confirmPassword ? 'border-destructive pr-9' : 'pr-9'
+              }
             />
             <button
               type='button'
@@ -638,7 +717,9 @@ const Signup = () => {
             </button>
           </div>
           {regErrors.confirmPassword && (
-            <p className='text-[10px] text-destructive'>{regErrors.confirmPassword}</p>
+            <p className='text-[10px] text-destructive'>
+              {regErrors.confirmPassword}
+            </p>
           )}
         </div>
       </div>
@@ -662,7 +743,10 @@ const Signup = () => {
 
       <p className='text-center text-xs text-muted-foreground'>
         Already have an account?{' '}
-        <Link href='/login' className='text-primary hover:underline font-medium'>
+        <Link
+          href='/login'
+          className='text-primary hover:underline font-medium'
+        >
           Sign in
         </Link>
       </p>
@@ -696,7 +780,9 @@ const Signup = () => {
           {pinPhase === 'create' ? 'Create Your PIN' : 'Confirm Your PIN'}
         </h2>
         <p className='text-sm text-muted-foreground'>
-          {pinPhase === 'create' ? 'Set a 4-digit security PIN' : 'Re-enter your PIN to confirm'}
+          {pinPhase === 'create'
+            ? 'Set a 4-digit security PIN'
+            : 'Re-enter your PIN to confirm'}
         </p>
       </div>
 
@@ -807,7 +893,9 @@ const Signup = () => {
             <Rocket className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 text-primary' />
           </motion.div>
           <div className='text-center space-y-2'>
-            <h3 className='text-lg font-bold font-display'>Setting Up Your Business</h3>
+            <h3 className='text-lg font-bold font-display'>
+              Setting Up Your Business
+            </h3>
             <motion.p
               key={aiStage}
               initial={{ opacity: 0, y: 10 }}
@@ -840,7 +928,9 @@ const Signup = () => {
             <div className='relative'>
               <Input
                 placeholder='Search category...'
-                value={categoryDropdownOpen ? categorySearch : selectedCategoryLabel}
+                value={
+                  categoryDropdownOpen ? categorySearch : selectedCategoryLabel
+                }
                 onChange={(e) => {
                   setCategorySearch(e.target.value);
                   setCategoryDropdownOpen(true);
@@ -855,9 +945,13 @@ const Signup = () => {
                   className='absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg max-h-48 overflow-y-auto'
                 >
                   {categoriesLoading ? (
-                    <p className='px-3 py-2 text-xs text-muted-foreground'>Loading categories...</p>
+                    <p className='px-3 py-2 text-xs text-muted-foreground'>
+                      Loading categories...
+                    </p>
                   ) : filteredCategories.length === 0 ? (
-                    <p className='px-3 py-2 text-xs text-muted-foreground'>No categories found</p>
+                    <p className='px-3 py-2 text-xs text-muted-foreground'>
+                      No categories found
+                    </p>
                   ) : (
                     filteredCategories.map((cat) => (
                       <button
@@ -869,7 +963,9 @@ const Signup = () => {
                           setCategoryDropdownOpen(false);
                         }}
                         className={`flex w-full items-center px-3 py-2 text-xs font-medium transition-colors hover:bg-muted ${
-                          bizCategory === cat._id ? 'bg-primary/10 text-primary' : ''
+                          bizCategory === cat._id
+                            ? 'bg-primary/10 text-primary'
+                            : ''
                         }`}
                       >
                         {cat.name}
@@ -880,7 +976,10 @@ const Signup = () => {
               )}
             </div>
             {categoryDropdownOpen && (
-              <div className='fixed inset-0 z-40' onClick={() => setCategoryDropdownOpen(false)} />
+              <div
+                className='fixed inset-0 z-40'
+                onClick={() => setCategoryDropdownOpen(false)}
+              />
             )}
           </div>
 
@@ -960,7 +1059,9 @@ const Signup = () => {
                 placeholder='Add a service...'
                 value={newService}
                 onChange={(e) => setNewService(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddService())}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && (e.preventDefault(), handleAddService())
+                }
                 className='flex-1'
               />
               <Button size='sm' variant='outline' onClick={handleAddService}>
@@ -1015,7 +1116,8 @@ const Signup = () => {
         <Globe className='h-12 w-12 text-primary mx-auto' />
         <h2 className='text-xl font-bold font-display'>AI Website Builder</h2>
         <p className='text-sm text-muted-foreground'>
-          Generate a professional website with AI. Includes a bookings page for client requests.
+          Generate a professional website with AI. Includes a bookings page for
+          client requests.
         </p>
       </div>
 
@@ -1033,7 +1135,9 @@ const Signup = () => {
             </p>
             <div className='rounded-lg bg-muted px-4 py-2'>
               <p className='text-xs text-muted-foreground'>Website URL</p>
-              <p className='font-mono text-sm font-bold text-primary'>{websiteUrl}</p>
+              <p className='font-mono text-sm font-bold text-primary'>
+                {websiteUrl}
+              </p>
             </div>
           </div>
           <div className='grid grid-cols-2 gap-3'>
@@ -1044,7 +1148,10 @@ const Signup = () => {
             >
               <Eye size={16} /> Live Preview
             </Button>
-            <Button className='gradient-bg text-primary-foreground gap-1.5' onClick={handleFinish}>
+            <Button
+              className='gradient-bg text-primary-foreground gap-1.5'
+              onClick={handleFinish}
+            >
               <ArrowRight size={16} /> Go to Dashboard
             </Button>
           </div>
@@ -1095,7 +1202,9 @@ const Signup = () => {
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
-          <DialogTitle className='sr-only'>Website Generation Progress</DialogTitle>
+          <DialogTitle className='sr-only'>
+            Website Generation Progress
+          </DialogTitle>
           <div className='flex flex-col items-center gap-6 py-6'>
             <motion.div
               className='relative'
@@ -1111,7 +1220,9 @@ const Signup = () => {
               <Globe className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-primary' />
             </motion.div>
             <div className='text-center space-y-2'>
-              <h3 className='text-lg font-bold font-display'>AI is Building Your Website</h3>
+              <h3 className='text-lg font-bold font-display'>
+                AI is Building Your Website
+              </h3>
               <p className='text-sm text-muted-foreground'>
                 Please wait while we generate your website...
               </p>
@@ -1159,15 +1270,19 @@ const Signup = () => {
               i % 3 === 0
                 ? 'hsl(217, 91%, 60%)'
                 : i % 3 === 1
-                ? 'hsl(270, 70%, 60%)'
-                : 'hsl(174, 72%, 50%)',
+                  ? 'hsl(270, 70%, 60%)'
+                  : 'hsl(174, 72%, 50%)',
           }}
           animate={{
             x: [0, 50 * (i % 2 === 0 ? 1 : -1), 0],
             y: [0, 30 * (i % 2 === 0 ? -1 : 1), 0],
             scale: [1, 1.15, 1],
           }}
-          transition={{ duration: 6 + i * 1.5, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{
+            duration: 6 + i * 1.5,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
           initial={{ x: (i - 2.5) * 150, y: (i - 2.5) * 80 }}
         />
       ))}
@@ -1182,7 +1297,12 @@ const Signup = () => {
             opacity: [0, 1, 0],
             scale: [0, 1.5, 0],
           }}
-          transition={{ duration: 3 + i * 0.3, repeat: Infinity, delay: i * 0.5, ease: 'easeOut' }}
+          transition={{
+            duration: 3 + i * 0.3,
+            repeat: Infinity,
+            delay: i * 0.5,
+            ease: 'easeOut',
+          }}
           style={{ left: `${8 + i * 9}%`, bottom: '0%' }}
         />
       ))}
@@ -1202,8 +1322,8 @@ const Signup = () => {
                     i < step
                       ? 'bg-emerald-500 text-primary-foreground'
                       : i === step
-                      ? 'bg-primary text-primary-foreground shadow-lg'
-                      : 'bg-muted text-muted-foreground'
+                        ? 'bg-primary text-primary-foreground shadow-lg'
+                        : 'bg-muted text-muted-foreground'
                   }`}
                   animate={i === step ? { scale: [1, 1.1, 1] } : {}}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -1231,7 +1351,13 @@ const Signup = () => {
               transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
             >
               <div className='relative'>
-                <Image src={servixLogo} alt='Servix OS' width={48} height={48} className='h-12 w-12' />
+                <Image
+                  src={servixLogo}
+                  alt='Servix OS'
+                  width={48}
+                  height={48}
+                  className='h-12 w-12'
+                />
                 <motion.div
                   className='absolute -right-1 -top-1'
                   animate={{ rotate: [0, 15, -15, 0] }}
@@ -1245,7 +1371,9 @@ const Signup = () => {
                 Set up your business with AI assistance
               </p>
             </motion.div>
-            <AnimatePresence mode='wait'>{renderBusinessOnboarding()}</AnimatePresence>
+            <AnimatePresence mode='wait'>
+              {renderBusinessOnboarding()}
+            </AnimatePresence>
           </>
         ) : (
           <div className='max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-2xl border border-border bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:max-h-[78dvh] sm:p-6'>
@@ -1256,7 +1384,13 @@ const Signup = () => {
               transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
             >
               <div className='relative'>
-                <Image src={servixLogo} alt='Servix OS' width={48} height={48} className='h-12 w-12' />
+                <Image
+                  src={servixLogo}
+                  alt='Servix OS'
+                  width={48}
+                  height={48}
+                  className='h-12 w-12'
+                />
                 <motion.div
                   className='absolute -right-1 -top-1'
                   animate={{ rotate: [0, 15, -15, 0] }}
@@ -1267,7 +1401,9 @@ const Signup = () => {
               </div>
               {!showPinStep && !showEmailVerify && (
                 <>
-                  <h1 className='font-display text-xl font-bold'>{STEPS[step]}</h1>
+                  <h1 className='font-display text-xl font-bold'>
+                    {STEPS[step]}
+                  </h1>
                   <p className='text-xs text-muted-foreground text-center'>
                     {step === 0 && 'Create your Servix OS account'}
                     {step === 2 && 'Generate a professional website'}
@@ -1280,10 +1416,10 @@ const Signup = () => {
               {showPinStep
                 ? renderPinEntry()
                 : showEmailVerify
-                ? renderEmailVerify()
-                : step === 0
-                ? renderRegistrationForm()
-                : renderWebsiteBuilder()}
+                  ? renderEmailVerify()
+                  : step === 0
+                    ? renderRegistrationForm()
+                    : renderWebsiteBuilder()}
             </AnimatePresence>
           </div>
         )}

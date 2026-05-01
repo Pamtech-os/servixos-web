@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ShieldCheck, Sparkles, Delete } from 'lucide-react';
 import { toast } from 'sonner';
+import { HttpError, getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVerifyPin } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
@@ -71,17 +72,18 @@ const PinEntry = () => {
         pin: code,
         token: auth.accessToken,
       });
+      setPin([]); // clear before navigation so the auto-submit effect cannot re-fire
       completeVerification(verifiedToken);
       router.push('/dashboard');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Incorrect PIN. Please try again.';
+      const message = getApiErrorMessage(err);
       setError(message);
       setPin([]);
-      if ((err as { status?: number }).status === 401) {
+      if (err instanceof HttpError && err.status === 401) {
         // Account locked after 3 failed attempts
         if (message.toLowerCase().includes('lock')) {
           toast.error('Account locked', {
-            description: 'Too many failed attempts. Try again in 1 hour.',
+            description: message,
           });
         }
       }
@@ -93,12 +95,17 @@ const PinEntry = () => {
     if (!auth.isLoggedIn) router.replace('/login');
   }, [auth.isLoggedIn, isHydrated, router]);
 
-  // Auto-submit when 4 digits entered
+  // Auto-submit when 4 digits entered.
+  // verifyPinMutation.isPending is intentionally NOT a dependency — listing it
+  // caused the effect to re-fire when the mutation completed (isPending: true→false)
+  // while pin.length was still 4, triggering duplicate calls.
+  // pin is cleared on both success and error, so re-trigger is impossible.
   useEffect(() => {
-    if (pin.length === 4 && !verifyPinMutation.isPending) {
+    if (pin.length === 4) {
       void handleSubmit();
     }
-  }, [handleSubmit, pin.length, verifyPinMutation.isPending]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin.length]);
 
   if (!isHydrated || !auth.isLoggedIn) return null;
 

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
 import { useForgotPassword, useResetPassword } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -51,8 +52,7 @@ const ForgotPassword = () => {
       // API always returns 200 regardless of whether email exists (OWASP enumeration prevention).
       setStep('otp');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      toast.error('Failed to send code', { description: message });
+      toast.error(getApiErrorMessage(err));
     }
   };
 
@@ -70,26 +70,20 @@ const ForgotPassword = () => {
 
     try {
       await resetPasswordMutation.mutateAsync({ otp: capturedOtp, newPassword });
-      toast.success('Password reset!', {
-        description: 'You can now sign in with your new password.',
-      });
+      toast.success('Password updated successfully.');
       router.push('/login');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to reset password.';
+      const message = getApiErrorMessage(err);
       // If the OTP was invalid/expired, send the user back to re-enter it.
       const isOtpError =
         message.toLowerCase().includes('otp') ||
         message.toLowerCase().includes('invalid') ||
         message.toLowerCase().includes('expired');
       if (isOtpError) {
-        toast.error('Code invalid or expired', {
-          description: 'Please request a new code.',
-        });
         setCapturedOtp('');
         setStep('otp');
-      } else {
-        toast.error('Reset failed', { description: message });
       }
+      toast.error(message);
     }
   };
 

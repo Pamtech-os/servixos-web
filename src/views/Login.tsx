@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLogin } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
@@ -35,7 +36,6 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginMutation.isPending) return;
     if (!validate()) return;
 
     try {
@@ -43,8 +43,7 @@ const Login = () => {
       setSession(session);
       router.push('/pin');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      toast.error('Sign in failed', { description: message });
+      toast.error(getApiErrorMessage(err));
     }
   };
 
