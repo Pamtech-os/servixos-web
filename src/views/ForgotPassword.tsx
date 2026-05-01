@@ -5,10 +5,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Mail, Sparkles, KeyRound } from 'lucide-react';
+import { ArrowLeft, Mail, Sparkles, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import { useForgotPassword, useResetPassword } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 import OtpVerify from '@/components/OtpVerify';
@@ -17,14 +20,20 @@ const ForgotPassword = () => {
   const [step, setStep] = useState<'email' | 'otp' | 'reset'>('email');
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
+  // The OTP is captured at step 2 and sent with the new password at step 3.
+  const [capturedOtp, setCapturedOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState<{
     newPassword?: string;
     confirmPassword?: string;
   }>({});
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const forgotPasswordMutation = useForgotPassword();
+  const resetPasswordMutation = useResetPassword();
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,25 +46,45 @@ const ForgotPassword = () => {
       return;
     }
     setEmailError('');
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
-    setStep('otp');
+
+    try {
+      await forgotPasswordMutation.mutateAsync(email);
+      // API always returns 200 regardless of whether email exists (OWASP enumeration prevention).
+      setStep('otp');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: typeof passwordErrors = {};
     if (!newPassword) errs.newPassword = 'Password is required';
-    else if (newPassword.length < 6) errs.newPassword = 'Password must be at least 6 characters';
+    else if (newPassword.length < 8) errs.newPassword = 'Minimum 8 characters';
+    else if (!/[A-Z]/.test(newPassword)) errs.newPassword = 'Must contain at least one uppercase letter';
+    else if (!/\d/.test(newPassword)) errs.newPassword = 'Must contain at least one number';
     if (!confirmPassword) errs.confirmPassword = 'Please confirm your password';
     else if (newPassword !== confirmPassword) errs.confirmPassword = 'Passwords do not match';
     setPasswordErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
-    router.push('/login');
+
+    try {
+      await resetPasswordMutation.mutateAsync({ otp: capturedOtp, newPassword });
+      toast.success('Password updated successfully.');
+      router.push('/login');
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      // If the OTP was invalid/expired, send the user back to re-enter it.
+      const isOtpError =
+        message.toLowerCase().includes('otp') ||
+        message.toLowerCase().includes('invalid') ||
+        message.toLowerCase().includes('expired');
+      if (isOtpError) {
+        setCapturedOtp('');
+        setStep('otp');
+      }
+      toast.error(message);
+    }
   };
 
   const Orbs = useCallback(
@@ -80,11 +109,7 @@ const ForgotPassword = () => {
               y: [0, 30 * (i % 2 === 0 ? -1 : 1), 0],
               scale: [1, 1.15, 1],
             }}
-            transition={{
-              duration: 5 + i * 1.5,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
+            transition={{ duration: 5 + i * 1.5, repeat: Infinity, ease: 'easeInOut' }}
             initial={{ x: (i - 2) * 140, y: (i - 2) * 90 }}
           />
         ))}
@@ -93,26 +118,20 @@ const ForgotPassword = () => {
     []
   );
 
+  const sendingOtp = forgotPasswordMutation.isPending;
+  const resettingPassword = resetPasswordMutation.isPending;
+
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
       <ThemeToggle />
       <Orbs />
 
-      {/* Sparkle particles */}
       {[...Array(8)].map((_, i) => (
         <motion.div
           key={`sp-${i}`}
           className='pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-secondary'
-          animate={{
-            y: [0, -250],
-            opacity: [0, 1, 0],
-            scale: [0, 1, 0],
-          }}
-          transition={{
-            duration: 4 + i * 0.5,
-            repeat: Infinity,
-            delay: i * 0.6,
-          }}
+          animate={{ y: [0, -250], opacity: [0, 1, 0], scale: [0, 1, 0] }}
+          transition={{ duration: 4 + i * 0.5, repeat: Infinity, delay: i * 0.6 }}
           style={{ left: `${15 + i * 9}%`, bottom: '5%' }}
         />
       ))}
@@ -172,6 +191,7 @@ const ForgotPassword = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={emailError ? 'border-destructive' : ''}
+                  disabled={sendingOtp}
                 />
                 {emailError && <p className='text-xs text-destructive'>{emailError}</p>}
               </div>
@@ -179,17 +199,13 @@ const ForgotPassword = () => {
                 type='submit'
                 className='gradient-bg w-full text-primary-foreground'
                 size='lg'
-                disabled={loading}
+                disabled={sendingOtp}
               >
-                {loading ? (
+                {sendingOtp ? (
                   <motion.div
                     className='h-5 w-5 rounded-full border-2 border-primary-foreground border-t-transparent'
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: 'linear',
-                    }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   />
                 ) : (
                   'Send Verification Code'
@@ -207,7 +223,11 @@ const ForgotPassword = () => {
           {step === 'otp' && (
             <OtpVerify
               email={email}
-              onVerified={() => setStep('reset')}
+              // Capture the OTP locally — it will be sent with the new password at step 3.
+              onVerified={(otp) => {
+                setCapturedOtp(otp);
+                setStep('reset');
+              }}
               onBack={() => setStep('email')}
               title='Verify Code'
             />
@@ -217,28 +237,48 @@ const ForgotPassword = () => {
             <form onSubmit={handleResetPassword} className='space-y-5'>
               <div className='space-y-2'>
                 <Label htmlFor='new-password'>New Password</Label>
-                <Input
-                  id='new-password'
-                  type='password'
-                  placeholder='••••••••'
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className={passwordErrors.newPassword ? 'border-destructive' : ''}
-                />
+                <div className='relative'>
+                  <Input
+                    id='new-password'
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder='••••••••'
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className={passwordErrors.newPassword ? 'border-destructive pr-10' : 'pr-10'}
+                    disabled={resettingPassword}
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setShowPassword(!showPassword)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {passwordErrors.newPassword && (
                   <p className='text-xs text-destructive'>{passwordErrors.newPassword}</p>
                 )}
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='confirm-password'>Confirm Password</Label>
-                <Input
-                  id='confirm-password'
-                  type='password'
-                  placeholder='••••••••'
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={passwordErrors.confirmPassword ? 'border-destructive' : ''}
-                />
+                <div className='relative'>
+                  <Input
+                    id='confirm-password'
+                    type={showConfirm ? 'text' : 'password'}
+                    placeholder='••••••••'
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={passwordErrors.confirmPassword ? 'border-destructive pr-10' : 'pr-10'}
+                    disabled={resettingPassword}
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  >
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {passwordErrors.confirmPassword && (
                   <p className='text-xs text-destructive'>{passwordErrors.confirmPassword}</p>
                 )}
@@ -247,17 +287,13 @@ const ForgotPassword = () => {
                 type='submit'
                 className='gradient-bg w-full text-primary-foreground'
                 size='lg'
-                disabled={loading}
+                disabled={resettingPassword}
               >
-                {loading ? (
+                {resettingPassword ? (
                   <motion.div
                     className='h-5 w-5 rounded-full border-2 border-primary-foreground border-t-transparent'
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: 'linear',
-                    }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   />
                 ) : (
                   'Reset Password'

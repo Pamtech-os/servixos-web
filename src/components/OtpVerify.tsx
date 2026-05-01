@@ -4,13 +4,22 @@ import { useState, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'r
 import { motion } from 'framer-motion';
 import { KeyRound, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getApiErrorMessage } from '@/common/network/http-client';
 
 interface OtpVerifyProps {
   email: string;
-  onVerified: () => void;
+  /** Called with the verified OTP code on success. */
+  onVerified: (otp: string) => void;
   onBack?: () => void;
   title?: string;
   description?: string;
+  /**
+   * If provided, called with the entered code before `onVerified`.
+   * Should throw an Error (with a user-facing message) on failure.
+   * If omitted, the OTP is accepted locally without a server round-trip.
+   */
+  onVerify?: (otp: string) => Promise<void>;
+  /** If provided, called when the user clicks "Resend Code". */
   onResend?: () => Promise<void>;
 }
 
@@ -20,6 +29,7 @@ const OtpVerify = ({
   onBack,
   title = 'Verify Your Email',
   description,
+  onVerify,
   onResend,
 }: OtpVerifyProps) => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -46,16 +56,17 @@ const OtpVerify = ({
   const handleResend = async () => {
     if (!canResend || loading) return;
     setLoading(true);
-    if (onResend) {
-      await onResend();
-    } else {
-      await new Promise((r) => setTimeout(r, 1000));
+    try {
+      if (onResend) await onResend();
+      setCountdown(120);
+      setCanResend(false);
+      setOtp(['', '', '', '', '', '']);
+      setOtpError('');
+    } catch (err) {
+      setOtpError(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    setCountdown(120);
-    setCanResend(false);
-    setOtp(['', '', '', '', '', '']);
-    setOtpError('');
   };
 
   const verifyCode = async (code: string) => {
@@ -65,9 +76,17 @@ const OtpVerify = ({
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
-    onVerified();
+    try {
+      if (onVerify) await onVerify(code);
+      onVerified(code);
+    } catch (err) {
+      const msg = getApiErrorMessage(err);
+      setOtpError(msg);
+      setOtp(['', '', '', '', '', '']);
+      document.getElementById('otp-field-0')?.focus();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (index: number, value: string) => {

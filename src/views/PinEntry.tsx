@@ -5,7 +5,10 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ShieldCheck, Sparkles, Delete } from 'lucide-react';
+import { toast } from 'sonner';
+import { HttpError, getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVerifyPin } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
 
 const shuffleArray = (arr: number[]) => {
@@ -20,12 +23,11 @@ const shuffleArray = (arr: number[]) => {
 const PinEntry = () => {
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { auth, verifyPin, isHydrated } = useAuth();
+  const { auth, completeVerification, isHydrated } = useAuth();
+  const verifyPinMutation = useVerifyPin();
   const [shuffledNumbers] = useState(() => shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]));
 
-  // Arrange into grid: 3 rows of 3 + bottom row with 0
   const gridNumbers = useMemo(() => {
     const top9 = shuffledNumbers.filter((n) => n !== 0);
     const rows = [top9.slice(0, 3), top9.slice(3, 6), top9.slice(6, 9)];
@@ -45,14 +47,10 @@ const PinEntry = () => {
     setError('');
   }, []);
 
-  // Keyboard support
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (/^\d$/.test(e.key)) {
-        addDigit(parseInt(e.key));
-      } else if (e.key === 'Backspace') {
-        removeDigit();
-      }
+      if (/^\d$/.test(e.key)) addDigit(parseInt(e.key));
+      else if (e.key === 'Backspace') removeDigit();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -64,32 +62,54 @@ const PinEntry = () => {
       setError('Please enter all 4 digits');
       return;
     }
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    verifyPin();
-    setLoading(false);
-    router.push('/dashboard');
-  }, [pin, router, verifyPin]);
-
-  useEffect(() => {
-    if (!isHydrated) {
+    if (!auth.accessToken) {
+      router.replace('/login');
       return;
     }
-    if (!auth.isLoggedIn) {
-      router.replace('/login');
+
+    try {
+      const verifiedToken = await verifyPinMutation.mutateAsync({
+        pin: code,
+        token: auth.accessToken,
+      });
+      setPin([]); // clear before navigation so the auto-submit effect cannot re-fire
+      completeVerification(verifiedToken);
+      router.push('/dashboard');
+    } catch (err) {
+      const message = getApiErrorMessage(err);
+      setError(message);
+      setPin([]);
+      if (err instanceof HttpError && err.status === 401) {
+        // Account locked after 3 failed attempts
+        if (message.toLowerCase().includes('lock')) {
+          toast.error('Account locked', {
+            description: message,
+          });
+        }
+      }
     }
+  }, [pin, auth.accessToken, completeVerification, router, verifyPinMutation]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!auth.isLoggedIn) router.replace('/login');
   }, [auth.isLoggedIn, isHydrated, router]);
 
-  // Auto-submit when 4 digits entered
+  // Auto-submit when 4 digits entered.
+  // verifyPinMutation.isPending is intentionally NOT a dependency — listing it
+  // caused the effect to re-fire when the mutation completed (isPending: true→false)
+  // while pin.length was still 4, triggering duplicate calls.
+  // pin is cleared on both success and error, so re-trigger is impossible.
   useEffect(() => {
-    if (pin.length === 4 && !loading) {
-      handleSubmit();
+    if (pin.length === 4) {
+      void handleSubmit();
     }
-  }, [handleSubmit, loading, pin.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin.length]);
 
-  if (!isHydrated || !auth.isLoggedIn) {
-    return null;
-  }
+  if (!isHydrated || !auth.isLoggedIn) return null;
+
+  const loading = verifyPinMutation.isPending;
 
   return (
     <div className='relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 py-6 sm:items-center sm:py-8'>
@@ -141,7 +161,6 @@ const PinEntry = () => {
             </p>
           </motion.div>
 
-          {/* PIN Display Dots */}
           <div className='flex justify-center gap-4 mb-6'>
             {[0, 1, 2, 3].map((i) => (
               <motion.div
@@ -167,7 +186,6 @@ const PinEntry = () => {
             </motion.p>
           )}
 
-          {/* ATM-style Number Pad */}
           <div className='space-y-2'>
             {gridNumbers.rows.map((row, rowIdx) => (
               <div key={rowIdx} className='flex justify-center gap-2'>
@@ -186,7 +204,6 @@ const PinEntry = () => {
                 ))}
               </div>
             ))}
-            {/* Bottom row: empty, 0, backspace */}
             <div className='flex justify-center gap-2'>
               <div className='h-16 w-16' />
               <motion.button
@@ -212,7 +229,6 @@ const PinEntry = () => {
             </div>
           </div>
 
-          {/* Loading indicator */}
           {loading && (
             <div className='mt-4 flex justify-center'>
               <motion.div

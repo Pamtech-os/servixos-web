@@ -32,7 +32,16 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  useCreateAccount,
+  useCreateBusiness,
+  useGenerateWebsite,
+} from '@/hooks/mutations/use-onboarding';
+import { useBusinessCategories } from '@/hooks/queries/use-business-categories';
+import { onboarding, auth as authApi } from '@/lib/api-client';
+import { getApiErrorMessage } from '@/common/network/http-client';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 import OtpVerify from '@/components/OtpVerify';
@@ -42,9 +51,19 @@ import PhoneInput, {
   phoneError as getPhoneError,
 } from '@/components/PhoneInput';
 import type { PhoneValue } from '@/components/PhoneInput';
-import { toast } from 'sonner';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const ONBOARDING_KEY = 'servixos-onboarding';
+
+const FONT_NAME_MAP: Record<string, string> = {
+  modern: 'Inter',
+  classic: 'Georgia',
+  playful: 'Nunito',
+  bold: 'Montserrat',
+};
+
+// ─── Persistence helpers ──────────────────────────────────────────────────────
 
 interface SavedProgress {
   step: number;
@@ -61,32 +80,48 @@ interface SavedProgress {
 
 const saveProgress = (data: Partial<SavedProgress>) => {
   try {
-    const current = JSON.parse(localStorage.getItem(ONBOARDING_KEY) ?? '{}') as Partial<SavedProgress>;
-    localStorage.setItem(ONBOARDING_KEY, JSON.stringify({ ...current, ...data }));
+    const current = JSON.parse(
+      localStorage.getItem(ONBOARDING_KEY) ?? '{}',
+    ) as Partial<SavedProgress>;
+    localStorage.setItem(
+      ONBOARDING_KEY,
+      JSON.stringify({ ...current, ...data }),
+    );
   } catch {}
 };
 
 const clearProgress = () => localStorage.removeItem(ONBOARDING_KEY);
 
-const STEPS = ['Registration', 'Business Setup', 'Website Builder'];
+// ─── Static data ──────────────────────────────────────────────────────────────
 
-const businessCategories = [
-  { id: 'cleaning', label: 'Cleaning Services', icon: '🧹' },
-  { id: 'plumbing', label: 'Plumbing', icon: '🔧' },
-  { id: 'electrical', label: 'Electrical', icon: '⚡' },
-  { id: 'hvac', label: 'HVAC', icon: '❄️' },
-  { id: 'landscaping', label: 'Landscaping', icon: '🌿' },
-  { id: 'painting', label: 'Painting', icon: '🎨' },
-  { id: 'carpentry', label: 'Carpentry', icon: '🪚' },
-  { id: 'general', label: 'General Contractor', icon: '🏗️' },
-];
+const STEPS = ['Registration', 'Business Setup', 'Website Builder'];
 
 const colorSchemes = [
   { id: 'blue', label: 'Ocean Blue', primary: '#3B82F6', secondary: '#8B5CF6' },
-  { id: 'green', label: 'Forest Green', primary: '#10B981', secondary: '#059669' },
-  { id: 'purple', label: 'Royal Purple', primary: '#8B5CF6', secondary: '#EC4899' },
-  { id: 'orange', label: 'Sunset Orange', primary: '#F59E0B', secondary: '#EF4444' },
-  { id: 'teal', label: 'Teal Breeze', primary: '#14B8A6', secondary: '#3B82F6' },
+  {
+    id: 'green',
+    label: 'Forest Green',
+    primary: '#10B981',
+    secondary: '#059669',
+  },
+  {
+    id: 'purple',
+    label: 'Royal Purple',
+    primary: '#8B5CF6',
+    secondary: '#EC4899',
+  },
+  {
+    id: 'orange',
+    label: 'Sunset Orange',
+    primary: '#F59E0B',
+    secondary: '#EF4444',
+  },
+  {
+    id: 'teal',
+    label: 'Teal Breeze',
+    primary: '#14B8A6',
+    secondary: '#3B82F6',
+  },
   { id: 'pink', label: 'Pink Glow', primary: '#EC4899', secondary: '#8B5CF6' },
 ];
 
@@ -106,11 +141,21 @@ const shuffleArray = (arr: number[]) => {
   return a;
 };
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const Signup = () => {
   const router = useRouter();
-  const { login, verifyPin } = useAuth();
+  const { setSession, auth: authState } = useAuth();
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
+
+  // Queries
+  const { data: apiCategories = [], isLoading: categoriesLoading } =
+    useBusinessCategories();
+
+  // Mutations
+  const createAccountMutation = useCreateAccount();
+  const createBusinessMutation = useCreateBusiness();
+  const generateWebsiteMutation = useGenerateWebsite();
 
   // Step 1: Registration
   const [reg, setReg] = useState({
@@ -134,7 +179,12 @@ const Signup = () => {
   const [confirmPin, setConfirmPin] = useState<string[]>([]);
   const [pinPhase, setPinPhase] = useState<'create' | 'confirm'>('create');
   const [pinError, setPinError] = useState('');
-  const [shuffledNumbers] = useState(() => shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+  const [pinLoading, setPinLoading] = useState(false);
+  // Held temporarily so we can call verify-pin silently after business creation.
+  const [savedPin, setSavedPin] = useState('');
+  const [shuffledNumbers] = useState(() =>
+    shuffleArray([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+  );
 
   const gridNumbers = useMemo(() => {
     const top9 = shuffledNumbers.filter((n) => n !== 0);
@@ -162,7 +212,6 @@ const Signup = () => {
   const [websiteStage, setWebsiteStage] = useState('');
   const [showWebsiteModal, setShowWebsiteModal] = useState(false);
 
-  // PIN keyboard support
   const currentPin = pinPhase === 'create' ? pin : confirmPin;
 
   const addDigit = useCallback(
@@ -174,7 +223,7 @@ const Signup = () => {
         return [...prev, digit.toString()];
       });
     },
-    [pinPhase]
+    [pinPhase],
   );
 
   const removeDigit = useCallback(() => {
@@ -183,7 +232,6 @@ const Signup = () => {
     setPinError('');
   }, [pinPhase]);
 
-  // Set locale-based default country once on client
   useEffect(() => {
     setPhone((p) => ({ ...p, country: getDefaultCountry() }));
   }, []);
@@ -198,34 +246,74 @@ const Signup = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [showPinStep, addDigit, removeDigit]);
 
-  // Auto-advance PIN
+  // Auto-advance / submit PIN phases.
+  // Every setTimeout returns a cleanup so React StrictMode's double-invocation
+  // (and any other re-run) cancels the pending timer before scheduling a new one.
   useEffect(() => {
+    if (pinLoading) return;
+
     if (pinPhase === 'create' && pin.length === 4) {
-      setTimeout(() => setPinPhase('confirm'), 400);
+      const timer = setTimeout(() => setPinPhase('confirm'), 400);
+      return () => clearTimeout(timer);
     }
+
     if (pinPhase === 'confirm' && confirmPin.length === 4) {
-      setTimeout(() => {
-        if (pin.join('') !== confirmPin.join('')) {
+      if (pin.join('') !== confirmPin.join('')) {
+        const timer = setTimeout(() => {
           setPinError('PINs do not match. Try again.');
           setConfirmPin([]);
           setPinPhase('create');
           setPin([]);
-        } else {
+        }, 400);
+        return () => clearTimeout(timer);
+      }
+
+      const pinValue = pin.join('');
+      const timer = setTimeout(async () => {
+        setPinLoading(true);
+        try {
+          await onboarding.setPin({
+            email: reg.email,
+            pin: pinValue,
+            confirmPin: pinValue,
+          });
+          setSavedPin(pinValue);
           toast.success('PIN created successfully!');
           saveProgress({ subStep: null, step: 1 });
+          // Clear pin state before pinLoading→false so the effect cannot re-trigger.
+          setPin([]);
+          setConfirmPin([]);
+          setPinPhase('create');
           setShowPinStep(false);
           setStep(1);
+        } catch (err) {
+          setPinError(getApiErrorMessage(err));
+          setConfirmPin([]);
+          setPinPhase('create');
+          setPin([]);
+        } finally {
+          setPinLoading(false);
         }
       }, 400);
+      return () => clearTimeout(timer);
     }
-  }, [pin, confirmPin, pinPhase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pin, confirmPin, pinPhase, pinLoading]);
 
-  // Restore saved onboarding progress on mount
+  // Restore onboarding progress on mount
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(ONBOARDING_KEY) ?? 'null') as SavedProgress | null;
+      const saved = JSON.parse(
+        localStorage.getItem(ONBOARDING_KEY) ?? 'null',
+      ) as SavedProgress | null;
       if (!saved?.email) return;
-      setReg((r) => ({ ...r, email: saved.email, firstName: saved.firstName ?? '', lastName: saved.lastName ?? '' }));
+
+      setReg((r) => ({
+        ...r,
+        email: saved.email,
+        firstName: saved.firstName ?? '',
+        lastName: saved.lastName ?? '',
+      }));
       if (saved.phone || saved.phoneCountry) {
         setPhone((p) => ({
           ...p,
@@ -242,49 +330,80 @@ const Signup = () => {
       }
       if (saved.subStep === 'emailVerify') {
         setShowEmailVerify(true);
-        toast.info('Welcome back!', { description: 'Please verify your email to continue.' });
+        toast.info('Welcome back!', {
+          description: 'Please verify your email to continue.',
+        });
       } else if (saved.subStep === 'pin') {
-        login(saved.email);
         setShowPinStep(true);
-        toast.info('Welcome back!', { description: 'Continue setting up your security PIN.' });
+        toast.info('Welcome back!', {
+          description: 'Continue setting up your security PIN.',
+        });
       } else if (saved.step >= 1) {
-        login(saved.email);
         setStep(saved.step);
-        toast.info('Welcome back!', { description: 'Continuing your business setup.' });
+        toast.info('Welcome back!', {
+          description: 'Continuing your business setup.',
+        });
       }
     } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const validateRegistration = () => {
     const errs: Record<string, string> = {};
     if (!reg.firstName.trim()) errs.firstName = 'First name is required';
     if (!reg.lastName.trim()) errs.lastName = 'Last name is required';
     if (!reg.email) errs.email = 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email)) errs.email = 'Invalid email';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email))
+      errs.email = 'Invalid email';
     const phoneErr = getPhoneError(phone);
     if (phoneErr) errs.phone = phoneErr;
     if (!reg.password) errs.password = 'Password is required';
     else if (reg.password.length < 8) errs.password = 'Minimum 8 characters';
-    if (reg.password !== reg.confirmPassword) errs.confirmPassword = 'Passwords do not match';
+    else if (!/[A-Z]/.test(reg.password))
+      errs.password = 'Must contain at least one uppercase letter';
+    else if (!/\d/.test(reg.password))
+      errs.password = 'Must contain at least one number';
+    if (reg.password !== reg.confirmPassword)
+      errs.confirmPassword = 'Passwords do not match';
     setRegErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleRegistrationNext = async () => {
     if (!validateRegistration()) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setLoading(false);
-    toast.success('Account created!', { description: 'Check your email for a verification code.' });
-    saveProgress({ step: 0, subStep: 'emailVerify', email: reg.email, firstName: reg.firstName, lastName: reg.lastName, phone: phone.e164, phoneCountry: phone.country });
-    setShowEmailVerify(true);
+
+    try {
+      await createAccountMutation.mutateAsync({
+        firstName: reg.firstName.trim(),
+        lastName: reg.lastName.trim(),
+        email: reg.email,
+        phone: phone.e164,
+        password: reg.password,
+        confirmPassword: reg.confirmPassword,
+      });
+      toast.success('Check your email for a verification code.');
+      saveProgress({
+        step: 0,
+        subStep: 'emailVerify',
+        email: reg.email,
+        firstName: reg.firstName,
+        lastName: reg.lastName,
+        phone: phone.e164,
+        phoneCountry: phone.country,
+      });
+      setShowEmailVerify(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
   };
 
   const handleEmailVerified = () => {
-    login(reg.email);
     saveProgress({ subStep: 'pin' });
-    toast.success('Email verified!', { description: 'Now set up your security PIN.' });
+    toast.success('Email verified!', {
+      description: 'Now set up your security PIN.',
+    });
     setShowEmailVerify(false);
     setShowPinStep(true);
   };
@@ -305,32 +424,92 @@ const Signup = () => {
       toast.error('Please enter your business name');
       return;
     }
+    if (!bizDescription.trim()) {
+      toast.error('Please enter a business description');
+      return;
+    }
+
+    const colorScheme =
+      colorSchemes.find((c) => c.id === selectedColor) ?? colorSchemes[0];
+    const fontName = FONT_NAME_MAP[selectedFont] ?? 'Inter';
+    const timezone =
+      typeof Intl !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : 'UTC';
 
     setAiGenerating(true);
     setAiProgress(0);
-    const stages = [
+
+    const aiStages = [
       'Analyzing business category...',
       'Setting up brand identity...',
       'Configuring services...',
       'Creating business profile...',
       'Finalizing setup...',
     ];
-    for (let i = 0; i < stages.length; i++) {
-      setAiStage(stages[i]);
-      setAiProgress(((i + 1) / stages.length) * 100);
-      await new Promise((r) => setTimeout(r, 1200));
+    let stageIdx = 0;
+    const stageInterval = setInterval(() => {
+      if (stageIdx < aiStages.length) {
+        setAiStage(aiStages[stageIdx]);
+        setAiProgress(((stageIdx + 1) / aiStages.length) * 100);
+        stageIdx++;
+      }
+    }, 800);
+
+    try {
+      const session = await createBusinessMutation.mutateAsync({
+        email: reg.email,
+        businessName: bizName.trim(),
+        businessCategory: bizCategory,
+        businessDescription: bizDescription.trim(),
+        colorPrimary: colorScheme.primary,
+        colorSecondary: colorScheme.secondary,
+        font: fontName,
+        services,
+        timezone,
+      });
+
+      // Silently verify PIN so the stored token has pinVerified: true.
+      if (savedPin) {
+        const verifiedToken = await authApi.verifyPin(
+          savedPin,
+          session.accessToken,
+        );
+        setSession({ ...session, accessToken: verifiedToken });
+        setSavedPin(''); // clear from memory
+      } else {
+        // Restoration path: user came back without a cached PIN.
+        setSession(session);
+        clearProgress();
+        router.push('/pin');
+        return;
+      }
+
+      clearInterval(stageInterval);
+      setAiProgress(100);
+      toast.success('Business created successfully!');
+      saveProgress({ step: 2, bizName });
+      setStep(2);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      clearInterval(stageInterval);
+      setAiGenerating(false);
     }
-    setAiGenerating(false);
-    toast.success('Business created!', { description: 'Your business profile is ready.' });
-    saveProgress({ step: 2, bizName });
-    setStep(2);
   };
 
   const handleGenerateWebsite = async () => {
+    const businessId = authState.user?.businessId;
+    if (!businessId) {
+      toast.error('Business not found. Please refresh and try again.');
+      return;
+    }
+
     setShowWebsiteModal(true);
     setWebsiteGenerating(true);
     setWebsiteProgress(0);
-    const stages = [
+
+    const wsStages = [
       'Designing homepage layout...',
       'Adding service sections...',
       'Creating booking page...',
@@ -341,68 +520,101 @@ const Signup = () => {
       'Setting up booking form...',
       'Finalizing & deploying...',
     ];
-    for (let i = 0; i < stages.length; i++) {
-      setWebsiteStage(stages[i]);
-      setWebsiteProgress(((i + 1) / stages.length) * 100);
-      await new Promise((r) => setTimeout(r, 1500));
+    let stageIdx = 0;
+    const stageInterval = setInterval(() => {
+      if (stageIdx < wsStages.length) {
+        setWebsiteStage(wsStages[stageIdx]);
+        setWebsiteProgress(((stageIdx + 1) / wsStages.length) * 100);
+        stageIdx++;
+      }
+    }, 1200);
+
+    try {
+      const result = await generateWebsiteMutation.mutateAsync(businessId);
+      const url = result.url.startsWith('https://')
+        ? result.url
+        : `https://${result.url}`;
+
+      clearInterval(stageInterval);
+      setWebsiteProgress(100);
+      setWebsiteUrl(url);
+      setWebsiteGenerating(false);
+      setWebsiteGenerated(true);
+      setShowWebsiteModal(false);
+      saveProgress({ websiteGenerated: true, websiteUrl: url });
+      toast.success(`Website live at ${result.subdomain}.servixos.com`);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      clearInterval(stageInterval);
+      setWebsiteGenerating(false);
+      setShowWebsiteModal(false);
     }
-    const subdomain = bizName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-    const url = `${subdomain || 'mybusiness'}.servixos.com`;
-    setWebsiteUrl(url);
-    setWebsiteGenerating(false);
-    setWebsiteGenerated(true);
-    setShowWebsiteModal(false);
-    saveProgress({ websiteGenerated: true, websiteUrl: url });
-    toast.success('Website generated!', { description: `Live at ${url}` });
   };
 
   const handleFinish = () => {
     clearProgress();
-    verifyPin();
     router.push('/dashboard');
   };
 
   const handleSkipWebsite = () => {
     clearProgress();
-    verifyPin();
     router.push('/dashboard');
   };
 
+  // ─── Render helpers ──────────────────────────────────────────────────────────
+
+  const [categorySearch, setCategorySearch] = useState('');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const filteredCategories = apiCategories.filter((c) =>
+    c.name.toLowerCase().includes(categorySearch.toLowerCase()),
+  );
+  const selectedCategoryLabel =
+    apiCategories.find((c) => c._id === bizCategory)?.name ?? '';
+
   const renderRegistrationForm = () => (
     <motion.div
-      // initial={{ opacity: 0, x: 40 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }}
       className='space-y-4 sm:space-y-5'
     >
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1.5'>
-          <Label htmlFor='firstName' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='firstName'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <User size={12} /> First Name
           </Label>
           <Input
             id='firstName'
             placeholder='John'
             value={reg.firstName}
-            onChange={(e) => setReg((p) => ({ ...p, firstName: e.target.value }))}
+            onChange={(e) =>
+              setReg((p) => ({ ...p, firstName: e.target.value }))
+            }
             className={regErrors.firstName ? 'border-destructive' : ''}
           />
           {regErrors.firstName && (
-            <p className='text-[10px] text-destructive'>{regErrors.firstName}</p>
+            <p className='text-[10px] text-destructive'>
+              {regErrors.firstName}
+            </p>
           )}
         </div>
         <div className='space-y-1.5'>
-          <Label htmlFor='lastName' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='lastName'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <User size={12} /> Last Name
           </Label>
           <Input
             id='lastName'
             placeholder='Doe'
             value={reg.lastName}
-            onChange={(e) => setReg((p) => ({ ...p, lastName: e.target.value }))}
+            onChange={(e) =>
+              setReg((p) => ({ ...p, lastName: e.target.value }))
+            }
             className={regErrors.lastName ? 'border-destructive' : ''}
           />
           {regErrors.lastName && (
@@ -423,7 +635,9 @@ const Signup = () => {
           onChange={(e) => setReg((p) => ({ ...p, email: e.target.value }))}
           className={regErrors.email ? 'border-destructive' : ''}
         />
-        {regErrors.email && <p className='text-[10px] text-destructive'>{regErrors.email}</p>}
+        {regErrors.email && (
+          <p className='text-[10px] text-destructive'>{regErrors.email}</p>
+        )}
       </div>
 
       <div className='space-y-1.5'>
@@ -443,7 +657,10 @@ const Signup = () => {
 
       <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
         <div className='space-y-1.5'>
-          <Label htmlFor='password' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='password'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <Lock size={12} /> Password
           </Label>
           <div className='relative'>
@@ -452,8 +669,12 @@ const Signup = () => {
               type={showPassword ? 'text' : 'password'}
               placeholder='••••••••'
               value={reg.password}
-              onChange={(e) => setReg((p) => ({ ...p, password: e.target.value }))}
-              className={regErrors.password ? 'border-destructive pr-9' : 'pr-9'}
+              onChange={(e) =>
+                setReg((p) => ({ ...p, password: e.target.value }))
+              }
+              className={
+                regErrors.password ? 'border-destructive pr-9' : 'pr-9'
+              }
             />
             <button
               type='button'
@@ -468,7 +689,10 @@ const Signup = () => {
           )}
         </div>
         <div className='space-y-1.5'>
-          <Label htmlFor='confirmPw' className='flex items-center gap-1.5 text-xs'>
+          <Label
+            htmlFor='confirmPw'
+            className='flex items-center gap-1.5 text-xs'
+          >
             <Lock size={12} /> Confirm Password
           </Label>
           <div className='relative'>
@@ -477,8 +701,12 @@ const Signup = () => {
               type={showConfirm ? 'text' : 'password'}
               placeholder='••••••••'
               value={reg.confirmPassword}
-              onChange={(e) => setReg((p) => ({ ...p, confirmPassword: e.target.value }))}
-              className={regErrors.confirmPassword ? 'border-destructive pr-9' : 'pr-9'}
+              onChange={(e) =>
+                setReg((p) => ({ ...p, confirmPassword: e.target.value }))
+              }
+              className={
+                regErrors.confirmPassword ? 'border-destructive pr-9' : 'pr-9'
+              }
             />
             <button
               type='button'
@@ -489,7 +717,9 @@ const Signup = () => {
             </button>
           </div>
           {regErrors.confirmPassword && (
-            <p className='text-[10px] text-destructive'>{regErrors.confirmPassword}</p>
+            <p className='text-[10px] text-destructive'>
+              {regErrors.confirmPassword}
+            </p>
           )}
         </div>
       </div>
@@ -499,9 +729,9 @@ const Signup = () => {
           onClick={handleRegistrationNext}
           className='gradient-bg w-full text-primary-foreground'
           size='lg'
-          disabled={loading}
+          disabled={createAccountMutation.isPending}
         >
-          {loading ? (
+          {createAccountMutation.isPending ? (
             <Loader2 className='h-5 w-5 animate-spin' />
           ) : (
             <>
@@ -511,54 +741,12 @@ const Signup = () => {
         </Button>
       </motion.div>
 
-      {/* <div className='relative'>
-        <Separator />
-        <span className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs text-muted-foreground'>
-          or sign up with
-        </span>
-      </div> */}
-
-      {/* <div className='grid grid-cols-2 gap-3'>
-        <Button
-          variant='outline'
-          className='gap-2'
-          onClick={() => toast.info('Google signup coming soon')}
-        >
-          <svg className='h-4 w-4' viewBox='0 0 24 24'>
-            <path
-              d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z'
-              fill='#4285F4'
-            />
-            <path
-              d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'
-              fill='#34A853'
-            />
-            <path
-              d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'
-              fill='#FBBC05'
-            />
-            <path
-              d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
-              fill='#EA4335'
-            />
-          </svg>
-          Google
-        </Button>
-        <Button
-          variant='outline'
-          className='gap-2'
-          onClick={() => toast.info('Apple signup coming soon')}
-        >
-          <svg className='h-4 w-4' viewBox='0 0 24 24' fill='currentColor'>
-            <path d='M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z' />
-          </svg>
-          Apple
-        </Button>
-      </div> */}
-
       <p className='text-center text-xs text-muted-foreground'>
         Already have an account?{' '}
-        <Link href='/login' className='text-primary hover:underline font-medium'>
+        <Link
+          href='/login'
+          className='text-primary hover:underline font-medium'
+        >
           Sign in
         </Link>
       </p>
@@ -568,7 +756,14 @@ const Signup = () => {
   const renderEmailVerify = () => (
     <OtpVerify
       email={reg.email}
+      onVerify={async (otp) => {
+        await onboarding.verifyEmail({ email: reg.email, otp });
+      }}
       onVerified={handleEmailVerified}
+      onResend={async () => {
+        await onboarding.resendOtp(reg.email);
+        toast.success('New code sent!', { description: 'Check your email.' });
+      }}
       title='Verify Your Email'
     />
   );
@@ -585,7 +780,9 @@ const Signup = () => {
           {pinPhase === 'create' ? 'Create Your PIN' : 'Confirm Your PIN'}
         </h2>
         <p className='text-sm text-muted-foreground'>
-          {pinPhase === 'create' ? 'Set a 4-digit security PIN' : 'Re-enter your PIN to confirm'}
+          {pinPhase === 'create'
+            ? 'Set a 4-digit security PIN'
+            : 'Re-enter your PIN to confirm'}
         </p>
       </div>
 
@@ -614,6 +811,12 @@ const Signup = () => {
         </motion.p>
       )}
 
+      {pinLoading && (
+        <div className='flex justify-center'>
+          <Loader2 className='h-6 w-6 animate-spin text-primary' />
+        </div>
+      )}
+
       <div className='space-y-2'>
         {gridNumbers.rows.map((row, rowIdx) => (
           <div key={rowIdx} className='flex justify-center gap-2'>
@@ -624,7 +827,7 @@ const Signup = () => {
                 whileTap={{ scale: 0.9 }}
                 whileHover={{ scale: 1.05 }}
                 onClick={() => addDigit(num)}
-                disabled={currentPin.length >= 4}
+                disabled={currentPin.length >= 4 || pinLoading}
                 className='flex h-14 w-14 items-center justify-center rounded-xl border border-border bg-background text-lg font-bold text-foreground shadow-sm transition-all hover:bg-muted hover:border-primary/50 active:bg-primary/10 disabled:opacity-40'
               >
                 {num}
@@ -639,7 +842,7 @@ const Signup = () => {
             whileTap={{ scale: 0.9 }}
             whileHover={{ scale: 1.05 }}
             onClick={() => addDigit(0)}
-            disabled={currentPin.length >= 4}
+            disabled={currentPin.length >= 4 || pinLoading}
             className='flex h-14 w-14 items-center justify-center rounded-xl border border-border bg-background text-lg font-bold text-foreground shadow-sm transition-all hover:bg-muted hover:border-primary/50 active:bg-primary/10 disabled:opacity-40'
           >
             0
@@ -649,7 +852,7 @@ const Signup = () => {
             whileTap={{ scale: 0.9 }}
             whileHover={{ scale: 1.05 }}
             onClick={removeDigit}
-            disabled={currentPin.length === 0}
+            disabled={currentPin.length === 0 || pinLoading}
             className='flex h-14 w-14 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground shadow-sm transition-all hover:bg-destructive/10 hover:text-destructive disabled:opacity-40'
           >
             <Delete size={20} />
@@ -658,13 +861,6 @@ const Signup = () => {
       </div>
     </motion.div>
   );
-
-  const [categorySearch, setCategorySearch] = useState('');
-  const filteredCategories = businessCategories.filter((c) =>
-    c.label.toLowerCase().includes(categorySearch.toLowerCase())
-  );
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const selectedCategoryLabel = businessCategories.find((c) => c.id === bizCategory)?.label || '';
 
   const renderBusinessOnboarding = () => (
     <motion.div
@@ -697,7 +893,9 @@ const Signup = () => {
             <Rocket className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-10 w-10 text-primary' />
           </motion.div>
           <div className='text-center space-y-2'>
-            <h3 className='text-lg font-bold font-display'>AI Generating Your Business</h3>
+            <h3 className='text-lg font-bold font-display'>
+              Setting Up Your Business
+            </h3>
             <motion.p
               key={aiStage}
               initial={{ opacity: 0, y: 10 }}
@@ -722,7 +920,7 @@ const Signup = () => {
         </div>
       ) : (
         <>
-          {/* Business Category - Searchable Dropdown */}
+          {/* Business Category — searchable dropdown */}
           <div className='space-y-2 relative'>
             <Label className='text-xs font-semibold flex items-center gap-1.5'>
               <Building2 size={12} /> Business Category
@@ -730,7 +928,9 @@ const Signup = () => {
             <div className='relative'>
               <Input
                 placeholder='Search category...'
-                value={categoryDropdownOpen ? categorySearch : selectedCategoryLabel}
+                value={
+                  categoryDropdownOpen ? categorySearch : selectedCategoryLabel
+                }
                 onChange={(e) => {
                   setCategorySearch(e.target.value);
                   setCategoryDropdownOpen(true);
@@ -744,24 +944,31 @@ const Signup = () => {
                   animate={{ opacity: 1, y: 0 }}
                   className='absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg max-h-48 overflow-y-auto'
                 >
-                  {filteredCategories.length === 0 ? (
-                    <p className='px-3 py-2 text-xs text-muted-foreground'>No categories found</p>
+                  {categoriesLoading ? (
+                    <p className='px-3 py-2 text-xs text-muted-foreground'>
+                      Loading categories...
+                    </p>
+                  ) : filteredCategories.length === 0 ? (
+                    <p className='px-3 py-2 text-xs text-muted-foreground'>
+                      No categories found
+                    </p>
                   ) : (
                     filteredCategories.map((cat) => (
                       <button
-                        key={cat.id}
+                        key={cat._id}
                         type='button'
                         onClick={() => {
-                          setBizCategory(cat.id);
+                          setBizCategory(cat._id);
                           setCategorySearch('');
                           setCategoryDropdownOpen(false);
                         }}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-xs font-medium transition-colors hover:bg-muted ${
-                          bizCategory === cat.id ? 'bg-primary/10 text-primary' : ''
+                        className={`flex w-full items-center px-3 py-2 text-xs font-medium transition-colors hover:bg-muted ${
+                          bizCategory === cat._id
+                            ? 'bg-primary/10 text-primary'
+                            : ''
                         }`}
                       >
-                        <span className='text-base'>{cat.icon}</span>
-                        {cat.label}
+                        {cat.name}
                       </button>
                     ))
                   )}
@@ -769,11 +976,13 @@ const Signup = () => {
               )}
             </div>
             {categoryDropdownOpen && (
-              <div className='fixed inset-0 z-40' onClick={() => setCategoryDropdownOpen(false)} />
+              <div
+                className='fixed inset-0 z-40'
+                onClick={() => setCategoryDropdownOpen(false)}
+              />
             )}
           </div>
 
-          {/* Business Name & Description */}
           <div className='space-y-1.5'>
             <Label className='text-xs'>Business Name</Label>
             <Input
@@ -783,7 +992,7 @@ const Signup = () => {
             />
           </div>
           <div className='space-y-1.5'>
-            <Label className='text-xs'>Description (optional)</Label>
+            <Label className='text-xs'>Business Description</Label>
             <Textarea
               placeholder='What does your business do?'
               value={bizDescription}
@@ -792,7 +1001,6 @@ const Signup = () => {
             />
           </div>
 
-          {/* Brand Identity */}
           <div className='space-y-2'>
             <Label className='text-xs font-semibold flex items-center gap-1.5'>
               <Palette size={12} /> Color Scheme
@@ -842,7 +1050,6 @@ const Signup = () => {
             </div>
           </div>
 
-          {/* Services */}
           <div className='space-y-2'>
             <Label className='text-xs font-semibold flex items-center gap-1.5'>
               <Wrench size={12} /> Services
@@ -852,7 +1059,9 @@ const Signup = () => {
                 placeholder='Add a service...'
                 value={newService}
                 onChange={(e) => setNewService(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddService())}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && (e.preventDefault(), handleAddService())
+                }
                 className='flex-1'
               />
               <Button size='sm' variant='outline' onClick={handleAddService}>
@@ -880,8 +1089,15 @@ const Signup = () => {
               onClick={handleBusinessNext}
               className='gradient-bg w-full text-primary-foreground'
               size='lg'
+              disabled={createBusinessMutation.isPending}
             >
-              <Rocket size={18} /> Generate My Business
+              {createBusinessMutation.isPending ? (
+                <Loader2 className='h-5 w-5 animate-spin' />
+              ) : (
+                <>
+                  <Rocket size={18} /> Generate My Business
+                </>
+              )}
             </Button>
           </motion.div>
         </>
@@ -900,7 +1116,8 @@ const Signup = () => {
         <Globe className='h-12 w-12 text-primary mx-auto' />
         <h2 className='text-xl font-bold font-display'>AI Website Builder</h2>
         <p className='text-sm text-muted-foreground'>
-          Generate a professional website with AI. Includes a bookings page for client requests.
+          Generate a professional website with AI. Includes a bookings page for
+          client requests.
         </p>
       </div>
 
@@ -918,18 +1135,23 @@ const Signup = () => {
             </p>
             <div className='rounded-lg bg-muted px-4 py-2'>
               <p className='text-xs text-muted-foreground'>Website URL</p>
-              <p className='font-mono text-sm font-bold text-primary'>{websiteUrl}</p>
+              <p className='font-mono text-sm font-bold text-primary'>
+                {websiteUrl}
+              </p>
             </div>
           </div>
           <div className='grid grid-cols-2 gap-3'>
             <Button
               variant='outline'
               className='gap-1.5'
-              onClick={() => toast.info('Preview opening...')}
+              onClick={() => window.open(websiteUrl, '_blank')}
             >
               <Eye size={16} /> Live Preview
             </Button>
-            <Button className='gradient-bg text-primary-foreground gap-1.5' onClick={handleFinish}>
+            <Button
+              className='gradient-bg text-primary-foreground gap-1.5'
+              onClick={handleFinish}
+            >
               <ArrowRight size={16} /> Go to Dashboard
             </Button>
           </div>
@@ -973,14 +1195,16 @@ const Signup = () => {
         </div>
       )}
 
-      {/* Non-closable generating modal */}
+      {/* Non-closable generation modal */}
       <Dialog open={showWebsiteModal} onOpenChange={() => {}}>
         <DialogContent
           className='sm:max-w-md'
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
-          <DialogTitle className='sr-only'>Website Generation Progress</DialogTitle>
+          <DialogTitle className='sr-only'>
+            Website Generation Progress
+          </DialogTitle>
           <div className='flex flex-col items-center gap-6 py-6'>
             <motion.div
               className='relative'
@@ -996,7 +1220,9 @@ const Signup = () => {
               <Globe className='absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-primary' />
             </motion.div>
             <div className='text-center space-y-2'>
-              <h3 className='text-lg font-bold font-display'>AI is Building Your Website</h3>
+              <h3 className='text-lg font-bold font-display'>
+                AI is Building Your Website
+              </h3>
               <p className='text-sm text-muted-foreground'>
                 Please wait while we generate your website...
               </p>
@@ -1027,11 +1253,12 @@ const Signup = () => {
     </motion.div>
   );
 
+  // ─── Layout ──────────────────────────────────────────────────────────────────
+
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
       <ThemeToggle />
 
-      {/* Animated background */}
       {[...Array(6)].map((_, i) => (
         <motion.div
           key={i}
@@ -1043,20 +1270,23 @@ const Signup = () => {
               i % 3 === 0
                 ? 'hsl(217, 91%, 60%)'
                 : i % 3 === 1
-                ? 'hsl(270, 70%, 60%)'
-                : 'hsl(174, 72%, 50%)',
+                  ? 'hsl(270, 70%, 60%)'
+                  : 'hsl(174, 72%, 50%)',
           }}
           animate={{
             x: [0, 50 * (i % 2 === 0 ? 1 : -1), 0],
             y: [0, 30 * (i % 2 === 0 ? -1 : 1), 0],
             scale: [1, 1.15, 1],
           }}
-          transition={{ duration: 6 + i * 1.5, repeat: Infinity, ease: 'easeInOut' }}
+          transition={{
+            duration: 6 + i * 1.5,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
           initial={{ x: (i - 2.5) * 150, y: (i - 2.5) * 80 }}
         />
       ))}
 
-      {/* Sparkle particles */}
       {[...Array(10)].map((_, i) => (
         <motion.div
           key={`sp-${i}`}
@@ -1067,7 +1297,12 @@ const Signup = () => {
             opacity: [0, 1, 0],
             scale: [0, 1.5, 0],
           }}
-          transition={{ duration: 3 + i * 0.3, repeat: Infinity, delay: i * 0.5, ease: 'easeOut' }}
+          transition={{
+            duration: 3 + i * 0.3,
+            repeat: Infinity,
+            delay: i * 0.5,
+            ease: 'easeOut',
+          }}
           style={{ left: `${8 + i * 9}%`, bottom: '0%' }}
         />
       ))}
@@ -1078,7 +1313,6 @@ const Signup = () => {
         transition={{ duration: 0.6 }}
         className='relative z-10 w-full max-w-lg'
       >
-        {/* Step indicator */}
         {!showPinStep && !showEmailVerify && (
           <div className='mb-4 flex items-center justify-center gap-1.5 sm:mb-6 sm:gap-2'>
             {STEPS.map((s, i) => (
@@ -1088,8 +1322,8 @@ const Signup = () => {
                     i < step
                       ? 'bg-emerald-500 text-primary-foreground'
                       : i === step
-                      ? 'bg-primary text-primary-foreground shadow-lg'
-                      : 'bg-muted text-muted-foreground'
+                        ? 'bg-primary text-primary-foreground shadow-lg'
+                        : 'bg-muted text-muted-foreground'
                   }`}
                   animate={i === step ? { scale: [1, 1.1, 1] } : {}}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -1110,7 +1344,6 @@ const Signup = () => {
 
         {step === 1 && !aiGenerating ? (
           <>
-            {/* Logo + title without container for step 2 */}
             <motion.div
               className='mb-5 flex flex-col items-center gap-2'
               initial={{ scale: 0 }}
@@ -1138,11 +1371,12 @@ const Signup = () => {
                 Set up your business with AI assistance
               </p>
             </motion.div>
-            <AnimatePresence mode='wait'>{renderBusinessOnboarding()}</AnimatePresence>
+            <AnimatePresence mode='wait'>
+              {renderBusinessOnboarding()}
+            </AnimatePresence>
           </>
         ) : (
           <div className='max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-2xl border border-border bg-card/80 p-3 shadow-lg backdrop-blur-xl sm:max-h-[78dvh] sm:p-6'>
-            {/* Logo */}
             <motion.div
               className='mb-5 flex flex-col items-center gap-2'
               initial={{ scale: 0 }}
@@ -1167,7 +1401,9 @@ const Signup = () => {
               </div>
               {!showPinStep && !showEmailVerify && (
                 <>
-                  <h1 className='font-display text-xl font-bold'>{STEPS[step]}</h1>
+                  <h1 className='font-display text-xl font-bold'>
+                    {STEPS[step]}
+                  </h1>
                   <p className='text-xs text-muted-foreground text-center'>
                     {step === 0 && 'Create your Servix OS account'}
                     {step === 2 && 'Generate a professional website'}
@@ -1180,10 +1416,10 @@ const Signup = () => {
               {showPinStep
                 ? renderPinEntry()
                 : showEmailVerify
-                ? renderEmailVerify()
-                : step === 0
-                ? renderRegistrationForm()
-                : renderWebsiteBuilder()}
+                  ? renderEmailVerify()
+                  : step === 0
+                    ? renderRegistrationForm()
+                    : renderWebsiteBuilder()}
             </AnimatePresence>
           </div>
         )}
