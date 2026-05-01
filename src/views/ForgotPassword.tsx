@@ -48,7 +48,8 @@ const ForgotPassword = () => {
     setEmailError('');
 
     try {
-      await forgotPasswordMutation.mutateAsync(email);
+      const message = await forgotPasswordMutation.mutateAsync(email);
+      toast.success(message || 'Verification code sent.');
       // API always returns 200 regardless of whether email exists (OWASP enumeration prevention).
       setStep('otp');
     } catch (err) {
