@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useUpgradePlan } from '@/common/state/upgrade-plan-context';
+import { useAuth } from '@/contexts/AuthContext';
 
 const allOnlineTeam = [
   { name: 'Alice Morgan', initials: 'AM' },
@@ -94,6 +95,12 @@ OnlineTeamSection.displayName = 'OnlineTeamSection';
 const AppHeader = () => {
   const { status, clockIn, clockOut, startBreak, endBreak, clockedInAt } = useClock();
   const { showUpgradeModal } = useUpgradePlan();
+  const { auth } = useAuth();
+  const user = auth.user;
+  const displayName = user ? `${user.firstName} ${user.lastName}` : 'Business Owner';
+  const initials = user
+    ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase()
+    : 'BO';
   const [elapsed, setElapsed] = useState('');
 
   useEffect(() => {
@@ -214,7 +221,7 @@ const AppHeader = () => {
           <span className='hidden sm:inline'>Preview Modal</span>
         </Button>
         <div className='hidden sm:block text-right'>
-          <p className='text-sm font-semibold'>Business Owner</p>
+          <p className='text-sm font-semibold'>{displayName}</p>
           <p className='text-xs text-muted-foreground'>
             {status === 'clocked_in' && 'Clocked In'}
             {status === 'on_break' && 'On Break'}
@@ -222,7 +229,7 @@ const AppHeader = () => {
           </p>
         </div>
         <div className='flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-sm font-bold text-primary-foreground'>
-          BO
+          {initials}
         </div>
       </div>
     </header>

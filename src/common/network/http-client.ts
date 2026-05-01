@@ -52,7 +52,14 @@ export async function fetchJson<T>(
     });
 
     if (!response.ok) {
-      throw new HttpError(response.status, response.statusText);
+      let apiMessage: string | undefined;
+      try {
+        const body = (await response.json()) as { message?: string };
+        apiMessage = body.message;
+      } catch {
+        // response body wasn't JSON — fall back to generic message
+      }
+      throw new HttpError(response.status, response.statusText, apiMessage);
     }
 
     return (await response.json()) as T;
@@ -60,7 +67,6 @@ export async function fetchJson<T>(
     if ((error as Error).name === 'AbortError') {
       throw new RequestTimeoutError();
     }
-
     throw error;
   } finally {
     clearTimeout(timer);

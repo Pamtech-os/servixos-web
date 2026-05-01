@@ -9,7 +9,9 @@ import { Eye, EyeOff, LogIn, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLogin } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -17,30 +19,36 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const router = useRouter();
-  const { login } = useAuth();
+  const { setSession } = useAuth();
+  const loginMutation = useLogin();
 
   const validate = () => {
-    const errs: typeof errors = {};
+    const errs: typeof fieldErrors = {};
     if (!email) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email format';
     if (!password) errs.password = 'Password is required';
-    else if (password.length < 6) errs.password = 'Password must be at least 6 characters';
-    setErrors(errs);
+    setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loginMutation.isPending) return;
     if (!validate()) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    login(email);
-    setLoading(false);
-    router.push('/pin');
+
+    try {
+      const session = await loginMutation.mutateAsync({ email, password });
+      setSession(session);
+      router.push('/pin');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      toast.error('Sign in failed', { description: message });
+    }
   };
+
+  const loading = loginMutation.isPending;
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
@@ -133,9 +141,10 @@ const Login = () => {
                 placeholder='you@example.com'
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={errors.email ? 'border-destructive' : ''}
+                className={fieldErrors.email ? 'border-destructive' : ''}
+                disabled={loading}
               />
-              {errors.email && <p className='text-xs text-destructive'>{errors.email}</p>}
+              {fieldErrors.email && <p className='text-xs text-destructive'>{fieldErrors.email}</p>}
             </div>
 
             <div className='space-y-2'>
@@ -147,7 +156,8 @@ const Login = () => {
                   placeholder='••••••••'
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
+                  className={fieldErrors.password ? 'border-destructive pr-10' : 'pr-10'}
+                  disabled={loading}
                 />
                 <button
                   type='button'
@@ -157,7 +167,7 @@ const Login = () => {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {errors.password && <p className='text-xs text-destructive'>{errors.password}</p>}
+              {fieldErrors.password && <p className='text-xs text-destructive'>{fieldErrors.password}</p>}
             </div>
 
             <div className='flex justify-end'>
@@ -177,11 +187,7 @@ const Login = () => {
                   <motion.div
                     className='h-5 w-5 rounded-full border-2 border-primary-foreground border-t-transparent'
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: 'linear',
-                    }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   />
                 ) : (
                   <>
