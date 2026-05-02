@@ -1,16 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import {
-  Plus,
-  Search,
-  Mail,
-  Phone,
-  ShieldCheck,
-  Eye,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Plus, Search, Mail, Phone, ShieldCheck, Eye } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,8 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { mockEmployees, Employee } from '@/lib/team-mock-data';
 import { toast } from 'sonner';
+import { paginateArray } from '@/lib/pagination';
 
 const PAGE_SIZE = 5;
 
@@ -44,14 +37,27 @@ const EmployeesTab = () => {
   const [showDetail, setShowDetail] = useState<Employee | null>(null);
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', role: '' });
 
-  const filtered = employees.filter(
-    (e) =>
-      e.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase()) ||
-      e.role.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      employees.filter(
+        (e) =>
+          e.fullName.toLowerCase().includes(search.toLowerCase()) ||
+          e.email.toLowerCase().includes(search.toLowerCase()) ||
+          e.role.toLowerCase().includes(search.toLowerCase())
+      ),
+    [employees, search]
   );
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, PAGE_SIZE),
+    [filtered, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   const handleAdd = () => {
     if (!form.fullName || !form.email || !form.role) {
@@ -149,29 +155,13 @@ const EmployeesTab = () => {
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className='flex items-center justify-center gap-2 pt-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={page === 1}
-            onClick={() => setPage(page - 1)}
-          >
-            <ChevronLeft size={14} />
-          </Button>
-          <span className='text-sm text-muted-foreground'>
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={page === totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            <ChevronRight size={14} />
-          </Button>
-        </div>
-      )}
+      <PaginationControls
+        meta={paginationMeta}
+        onPageChange={setPage}
+        layout='centered'
+        className='pt-2'
+        buttonSize='sm'
+      />
 
       {/* Add Employee Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>

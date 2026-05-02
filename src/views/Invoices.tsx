@@ -7,8 +7,6 @@ import {
   Clock,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Trash2,
   CalendarIcon,
@@ -48,7 +46,9 @@ import { toast } from 'sonner';
 import { format, parse } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { cn } from '@/lib/utils';
+import { paginateArray } from '@/lib/pagination';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -119,8 +119,17 @@ const Invoices = () => {
     });
   }, [invoices, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
+    [filtered, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -312,31 +321,12 @@ const Invoices = () => {
           </Table>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className='flex items-center justify-between border-t px-4 py-3'>
-              <p className='text-sm text-muted-foreground'>
-                Page {page} of {totalPages}
-              </p>
-              <div className='flex gap-1'>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft size={16} />
-                </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight size={16} />
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            meta={paginationMeta}
+            onPageChange={setPage}
+            className='flex items-center justify-between border-t px-4 py-3'
+            controlsClassName='flex gap-1'
+          />
         </Card>
       )}
 

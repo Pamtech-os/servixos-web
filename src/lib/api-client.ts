@@ -1,5 +1,6 @@
 import { fetchJson, HttpError } from '@/common/network/http-client';
 import { tokenStore } from './token-store';
+import type { PaginationMeta } from './pagination';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
   ? `https://${process.env.NEXT_PUBLIC_API_BASE_URL}`
@@ -92,6 +93,16 @@ export interface ResetPasswordInput {
 export interface WebsiteGenerateResult {
   subdomain: string;
   url: string;
+}
+
+export interface PaginationQuery {
+  page: number;
+  limit: number;
+}
+
+export interface PaginatedListResponse<T> {
+  items: T[];
+  meta: PaginationMeta;
 }
 
 export interface BusinessCategory {

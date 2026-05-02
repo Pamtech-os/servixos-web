@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, Coffee, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Clock, Coffee, LogOut } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { mockEmployees } from '@/lib/team-mock-data';
+import { paginateArray } from '@/lib/pagination';
 
 const PAGE_SIZE = 5;
 
@@ -18,6 +19,18 @@ const ClockHistory = () => {
   const [page, setPage] = useState(1);
 
   const employee = mockEmployees.find((e) => e.id === employeeId);
+  const history = useMemo(() => employee?.clockHistory ?? [], [employee]);
+  const pagination = useMemo(
+    () => paginateArray(history, page, PAGE_SIZE),
+    [history, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   if (!employee) {
     return (
@@ -32,10 +45,6 @@ const ClockHistory = () => {
       </div>
     );
   }
-
-  const history = employee.clockHistory;
-  const totalPages = Math.ceil(history.length / PAGE_SIZE);
-  const paginated = history.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className='space-y-6'>
@@ -92,29 +101,13 @@ const ClockHistory = () => {
         )}
       </div>
 
-      {totalPages > 1 && (
-        <div className='flex items-center justify-center gap-2 pt-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={page === 1}
-            onClick={() => setPage(page - 1)}
-          >
-            <ChevronLeft size={14} />
-          </Button>
-          <span className='text-sm text-muted-foreground'>
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            size='sm'
-            variant='outline'
-            disabled={page === totalPages}
-            onClick={() => setPage(page + 1)}
-          >
-            <ChevronRight size={14} />
-          </Button>
-        </div>
-      )}
+      <PaginationControls
+        meta={paginationMeta}
+        onPageChange={setPage}
+        layout='centered'
+        className='pt-2'
+        buttonSize='sm'
+      />
     </div>
   );
 };
