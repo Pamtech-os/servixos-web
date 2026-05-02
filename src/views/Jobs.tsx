@@ -7,8 +7,6 @@ import {
   Briefcase,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
   Eye,
   Play,
@@ -57,9 +55,11 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import PaginationControls from '@/components/ui/pagination-controls';
 import ConfirmModal from '@/components/ConfirmModal';
 import { mockJobs, mockClients, type Job } from '@/lib/mock-data';
 import { toast } from 'sonner';
+import { paginateArray } from '@/lib/pagination';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -185,8 +185,17 @@ const Jobs = () => {
     });
   }, [jobs, search, clientFilter, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
+    [filtered, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -445,31 +454,12 @@ const Jobs = () => {
               </TableBody>
             </Table>
           </Card>
-          {totalPages > 1 && (
-            <div className='flex items-center justify-between gap-2 border-t px-1 py-3 sm:px-2 md:rounded-b-lg md:border md:px-4'>
-              <p className='text-sm text-muted-foreground'>
-                Page {page} of {totalPages}
-              </p>
-              <div className='flex gap-1'>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft size={16} />
-                </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight size={16} />
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            meta={paginationMeta}
+            onPageChange={setPage}
+            className='flex items-center justify-between gap-2 border-t px-1 py-3 sm:px-2 md:rounded-b-lg md:border md:px-4'
+            controlsClassName='flex gap-1'
+          />
         </>
       )}
 

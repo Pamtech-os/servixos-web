@@ -10,8 +10,6 @@ import {
   Eye,
   Search,
   CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   MessageCircle,
   Sparkles,
   DollarSign,
@@ -39,10 +37,12 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import ConfirmModal from '@/components/ConfirmModal';
 import ChatUI, { type ChatMessage } from '@/components/ChatUI';
+import { paginateArray } from '@/lib/pagination';
 
 interface ServiceRequest {
   id: string;
@@ -266,6 +266,17 @@ const Requests = () => {
   const [readMessages, setReadMessages] = useState<Record<string, number>>({});
   const [pricingValue, setPricingValue] = useState<string>('');
   const [aiPricingLoading, setAiPricingLoading] = useState(false);
+  const today = useMemo(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }, []);
+  const minEndDate = useMemo(() => {
+    if (adjustedDate && adjustedDate > today) {
+      return adjustedDate;
+    }
+    return today;
+  }, [adjustedDate, today]);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1000);
@@ -293,11 +304,17 @@ const Requests = () => {
     [requests, search],
   );
 
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = filtered.slice(
-    (page - 1) * ITEMS_PER_PAGE,
-    page * ITEMS_PER_PAGE,
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
+    [filtered, page],
   );
+  const { data: paginated, meta: paginationMeta } = pagination;
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   const counts = useMemo(
     () => ({
@@ -310,9 +327,23 @@ const Requests = () => {
   );
 
   const openDetail = (req: ServiceRequest) => {
+    const requestStartDate = new Date(req.date);
+    requestStartDate.setHours(0, 0, 0, 0);
+    const clampedStartDate = requestStartDate < today ? today : requestStartDate;
+
+    const requestEndDate = req.endDate ? new Date(req.endDate) : undefined;
+    if (requestEndDate) {
+      requestEndDate.setHours(0, 0, 0, 0);
+    }
+    const clampedEndDate = requestEndDate
+      ? requestEndDate < clampedStartDate
+        ? clampedStartDate
+        : requestEndDate
+      : undefined;
+
     setSelectedRequest(req);
-    setAdjustedDate(new Date(req.date));
-    setAdjustedEndDate(req.endDate ? new Date(req.endDate) : undefined);
+    setAdjustedDate(clampedStartDate);
+    setAdjustedEndDate(clampedEndDate);
     setPricingValue(req.pricing ? req.pricing.toString() : '');
     setDetailOpen(true);
     const clientMsgCount = (chatMessages[req.id] || []).filter(
@@ -436,6 +467,13 @@ const Requests = () => {
         : prev,
     );
     toast.success('Dates updated successfully.');
+  };
+
+  const handleStartDateSelect = (date: Date | undefined) => {
+    setAdjustedDate(date);
+    if (date && adjustedEndDate && adjustedEndDate < date) {
+      setAdjustedEndDate(date);
+    }
   };
 
   const summaryCards = [
@@ -638,31 +676,14 @@ const Requests = () => {
                   </p>
                 )}
               </div>
-              {totalPages > 1 && (
-                <div className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-                  <p className='text-sm text-muted-foreground'>
-                    Page {page} of {totalPages}
-                  </p>
-                  <div className='flex gap-2 self-end sm:self-auto'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={page === 1}
-                      onClick={() => setPage(page - 1)}
-                    >
-                      <ChevronLeft size={16} />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      disabled={page === totalPages}
-                      onClick={() => setPage(page + 1)}
-                    >
-                      <ChevronRight size={16} />
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <PaginationControls
+                meta={paginationMeta}
+                onPageChange={setPage}
+                className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'
+                labelClassName='text-sm text-muted-foreground'
+                controlsClassName='flex gap-2 self-end sm:self-auto'
+                buttonSize='sm'
+              />
             </>
           )}
         </CardContent>
@@ -737,8 +758,11 @@ const Requests = () => {
                       >
                         <Calendar
                           mode='single'
+                          startMonth={today}
+                          defaultMonth={adjustedDate && adjustedDate > today ? adjustedDate : today}
                           selected={adjustedDate}
-                          onSelect={setAdjustedDate}
+                          onSelect={handleStartDateSelect}
+                          disabled={{ before: today }}
                           initialFocus
                         />
                       </PopoverContent>
@@ -767,8 +791,15 @@ const Requests = () => {
                       >
                         <Calendar
                           mode='single'
+                          startMonth={minEndDate}
+                          defaultMonth={
+                            adjustedEndDate && adjustedEndDate > minEndDate
+                              ? adjustedEndDate
+                              : minEndDate
+                          }
                           selected={adjustedEndDate}
                           onSelect={setAdjustedEndDate}
+                          disabled={{ before: minEndDate }}
                           initialFocus
                         />
                       </PopoverContent>

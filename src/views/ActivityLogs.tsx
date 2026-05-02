@@ -5,8 +5,6 @@ import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Search,
-  ChevronLeft,
-  ChevronRight,
   Activity,
   Users,
   Briefcase,
@@ -40,6 +38,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import PaginationControls from '@/components/ui/pagination-controls';
+import { getPaginationRange, paginateArray } from '@/lib/pagination';
 
 interface ActivityLog {
   id: string;
@@ -296,8 +296,21 @@ const ActivityLogs = () => {
     });
   }, [logs, search, categoryFilter, roleFilter, dateFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
+    [filtered, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+  const paginationRange = useMemo(
+    () => getPaginationRange(paginationMeta),
+    [paginationMeta]
+  );
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   return (
     <div className='space-y-6'>
@@ -520,32 +533,16 @@ const ActivityLogs = () => {
               </div>
 
               {/* Pagination */}
-              <div className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
-                <p className='text-xs text-muted-foreground'>
-                  Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
-                  {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
-                </p>
-                <div className='flex gap-1 self-end sm:self-auto'>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft size={16} />
-                  </Button>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight size={16} />
-                  </Button>
-                </div>
-              </div>
+              <PaginationControls
+                meta={paginationMeta}
+                onPageChange={setPage}
+                hideWhenSinglePage={false}
+                className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'
+                labelClassName='text-xs text-muted-foreground'
+                label={`Showing ${paginationRange.from}–${paginationRange.to} of ${paginationMeta.total}`}
+                controlsClassName='flex gap-1 self-end sm:self-auto'
+                buttonClassName='h-8 w-8'
+              />
             </>
           )}
         </CardContent>

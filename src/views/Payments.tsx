@@ -9,8 +9,6 @@ import {
   AlertTriangle,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle2,
   Pencil,
   CalendarIcon,
@@ -47,8 +45,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { mockPayments, mockInvoices, type Payment } from '@/lib/mock-data';
 import { toast } from 'sonner';
+import { getPaginationRange, paginateArray } from '@/lib/pagination';
 
 const ITEMS_PER_PAGE = 6;
 
@@ -124,8 +124,21 @@ const Payments = () => {
     );
   }, [payments, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const pagination = useMemo(
+    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
+    [filtered, page]
+  );
+  const { data: paginated, meta: paginationMeta } = pagination;
+  const paginationRange = useMemo(
+    () => getPaginationRange(paginationMeta),
+    [paginationMeta]
+  );
+
+  useEffect(() => {
+    if (page !== paginationMeta.page) {
+      setPage(paginationMeta.page);
+    }
+  }, [page, paginationMeta.page]);
 
   const resetForm = () => {
     setFormBusinessName('');
@@ -370,32 +383,16 @@ const Payments = () => {
               </div>
 
               {/* Pagination */}
-              <div className='mt-4 flex items-center justify-between'>
-                <p className='text-xs text-muted-foreground'>
-                  Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
-                  {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
-                </p>
-                <div className='flex gap-1'>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft size={16} />
-                  </Button>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight size={16} />
-                  </Button>
-                </div>
-              </div>
+              <PaginationControls
+                meta={paginationMeta}
+                onPageChange={setPage}
+                hideWhenSinglePage={false}
+                className='mt-4 flex items-center justify-between'
+                labelClassName='text-xs text-muted-foreground'
+                label={`Showing ${paginationRange.from}–${paginationRange.to} of ${paginationMeta.total}`}
+                controlsClassName='flex gap-1'
+                buttonClassName='h-8 w-8'
+              />
             </>
           )}
         </CardContent>
