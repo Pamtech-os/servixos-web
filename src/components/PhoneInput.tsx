@@ -133,7 +133,7 @@ const checkValid = (nationalNumber: string, country: CountryCode): boolean => {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const SectionLabel = ({ children }: { children: string }) => (
-  <p className='px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60'>
+  <p className='px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
     {children}
   </p>
 );
@@ -277,7 +277,7 @@ const PhoneInput = ({ value, onChange, error, id = 'phone-input' }: PhoneInputPr
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder='Search country or dial code...'
-                    className='flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50'
+                    className='flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/80 dark:placeholder:text-muted-foreground/60'
                   />
                   {search && (
                     <button

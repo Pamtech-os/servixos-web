@@ -117,7 +117,7 @@ const ChatUI = ({
       <div className='flex items-center gap-3 border-b border-border px-4 py-3 bg-muted/30'>
         <div className='relative'>
           <Avatar className='h-9 w-9'>
-            <AvatarFallback className='bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
+            <AvatarFallback className='gradient-bg text-xs font-bold text-primary-foreground'>
               {clientName
                 .split(' ')
                 .map((n) => n[0])
@@ -242,7 +242,7 @@ const ChatUI = ({
               size='icon'
               onClick={handleSend}
               disabled={!input.trim() && !attachment}
-              className='h-9 w-9 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-md hover:shadow-lg transition-shadow'
+              className='gradient-bg h-9 w-9 rounded-full text-primary-foreground shadow-md transition-shadow hover:shadow-lg'
             >
               <Send size={16} />
             </Button>

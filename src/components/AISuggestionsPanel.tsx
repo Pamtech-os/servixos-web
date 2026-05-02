@@ -213,9 +213,12 @@ const AISuggestionsPanel = () => {
 
                 {suggestions.length === 0 && (
                   <div className='flex flex-col items-center justify-center py-12 text-center'>
-                    <Sparkles size={32} className='mb-3 text-muted-foreground/50' />
+                    <Sparkles
+                      size={32}
+                      className='mb-3 text-muted-foreground dark:text-muted-foreground/70'
+                    />
                     <p className='text-sm text-muted-foreground'>All caught up!</p>
-                    <p className='text-xs text-muted-foreground/70'>
+                    <p className='text-xs text-muted-foreground dark:text-muted-foreground/80'>
                       New suggestions will appear here.
                     </p>
                   </div>

@@ -109,7 +109,7 @@ const EmployeesTab = () => {
             <Card className='hover:shadow-md transition-shadow'>
               <CardContent className='flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'>
                 <div className='flex items-center gap-3'>
-                  <div className='flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
+                  <div className='gradient-bg flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold text-primary-foreground'>
                     {emp.fullName
                       .split(' ')
                       .map((n) => n[0])
@@ -245,7 +245,7 @@ const EmployeesTab = () => {
           {showDetail && (
             <div className='space-y-4'>
               <div className='flex items-center gap-4'>
-                <div className='flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-lg font-bold text-primary-foreground'>
+                <div className='gradient-bg flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-primary-foreground'>
                   {showDetail.fullName
                     .split(' ')
                     .map((n) => n[0])

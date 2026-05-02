@@ -215,6 +215,13 @@ const Signup = () => {
   const [showWebsiteModal, setShowWebsiteModal] = useState(false);
 
   const currentPin = pinPhase === 'create' ? pin : confirmPin;
+  const isRegistrationInfoFilled =
+    Boolean(reg.firstName.trim()) &&
+    Boolean(reg.lastName.trim()) &&
+    Boolean(reg.email.trim()) &&
+    Boolean(phone.nationalNumber.trim()) &&
+    Boolean(reg.password.trim()) &&
+    Boolean(reg.confirmPassword.trim());
 
   const addDigit = useCallback(
     (digit: number) => {
@@ -749,7 +756,7 @@ const Signup = () => {
           onClick={handleRegistrationNext}
           className='gradient-bg w-full text-primary-foreground'
           size='lg'
-          disabled={createAccountMutation.isPending}
+          disabled={createAccountMutation.isPending || !isRegistrationInfoFilled}
         >
           {createAccountMutation.isPending ? (
             <Loader2 className='h-5 w-5 animate-spin' />

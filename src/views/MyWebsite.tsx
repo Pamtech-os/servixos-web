@@ -20,7 +20,13 @@ import {
   Wrench,
   ClipboardList,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +42,8 @@ const websiteSections = [
     id: 'hero',
     label: 'Hero Section',
     icon: Layout,
-    content: 'Welcome to Servix Solutions – Professional field services you can trust.',
+    content:
+      'Welcome to Servix Solutions – Professional field services you can trust.',
   },
   {
     id: 'services',
@@ -56,7 +63,8 @@ const websiteSections = [
     id: 'contact',
     label: 'Contact',
     icon: Globe,
-    content: 'Email: info@servix.com | Phone: +1 (555) 123-4567 | Address: 123 Business Ave, NY',
+    content:
+      'Email: info@servix.com | Phone: +1 (555) 123-4567 | Address: 123 Business Ave, NY',
   },
 ];
 
@@ -74,9 +82,9 @@ const MyWebsite = () => {
   const [websiteUrl] = useState('servixsolutions.servixos.com');
   const [isPublished] = useState(true);
   const [editingSection, setEditingSection] = useState<string | null>(null);
-  const [sectionContents, setSectionContents] = useState<Record<string, string>>(
-    Object.fromEntries(websiteSections.map((s) => [s.id, s.content]))
-  );
+  const [sectionContents, setSectionContents] = useState<
+    Record<string, string>
+  >(Object.fromEntries(websiteSections.map((s) => [s.id, s.content])));
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
   const [secondaryColor, setSecondaryColor] = useState('#8B5CF6');
   const [fontFamily, setFontFamily] = useState('Inter');
@@ -151,28 +159,26 @@ const MyWebsite = () => {
   ]);
   const [bookingTitle, setBookingTitle] = useState('Book a Service');
   const [bookingDescription, setBookingDescription] = useState(
-    "Fill out the form below to request a service. We'll get back to you within 24 hours."
+    "Fill out the form below to request a service. We'll get back to you within 24 hours.",
   );
   const [requireEndDate, setRequireEndDate] = useState(false);
 
   const handleSaveSection = (sectionId: string) => {
     setEditingSection(null);
-    toast.success('Section updated', { description: `${sectionId} section has been saved.` });
+    toast.success('Section updated', {
+      description: `${sectionId} section has been saved.`,
+    });
   };
 
   const handlePublish = () => {
-    toast.success('Website published!', { description: `Changes are live at ${websiteUrl}` });
-  };
-
-  const handleRegenerateWithAI = () => {
-    toast.success('AI regeneration started', {
-      description: 'Your website content is being updated by AI...',
+    toast.success('Website published!', {
+      description: `Changes are live at ${websiteUrl}`,
     });
   };
 
   const handleSaveBookingForm = () => {
     const updated = bookingFields.map((f) =>
-      f.id === 'endDate' ? { ...f, required: requireEndDate } : f
+      f.id === 'endDate' ? { ...f, required: requireEndDate } : f,
     );
     setBookingFields(updated);
     toast.success('Booking form saved!', {
@@ -181,12 +187,19 @@ const MyWebsite = () => {
   };
 
   const handleUpdateFieldLabel = (fieldId: string, newLabel: string) => {
-    setBookingFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f, label: newLabel } : f)));
+    setBookingFields((prev) =>
+      prev.map((f) => (f.id === fieldId ? { ...f, label: newLabel } : f)),
+    );
   };
 
-  const handleUpdateFieldPlaceholder = (fieldId: string, newPlaceholder: string) => {
+  const handleUpdateFieldPlaceholder = (
+    fieldId: string,
+    newPlaceholder: string,
+  ) => {
     setBookingFields((prev) =>
-      prev.map((f) => (f.id === fieldId ? { ...f, placeholder: newPlaceholder } : f))
+      prev.map((f) =>
+        f.id === fieldId ? { ...f, placeholder: newPlaceholder } : f,
+      ),
     );
   };
 
@@ -196,7 +209,7 @@ const MyWebsite = () => {
       return;
     }
     setBookingFields((prev) =>
-      prev.map((f) => (f.id === fieldId ? { ...f, required: !f.required } : f))
+      prev.map((f) => (f.id === fieldId ? { ...f, required: !f.required } : f)),
     );
   };
 
@@ -211,8 +224,8 @@ const MyWebsite = () => {
                 .map((o) => o.trim())
                 .filter(Boolean),
             }
-          : f
-      )
+          : f,
+      ),
     );
   };
 
@@ -220,7 +233,9 @@ const MyWebsite = () => {
     <div className='space-y-6'>
       <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='font-display text-2xl font-bold md:text-3xl'>My Website</h1>
+          <h1 className='font-display text-2xl font-bold md:text-3xl'>
+            My Website
+          </h1>
           <p className='text-sm text-muted-foreground'>
             Manage your AI-generated business website.
           </p>
@@ -229,7 +244,9 @@ const MyWebsite = () => {
           <Badge
             variant={isPublished ? 'default' : 'secondary'}
             className={
-              isPublished ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : ''
+              isPublished
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                : ''
             }
           >
             {isPublished ? 'Published' : 'Draft'}
@@ -256,12 +273,13 @@ const MyWebsite = () => {
       <Card>
         <CardContent className='flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'>
           <div>
-            <p className='text-xs font-medium text-muted-foreground'>Website URL</p>
-            <p className='font-mono text-sm font-bold text-primary'>{websiteUrl}</p>
+            <p className='text-xs font-medium text-muted-foreground'>
+              Website URL
+            </p>
+            <p className='font-mono text-sm font-bold text-primary'>
+              {websiteUrl}
+            </p>
           </div>
-          <Button variant='outline' size='sm' className='gap-1.5' onClick={handleRegenerateWithAI}>
-            <Sparkles size={14} /> Regenerate with AI
-          </Button>
         </CardContent>
       </Card>
 
@@ -297,10 +315,13 @@ const MyWebsite = () => {
                     size='sm'
                     className='gap-1 h-7 text-xs'
                     onClick={() =>
-                      setEditingSection(editingSection === section.id ? null : section.id)
+                      setEditingSection(
+                        editingSection === section.id ? null : section.id,
+                      )
                     }
                   >
-                    <Edit3 size={12} /> {editingSection === section.id ? 'Cancel' : 'Edit'}
+                    <Edit3 size={12} />{' '}
+                    {editingSection === section.id ? 'Cancel' : 'Edit'}
                   </Button>
                 </CardHeader>
                 <CardContent>
@@ -309,7 +330,10 @@ const MyWebsite = () => {
                       <Textarea
                         value={sectionContents[section.id]}
                         onChange={(e) =>
-                          setSectionContents((p) => ({ ...p, [section.id]: e.target.value }))
+                          setSectionContents((p) => ({
+                            ...p,
+                            [section.id]: e.target.value,
+                          }))
                         }
                         rows={3}
                       />
@@ -332,7 +356,9 @@ const MyWebsite = () => {
                       </div>
                     </div>
                   ) : (
-                    <p className='text-sm text-muted-foreground'>{sectionContents[section.id]}</p>
+                    <p className='text-sm text-muted-foreground'>
+                      {sectionContents[section.id]}
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -345,11 +371,12 @@ const MyWebsite = () => {
           <Card>
             <CardHeader>
               <CardTitle className='text-base flex items-center gap-2'>
-                <ClipboardList size={18} className='text-primary' /> Booking Form Setup
+                <ClipboardList size={18} className='text-primary' /> Booking
+                Form Setup
               </CardTitle>
               <CardDescription>
-                Configure the booking form that clients see on your website. Submissions appear in
-                your Requests page.
+                Configure the booking form that clients see on your website.
+                Submissions appear in your Requests page.
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5'>
@@ -357,7 +384,10 @@ const MyWebsite = () => {
               <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                 <div className='space-y-1.5'>
                   <Label className='text-xs'>Form Title</Label>
-                  <Input value={bookingTitle} onChange={(e) => setBookingTitle(e.target.value)} />
+                  <Input
+                    value={bookingTitle}
+                    onChange={(e) => setBookingTitle(e.target.value)}
+                  />
                 </div>
                 <div className='space-y-1.5'>
                   <Label className='text-xs'>Form Description</Label>
@@ -385,15 +415,23 @@ const MyWebsite = () => {
                     <div className='flex items-center justify-between'>
                       <div className='flex items-center gap-2'>
                         <field.icon size={14} className='text-primary' />
-                        <span className='text-xs font-semibold'>{field.label}</span>
+                        <span className='text-xs font-semibold'>
+                          {field.label}
+                        </span>
                         <Badge variant='outline' className='text-[9px] px-1.5'>
                           {field.type}
                         </Badge>
                       </div>
                       <div className='flex items-center gap-2'>
-                        <Label className='text-[10px] text-muted-foreground'>Required</Label>
+                        <Label className='text-[10px] text-muted-foreground'>
+                          Required
+                        </Label>
                         <Switch
-                          checked={field.id === 'endDate' ? requireEndDate : field.required}
+                          checked={
+                            field.id === 'endDate'
+                              ? requireEndDate
+                              : field.required
+                          }
                           onCheckedChange={() => handleToggleRequired(field.id)}
                           className='scale-75'
                         />
@@ -401,18 +439,29 @@ const MyWebsite = () => {
                     </div>
                     <div className='grid grid-cols-2 gap-2'>
                       <div className='space-y-1'>
-                        <Label className='text-[10px] text-muted-foreground'>Label</Label>
+                        <Label className='text-[10px] text-muted-foreground'>
+                          Label
+                        </Label>
                         <Input
                           value={field.label}
-                          onChange={(e) => handleUpdateFieldLabel(field.id, e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateFieldLabel(field.id, e.target.value)
+                          }
                           className='h-7 text-xs'
                         />
                       </div>
                       <div className='space-y-1'>
-                        <Label className='text-[10px] text-muted-foreground'>Placeholder</Label>
+                        <Label className='text-[10px] text-muted-foreground'>
+                          Placeholder
+                        </Label>
                         <Input
                           value={field.placeholder}
-                          onChange={(e) => handleUpdateFieldPlaceholder(field.id, e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateFieldPlaceholder(
+                              field.id,
+                              e.target.value,
+                            )
+                          }
                           className='h-7 text-xs'
                         />
                       </div>
@@ -424,7 +473,9 @@ const MyWebsite = () => {
                         </Label>
                         <Input
                           value={field.options.join(', ')}
-                          onChange={(e) => handleUpdateServiceOptions(e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateServiceOptions(e.target.value)
+                          }
                           className='h-7 text-xs'
                         />
                       </div>
@@ -442,7 +493,11 @@ const MyWebsite = () => {
                 >
                   <Sparkles size={12} /> AI Optimize
                 </Button>
-                <Button size='sm' className='gap-1.5' onClick={handleSaveBookingForm}>
+                <Button
+                  size='sm'
+                  className='gap-1.5'
+                  onClick={handleSaveBookingForm}
+                >
                   <Save size={14} /> Save Booking Form
                 </Button>
               </div>
@@ -460,8 +515,12 @@ const MyWebsite = () => {
             <CardContent>
               <div className='rounded-xl border border-border bg-muted/20 p-5 space-y-4'>
                 <div className='text-center space-y-1'>
-                  <h3 className='text-lg font-bold font-display'>{bookingTitle}</h3>
-                  <p className='text-xs text-muted-foreground'>{bookingDescription}</p>
+                  <h3 className='text-lg font-bold font-display'>
+                    {bookingTitle}
+                  </h3>
+                  <p className='text-xs text-muted-foreground'>
+                    {bookingDescription}
+                  </p>
                 </div>
                 <div className='space-y-3'>
                   {bookingFields.map((field) => (
@@ -469,7 +528,9 @@ const MyWebsite = () => {
                       <Label className='text-xs flex items-center gap-1.5'>
                         <field.icon size={10} />
                         {field.label}{' '}
-                        {field.required && <span className='text-destructive'>*</span>}
+                        {field.required && (
+                          <span className='text-destructive'>*</span>
+                        )}
                       </Label>
                       {field.type === 'textarea' ? (
                         <Textarea
@@ -499,7 +560,10 @@ const MyWebsite = () => {
                     </div>
                   ))}
                 </div>
-                <Button className='w-full gradient-bg text-primary-foreground' disabled>
+                <Button
+                  className='w-full gradient-bg text-primary-foreground'
+                  disabled
+                >
                   Submit Booking
                 </Button>
               </div>
@@ -512,12 +576,17 @@ const MyWebsite = () => {
           <Card>
             <CardHeader>
               <CardTitle className='text-base'>Brand Identity</CardTitle>
-              <CardDescription>Customize your website look and feel.</CardDescription>
+              <CardDescription>
+                Customize your website look and feel.
+              </CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='space-y-2'>
                 <Label className='text-xs'>Site Name</Label>
-                <Input value={siteName} onChange={(e) => setSiteName(e.target.value)} />
+                <Input
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                />
               </div>
 
               <Separator />
@@ -582,7 +651,10 @@ const MyWebsite = () => {
               </div>
 
               <div className='flex justify-end'>
-                <Button className='gap-1.5' onClick={() => toast.success('Design saved!')}>
+                <Button
+                  className='gap-1.5'
+                  onClick={() => toast.success('Design saved!')}
+                >
                   <Save size={14} /> Save Design
                 </Button>
               </div>

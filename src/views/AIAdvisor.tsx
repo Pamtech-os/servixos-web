@@ -20,7 +20,7 @@ const quickTopics = [
     icon: DollarSign,
     prompt:
       'Analyze my current pricing strategy and suggest improvements based on my business data.',
-    color: 'from-emerald-500 to-emerald-600',
+    iconGradient: 'linear-gradient(135deg, rgb(16 185 129), rgb(5 150 105))',
     bg: 'bg-emerald-500/10',
     textColor: 'text-emerald-600',
   },
@@ -29,7 +29,7 @@ const quickTopics = [
     icon: Megaphone,
     prompt:
       'Give me marketing recommendations to grow my client base based on my current business performance.',
-    color: 'from-primary to-secondary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
     bg: 'bg-primary/10',
     textColor: 'text-primary',
   },
@@ -37,7 +37,7 @@ const quickTopics = [
     label: 'Operations',
     icon: Settings2,
     prompt: 'How can I optimize my business operations to improve efficiency and reduce costs?',
-    color: 'from-violet-500 to-violet-600',
+    iconGradient: 'linear-gradient(135deg, rgb(139 92 246), rgb(124 58 237))',
     bg: 'bg-violet-500/10',
     textColor: 'text-violet-600',
   },
@@ -179,7 +179,7 @@ const AIAdvisor = () => {
               animate={{ opacity: 1, y: 0 }}
               className='flex h-full flex-col items-center justify-center text-center'
             >
-              <div className='mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-lg sm:mb-6 sm:h-16 sm:w-16'>
+              <div className='gradient-bg mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-primary-foreground shadow-lg sm:mb-6 sm:h-16 sm:w-16'>
                 <Sparkles size={32} />
               </div>
               <h2 className='mb-2 font-display text-lg font-bold sm:text-xl'>
@@ -199,7 +199,8 @@ const AIAdvisor = () => {
                     className={`flex items-center justify-start gap-3 rounded-xl border border-border p-3 text-left transition-all hover:shadow-md sm:flex-col sm:items-center sm:p-5 sm:text-center ${topic.bg}`}
                   >
                     <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${topic.color} text-primary-foreground sm:h-11 sm:w-11`}
+                      className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-primary-foreground shadow-sm sm:h-11 sm:w-11'
+                      style={{ background: topic.iconGradient }}
                     >
                       <topic.icon size={20} />
                     </div>
@@ -230,7 +231,7 @@ const AIAdvisor = () => {
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                       msg.role === 'user'
-                        ? 'bg-gradient-to-br from-primary to-secondary text-primary-foreground'
+                        ? 'gradient-bg text-primary-foreground'
                         : 'bg-muted text-muted-foreground'
                     }`}
                   >
@@ -341,7 +342,7 @@ const AIAdvisor = () => {
                 size='icon'
                 onClick={() => handleSend(input)}
                 disabled={!input.trim() || isTyping}
-                className='h-10 w-10 rounded-full bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-md'
+                className='gradient-bg h-10 w-10 rounded-full text-primary-foreground shadow-md'
               >
                 <Send size={16} />
               </Button>

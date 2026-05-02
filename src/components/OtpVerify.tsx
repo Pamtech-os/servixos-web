@@ -37,6 +37,7 @@ const OtpVerify = ({
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(120);
   const [canResend, setCanResend] = useState(false);
+  const canSubmit = otp.every((d) => d.length === 1);
 
   useEffect(() => {
     if (countdown <= 0) {
@@ -160,7 +161,7 @@ const OtpVerify = ({
             className={`font-medium ${
               canResend
                 ? 'text-primary hover:underline'
-                : 'cursor-not-allowed text-muted-foreground/50'
+                : 'cursor-not-allowed text-muted-foreground/70 dark:text-muted-foreground/60'
             }`}
           >
             Resend Code
@@ -171,7 +172,7 @@ const OtpVerify = ({
           type='submit'
           className='gradient-bg w-full text-primary-foreground'
           size='lg'
-          disabled={loading}
+          disabled={loading || !canSubmit}
         >
           {loading ? (
             <motion.div

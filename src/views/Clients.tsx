@@ -104,7 +104,7 @@ const Clients = () => {
                   className='flex flex-col gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:p-4'
                 >
                   <div className='flex items-center gap-3'>
-                    <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
+                    <div className='gradient-bg flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-primary-foreground'>
                       {client.fullName
                         .split(' ')
                         .map((n) => n[0])

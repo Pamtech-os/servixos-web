@@ -94,7 +94,7 @@ const CommunicationsTab = () => {
                     <p>{msg.content}</p>
                     <p
                       className={`mt-1 text-[9px] ${
-                        isOwner ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                        isOwner ? 'text-primary-foreground/75' : 'text-muted-foreground'
                       }`}
                     >
                       {msg.time}
