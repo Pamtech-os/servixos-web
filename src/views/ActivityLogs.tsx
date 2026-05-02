@@ -418,7 +418,7 @@ const ActivityLogs = () => {
             </div>
           ) : filtered.length === 0 ? (
             <div className='py-12 text-center'>
-              <Activity className='mx-auto mb-3 h-10 w-10 text-muted-foreground/40' />
+              <Activity className='mx-auto mb-3 h-10 w-10 text-muted-foreground dark:text-muted-foreground/60' />
               <p className='text-sm text-muted-foreground'>No activity logs found.</p>
             </div>
           ) : (

@@ -43,28 +43,28 @@ const statCards = [
     value: '$19,800',
     change: '+12.5%',
     icon: DollarSign,
-    gradient: 'from-primary to-secondary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
   },
   {
     title: 'Active Clients',
     value: '8',
     change: '+2 this month',
     icon: Users,
-    gradient: 'from-accent to-primary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--accent)), hsl(var(--primary)))',
   },
   {
     title: 'Outstanding Invoices',
     value: '4',
     change: '$11,600 total',
     icon: FileText,
-    gradient: 'from-secondary to-primary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)))',
   },
   {
     title: 'Reviews',
     value: '4.8',
     change: '32 reviews',
     icon: Star,
-    gradient: 'from-primary to-accent',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))',
   },
 ];
 
@@ -115,7 +115,8 @@ const Dashboard = () => {
               <Card className='overflow-hidden'>
                 <CardContent className='relative p-6'>
                   <div
-                    className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={20} />
                   </div>
@@ -336,7 +337,7 @@ const Dashboard = () => {
                   {topClients.map((client) => (
                     <div key={client.id} className='flex items-center justify-between'>
                       <div className='flex items-center gap-3'>
-                        <div className='flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
+                        <div className='gradient-bg flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-primary-foreground'>
                           {client.fullName
                             .split(' ')
                             .map((n) => n[0])

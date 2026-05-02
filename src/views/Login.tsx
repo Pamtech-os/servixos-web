@@ -20,6 +20,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const router = useRouter();
   const { setSession } = useAuth();
@@ -40,14 +41,17 @@ const Login = () => {
 
     try {
       const session = await loginMutation.mutateAsync({ email, password });
+      setIsRedirecting(true);
       setSession(session);
-      router.push('/pin');
+      router.replace('/pin');
     } catch (err) {
+      setIsRedirecting(false);
       toast.error(getApiErrorMessage(err));
     }
   };
 
-  const loading = loginMutation.isPending;
+  const loading = loginMutation.isPending || isRedirecting;
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
@@ -162,6 +166,7 @@ const Login = () => {
                   type='button'
                   onClick={() => setShowPassword(!showPassword)}
                   className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -170,7 +175,12 @@ const Login = () => {
             </div>
 
             <div className='flex justify-end'>
-              <Link href='/forgot-password' className='text-xs text-primary hover:underline sm:text-sm'>
+              <Link
+                href='/forgot-password'
+                className={`text-xs text-primary hover:underline sm:text-sm ${
+                  loading ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
                 Forgot password?
               </Link>
             </div>
@@ -180,7 +190,7 @@ const Login = () => {
                 type='submit'
                 className='gradient-bg w-full text-primary-foreground'
                 size='lg'
-                disabled={loading}
+                disabled={loading || !canSubmit}
               >
                 {loading ? (
                   <motion.div
@@ -198,7 +208,12 @@ const Login = () => {
 
             <p className='mt-3 text-center text-xs text-muted-foreground sm:mt-4'>
               Do not have an account?{' '}
-              <Link href='/signup' className='text-primary hover:underline font-medium'>
+              <Link
+                href='/signup'
+                className={`text-primary hover:underline font-medium ${
+                  loading ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
                 Sign up
               </Link>
             </p>

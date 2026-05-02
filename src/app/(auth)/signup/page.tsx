@@ -5,7 +5,7 @@ import { buildPageMetadata } from '@/common/seo/metadata';
 export const metadata: Metadata = buildPageMetadata({
   title: 'Create Account',
   path: '/signup',
-  description: 'Create a ServixOS account and launch your business workspace.',
+  description: 'Create a ServixOS account and launch your business office.',
 });
 
 export default function SignupPage() {

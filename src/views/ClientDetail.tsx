@@ -138,25 +138,25 @@ const ClientDetail = () => {
       title: 'Total Spent',
       value: `$${totalSpent.toLocaleString()}`,
       icon: DollarSign,
-      gradient: 'from-emerald-500 to-emerald-600',
+      iconGradient: 'linear-gradient(135deg, rgb(16 185 129), rgb(5 150 105))',
     },
     {
       title: 'Invoices',
       value: invoiceCount.toString(),
       icon: FileText,
-      gradient: 'from-primary to-secondary',
+      iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
     },
     {
       title: 'Files',
       value: fileCount.toString(),
       icon: FolderOpen,
-      gradient: 'from-violet-500 to-violet-600',
+      iconGradient: 'linear-gradient(135deg, rgb(139 92 246), rgb(124 58 237))',
     },
     {
       title: 'Contracts',
       value: contractCount.toString(),
       icon: ScrollText,
-      gradient: 'from-amber-500 to-amber-600',
+      iconGradient: 'linear-gradient(135deg, rgb(245 158 11), rgb(217 119 6))',
     },
   ];
 
@@ -194,7 +194,7 @@ const ClientDetail = () => {
             ) : (
               <div className='flex flex-col gap-4 sm:flex-row sm:items-center'>
                 <div className='flex items-center gap-4'>
-                  <div className='flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-lg font-bold text-primary-foreground'>
+                  <div className='gradient-bg flex h-16 w-16 items-center justify-center rounded-full text-lg font-bold text-primary-foreground'>
                     {client!.fullName
                       .split(' ')
                       .map((n) => n[0])
@@ -241,7 +241,8 @@ const ClientDetail = () => {
               <Card>
                 <CardContent className='relative p-4'>
                   <div
-                    className={`absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={16} />
                   </div>

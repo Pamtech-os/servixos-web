@@ -43,28 +43,28 @@ const statCards = [
     value: '3,020',
     change: '+14.2%',
     icon: Eye,
-    gradient: 'from-primary to-secondary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
   },
   {
     title: 'Page Views',
     value: '8,920',
     change: '+8.7%',
     icon: MousePointerClick,
-    gradient: 'from-secondary to-primary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)))',
   },
   {
     title: 'Daily Average',
     value: '431',
     change: '+5.3%',
     icon: TrendingUp,
-    gradient: 'from-accent to-primary',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--accent)), hsl(var(--primary)))',
   },
   {
     title: 'Conversion Rate',
     value: '3.2%',
     change: '+0.8%',
     icon: Target,
-    gradient: 'from-primary to-accent',
+    iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))',
   },
 ];
 
@@ -108,7 +108,8 @@ const Analytics = () => {
               <Card className='overflow-hidden'>
                 <CardContent className='relative p-6'>
                   <div
-                    className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={20} />
                   </div>

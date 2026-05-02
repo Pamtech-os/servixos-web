@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,65 +9,70 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Lock, Zap, Crown, Check, ArrowRight, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Clock,
+  CreditCard,
+  ArrowRight,
+  X,
+  Calendar,
+  Receipt,
+  Zap,
+} from 'lucide-react';
 
-export interface UpgradePlanModalProps {
+export interface GracePeriodModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  featureName?: string;
-  currentPlan?: string;
-  requiredPlan?: string;
-  benefits?: string[];
-  onUpgrade?: () => void;
-  onLater?: () => void;
+  planName?: string;
+  billingCycle?: 'Monthly' | 'Yearly' | string;
+  renewalAmount?: number;
+  currency?: string;
+  daysRemaining?: number;
+  dueDate?: string;
+  onPayNow?: () => void;
+  onCancel?: () => void;
 }
 
-const DEFAULT_BENEFITS = [
-  'Unlock all premium features',
-  'Priority support, 24/7',
-  'Advanced analytics & reports',
-  'Unlimited team members',
-];
-
-const UpgradePlanModal = ({
+const GracePeriodModal = ({
   open,
   onOpenChange,
-  featureName = 'this feature',
-  currentPlan = 'Free',
-  requiredPlan = 'Pro',
-  benefits = DEFAULT_BENEFITS,
-  onUpgrade,
-  onLater,
-}: UpgradePlanModalProps) => {
+  planName = 'Pro',
+  billingCycle = 'Monthly',
+  renewalAmount = 49,
+  currency = 'USD',
+  daysRemaining = 7,
+  dueDate,
+  onPayNow,
+  onCancel,
+}: GracePeriodModalProps) => {
   const particles = useMemo(
     () =>
-      Array.from({ length: 18 }).map((_, i) => ({
+      Array.from({ length: 14 }).map((_, i) => ({
         id: i,
-        x: (i * 37 + 13) % 100,
-        y: (i * 53 + 7) % 100,
-        size: 2 + (i % 3) * 2,
-        delay: (i % 5) * 0.4,
-        duration: 4 + (i % 4),
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: 2 + Math.random() * 5,
+        delay: Math.random() * 2,
+        duration: 4 + Math.random() * 4,
       })),
     [],
   );
 
-  const orbits = useMemo(
-    () =>
-      Array.from({ length: 6 }).map((_, i) => ({
-        id: i,
-        angle: (360 / 6) * i,
-        delay: i * 0.15,
-      })),
-    [],
-  );
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(renewalAmount);
+
+  const progress = Math.max(0, Math.min(100, (daysRemaining / 7) * 100));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='p-0 overflow-hidden border-0 max-w-[480px] bg-transparent shadow-none [&>button]:hidden'>
-        <DialogTitle className='sr-only'>Upgrade required</DialogTitle>
+        <DialogTitle className='sr-only'>Subscription grace period</DialogTitle>
         <DialogDescription className='sr-only'>
-          Upgrade your plan to unlock {featureName}.
+          Your {planName} subscription payment is overdue. {daysRemaining} days
+          left in grace period.
         </DialogDescription>
 
         <AnimatePresence>
@@ -79,7 +84,6 @@ const UpgradePlanModal = ({
               transition={{ type: 'spring', damping: 22, stiffness: 280 }}
               className='relative rounded-3xl overflow-hidden bg-card border border-border/50 card-shadow-hover'
             >
-              {/* Close button */}
               <button
                 onClick={() => onOpenChange(false)}
                 className='absolute top-4 right-4 z-30 w-8 h-8 rounded-full flex items-center justify-center bg-background/60 backdrop-blur-md border border-border/50 text-muted-foreground hover:text-foreground hover:bg-background/90 transition-all hover:scale-110'
@@ -88,13 +92,12 @@ const UpgradePlanModal = ({
                 <X className='w-4 h-4' />
               </button>
 
-              {/* Hero */}
-              <div className='relative h-56 overflow-hidden'>
+              <div className='relative h-48 overflow-hidden'>
                 <motion.div
                   className='absolute inset-0'
                   style={{
                     background:
-                      'linear-gradient(135deg, hsl(217 91% 60%), hsl(270 70% 60%), hsl(174 72% 50%), hsl(217 91% 60%))',
+                      'linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 55%), hsl(0 84% 60%), hsl(38 92% 50%))',
                     backgroundSize: '300% 300%',
                   }}
                   animate={{
@@ -102,7 +105,6 @@ const UpgradePlanModal = ({
                   }}
                   transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
                 />
-
                 <div
                   className='absolute inset-0'
                   style={{
@@ -110,7 +112,6 @@ const UpgradePlanModal = ({
                       'radial-gradient(circle at 50% 40%, transparent 0%, hsl(220 25% 8% / 0.35) 100%)',
                   }}
                 />
-
                 {particles.map((p) => (
                   <motion.div
                     key={p.id}
@@ -138,42 +139,8 @@ const UpgradePlanModal = ({
 
                 <div className='absolute inset-0 flex items-center justify-center'>
                   <motion.div
-                    className='relative w-44 h-44'
-                    animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 14,
-                      repeat: Infinity,
-                      ease: 'linear',
-                    }}
-                  >
-                    {orbits.map((o) => (
-                      <motion.div
-                        key={o.id}
-                        className='absolute top-1/2 left-1/2 w-2 h-2'
-                        style={{
-                          transform: `rotate(${o.angle}deg) translateY(-80px)`,
-                        }}
-                        animate={{
-                          scale: [0.5, 1.4, 0.5],
-                          opacity: [0.4, 1, 0.4],
-                        }}
-                        transition={{
-                          duration: 2,
-                          delay: o.delay,
-                          repeat: Infinity,
-                          ease: 'easeInOut',
-                        }}
-                      >
-                        <Sparkles className='w-3 h-3 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]' />
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                </div>
-
-                <div className='absolute inset-0 flex items-center justify-center'>
-                  <motion.div
                     className='relative'
-                    initial={{ scale: 0, rotate: -180 }}
+                    initial={{ scale: 0, rotate: -90 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: 'spring', damping: 12, delay: 0.15 }}
                   >
@@ -191,26 +158,24 @@ const UpgradePlanModal = ({
                         ease: 'easeInOut',
                       }}
                     />
-
                     <div className='relative w-24 h-24 rounded-3xl bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-2xl'>
                       <motion.div
-                        animate={{ y: [0, -4, 0] }}
+                        animate={{ rotate: [0, -8, 8, 0] }}
                         transition={{
-                          duration: 2,
+                          duration: 2.5,
                           repeat: Infinity,
                           ease: 'easeInOut',
                         }}
                       >
-                        <Lock className='w-10 h-10 text-white drop-shadow-lg' />
+                        <Clock className='w-10 h-10 text-white drop-shadow-lg' />
                       </motion.div>
-
                       <motion.div
-                        className='absolute -top-3 -right-3 w-10 h-10 rounded-2xl bg-gradient-to-br from-yellow-300 to-amber-500 flex items-center justify-center shadow-lg'
-                        initial={{ scale: 0, rotate: -45 }}
-                        animate={{ scale: 1, rotate: 0 }}
+                        className='absolute -top-3 -right-3 w-10 h-10 rounded-2xl bg-white flex items-center justify-center shadow-lg'
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
                         transition={{ delay: 0.6, type: 'spring', damping: 10 }}
                       >
-                        <Crown className='w-5 h-5 text-white' />
+                        <AlertTriangle className='w-5 h-5 text-amber-500' />
                       </motion.div>
                     </div>
                   </motion.div>
@@ -232,7 +197,6 @@ const UpgradePlanModal = ({
                 />
               </div>
 
-              {/* Content */}
               <div className='relative px-7 pt-6 pb-7 bg-card'>
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
@@ -240,9 +204,10 @@ const UpgradePlanModal = ({
                   transition={{ delay: 0.25 }}
                   className='flex items-center gap-2 mb-3'
                 >
-                  <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20'>
-                    <Zap className='w-3 h-3' />
-                    {currentPlan} → {requiredPlan}
+                  <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'>
+                    <Clock className='w-3 h-3' />
+                    Grace period • {daysRemaining} day
+                    {daysRemaining === 1 ? '' : 's'} left
                   </span>
                 </motion.div>
 
@@ -252,7 +217,10 @@ const UpgradePlanModal = ({
                   transition={{ delay: 0.3 }}
                   className='text-2xl font-bold tracking-tight mb-2'
                 >
-                  Unlock <span className='gradient-text'>{featureName}</span>
+                  Your payment is{' '}
+                  <span className='bg-gradient-to-r from-amber-500 to-red-500 bg-clip-text text-transparent'>
+                    overdue
+                  </span>
                 </motion.h2>
 
                 <motion.p
@@ -261,49 +229,94 @@ const UpgradePlanModal = ({
                   transition={{ delay: 0.35 }}
                   className='text-sm text-muted-foreground leading-relaxed mb-5'
                 >
-                  This feature is part of the{' '}
-                  <strong className='text-foreground'>{requiredPlan}</strong>{' '}
-                  plan. Upgrade now to unlock its full power — and a lot more.
+                  We couldn&apos;t renew your{' '}
+                  <strong className='text-foreground'>{planName}</strong>{' '}
+                  subscription. Pay within{' '}
+                  <strong className='text-foreground'>
+                    {daysRemaining} day{daysRemaining === 1 ? '' : 's'}
+                  </strong>{' '}
+                  to keep your access uninterrupted.
                 </motion.p>
-
-                <motion.ul
-                  initial='hidden'
-                  animate='show'
-                  variants={{
-                    hidden: {},
-                    show: {
-                      transition: { staggerChildren: 0.07, delayChildren: 0.4 },
-                    },
-                  }}
-                  className='space-y-2.5 mb-6'
-                >
-                  {benefits.map((b, i) => (
-                    <motion.li
-                      key={i}
-                      variants={{
-                        hidden: { opacity: 0, x: -10 },
-                        show: { opacity: 1, x: 0 },
-                      }}
-                      className='flex items-start gap-3 text-sm'
-                    >
-                      <span className='mt-0.5 flex-shrink-0 w-5 h-5 rounded-full gradient-bg flex items-center justify-center shadow-sm'>
-                        <Check className='w-3 h-3 text-white' strokeWidth={3} />
-                      </span>
-                      <span className='text-foreground/90'>{b}</span>
-                    </motion.li>
-                  ))}
-                </motion.ul>
 
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.7 }}
+                  transition={{ delay: 0.4 }}
+                  className='mb-5'
+                >
+                  <div className='flex items-center justify-between text-xs text-muted-foreground mb-1.5'>
+                    <span>Grace period</span>
+                    <span className='font-semibold text-foreground'>
+                      {daysRemaining} of 7 days
+                    </span>
+                  </div>
+                  <div className='h-2 rounded-full bg-muted overflow-hidden'>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progress}%` }}
+                      transition={{
+                        delay: 0.5,
+                        duration: 0.8,
+                        ease: 'easeOut',
+                      }}
+                      className='h-full bg-gradient-to-r from-amber-400 to-red-500 rounded-full'
+                    />
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.45 }}
+                  className='rounded-2xl border border-border/60 bg-muted/40 p-4 mb-6 space-y-2.5'
+                >
+                  <div className='flex items-center justify-between text-sm'>
+                    <span className='flex items-center gap-2 text-muted-foreground'>
+                      <Zap className='w-4 h-4' /> Plan
+                    </span>
+                    <span className='font-semibold text-foreground'>
+                      {planName}
+                    </span>
+                  </div>
+                  <div className='flex items-center justify-between text-sm'>
+                    <span className='flex items-center gap-2 text-muted-foreground'>
+                      <Calendar className='w-4 h-4' /> Billing
+                    </span>
+                    <span className='font-semibold text-foreground'>
+                      {billingCycle}
+                    </span>
+                  </div>
+                  {dueDate && (
+                    <div className='flex items-center justify-between text-sm'>
+                      <span className='flex items-center gap-2 text-muted-foreground'>
+                        <Clock className='w-4 h-4' /> Due
+                      </span>
+                      <span className='font-semibold text-foreground'>
+                        {dueDate}
+                      </span>
+                    </div>
+                  )}
+                  <div className='h-px bg-border/60 my-1' />
+                  <div className='flex items-center justify-between'>
+                    <span className='flex items-center gap-2 text-sm text-muted-foreground'>
+                      <Receipt className='w-4 h-4' /> Renewal amount
+                    </span>
+                    <span className='text-lg font-bold gradient-text'>
+                      {formattedAmount}
+                    </span>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55 }}
                   className='flex flex-col-reverse sm:flex-row gap-2.5'
                 >
                   <Button
-                    variant='ghost'
+                    variant='outline'
                     onClick={() => {
-                      onLater?.();
+                      onCancel?.();
                       onOpenChange(false);
                     }}
                     className='sm:flex-1'
@@ -312,11 +325,12 @@ const UpgradePlanModal = ({
                   </Button>
 
                   <Button
-                    onClick={() => onUpgrade?.()}
-                    className='sm:flex-1 relative overflow-hidden group gradient-bg text-white border-0 hover:opacity-100 hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow'
+                    onClick={() => onPayNow?.()}
+                    className='sm:flex-1 relative overflow-hidden group gradient-bg text-white border-0 hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow'
                   >
                     <span className='relative z-10 flex items-center justify-center gap-2 font-semibold'>
-                      Upgrade to {requiredPlan}
+                      <CreditCard className='w-4 h-4' />
+                      Pay {formattedAmount} now
                       <motion.span
                         animate={{ x: [0, 4, 0] }}
                         transition={{
@@ -353,4 +367,4 @@ const UpgradePlanModal = ({
   );
 };
 
-export default UpgradePlanModal;
+export default GracePeriodModal;

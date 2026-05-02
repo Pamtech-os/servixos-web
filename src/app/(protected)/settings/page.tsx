@@ -5,7 +5,7 @@ import { buildPageMetadata } from '@/common/seo/metadata';
 export const metadata: Metadata = buildPageMetadata({
   title: 'Settings',
   path: '/settings',
-  description: 'Configure your account, preferences, and workspace behavior.',
+  description: 'Configure your account, preferences, and office behavior.',
 });
 
 export default function SettingsPage() {

@@ -23,6 +23,7 @@ const shuffleArray = (arr: number[]) => {
 const PinEntry = () => {
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
   const { auth, completeVerification, isHydrated } = useAuth();
   const verifyPinMutation = useVerifyPin();
@@ -47,14 +48,17 @@ const PinEntry = () => {
     setError('');
   }, []);
 
+  const loading = verifyPinMutation.isPending || isRedirecting;
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (loading) return;
       if (/^\d$/.test(e.key)) addDigit(parseInt(e.key));
       else if (e.key === 'Backspace') removeDigit();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [addDigit, removeDigit]);
+  }, [addDigit, removeDigit, loading]);
 
   const handleSubmit = useCallback(async () => {
     const code = pin.join('');
@@ -72,10 +76,12 @@ const PinEntry = () => {
         pin: code,
         token: auth.accessToken,
       });
+      setIsRedirecting(true);
       setPin([]); // clear before navigation so the auto-submit effect cannot re-fire
       completeVerification(verifiedToken);
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch (err) {
+      setIsRedirecting(false);
       const message = getApiErrorMessage(err);
       setError(message);
       setPin([]);
@@ -108,8 +114,6 @@ const PinEntry = () => {
   }, [pin.length]);
 
   if (!isHydrated || !auth.isLoggedIn) return null;
-
-  const loading = verifyPinMutation.isPending;
 
   return (
     <div className='relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 py-6 sm:items-center sm:py-8'>

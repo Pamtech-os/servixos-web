@@ -21,9 +21,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -51,7 +65,8 @@ const initialRequests: ServiceRequest[] = [
     service: 'House Cleaning',
     date: '2024-04-20',
     endDate: '2024-04-20',
-    message: "I'd like a deep clean for my 3-bedroom apartment before the weekend.",
+    message:
+      "I'd like a deep clean for my 3-bedroom apartment before the weekend.",
     status: 'pending',
     createdAt: '2 hours ago',
   },
@@ -142,7 +157,8 @@ const initialChatMessages: Record<string, ChatMessage[]> = {
       id: 'cm2',
       sender: 'business',
       senderName: 'Servix Team',
-      content: "Hello Alice! We'd be happy to help. How many rooms need cleaning?",
+      content:
+        "Hello Alice! We'd be happy to help. How many rooms need cleaning?",
       timestamp: '2:35 PM',
     },
     {
@@ -158,7 +174,8 @@ const initialChatMessages: Record<string, ChatMessage[]> = {
       id: 'cm4',
       sender: 'client',
       senderName: 'David Park',
-      content: 'The kitchen sink has been leaking since yesterday. Can you come ASAP?',
+      content:
+        'The kitchen sink has been leaking since yesterday. Can you come ASAP?',
       timestamp: '10:15 AM',
     },
     {
@@ -232,7 +249,9 @@ const Requests = () => {
   const [requests, setRequests] = useState<ServiceRequest[]>(initialRequests);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(
+    null,
+  );
   const [detailOpen, setDetailOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatRequest, setChatRequest] = useState<ServiceRequest | null>(null);
@@ -269,13 +288,16 @@ const Requests = () => {
       requests.filter(
         (r) =>
           r.clientName.toLowerCase().includes(search.toLowerCase()) ||
-          r.service.toLowerCase().includes(search.toLowerCase())
+          r.service.toLowerCase().includes(search.toLowerCase()),
       ),
-    [requests, search]
+    [requests, search],
   );
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const paginated = filtered.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE,
+  );
 
   const counts = useMemo(
     () => ({
@@ -284,7 +306,7 @@ const Requests = () => {
       accepted: requests.filter((r) => r.status === 'accepted').length,
       cancelled: requests.filter((r) => r.status === 'cancelled').length,
     }),
-    [requests]
+    [requests],
   );
 
   const openDetail = (req: ServiceRequest) => {
@@ -293,14 +315,18 @@ const Requests = () => {
     setAdjustedEndDate(req.endDate ? new Date(req.endDate) : undefined);
     setPricingValue(req.pricing ? req.pricing.toString() : '');
     setDetailOpen(true);
-    const clientMsgCount = (chatMessages[req.id] || []).filter((m) => m.sender === 'client').length;
+    const clientMsgCount = (chatMessages[req.id] || []).filter(
+      (m) => m.sender === 'client',
+    ).length;
     setReadMessages((prev) => ({ ...prev, [req.id]: clientMsgCount }));
   };
 
   const openChat = (req: ServiceRequest) => {
     setChatRequest(req);
     setChatOpen(true);
-    const clientMsgCount = (chatMessages[req.id] || []).filter((m) => m.sender === 'client').length;
+    const clientMsgCount = (chatMessages[req.id] || []).filter(
+      (m) => m.sender === 'client',
+    ).length;
     setReadMessages((prev) => ({ ...prev, [req.id]: clientMsgCount }));
   };
 
@@ -308,7 +334,10 @@ const Requests = () => {
     if (!selectedRequest) return;
     setAiPricingLoading(true);
     await new Promise((r) => setTimeout(r, 1500));
-    const suggested = getAISuggestedPrice(selectedRequest.service, selectedRequest.message);
+    const suggested = getAISuggestedPrice(
+      selectedRequest.service,
+      selectedRequest.message,
+    );
     setPricingValue(suggested.toString());
     setAiPricingLoading(false);
     toast.success('AI Pricing Suggested', {
@@ -322,7 +351,8 @@ const Requests = () => {
       const price = Number(pricingValue);
       if (!price || price <= 0) {
         toast.error('Pricing required', {
-          description: 'Please set a valid price greater than $0 before accepting.',
+          description:
+            'Please set a valid price greater than $0 before accepting.',
         });
         setConfirmAction(null);
         return;
@@ -333,25 +363,31 @@ const Requests = () => {
         r.id === confirmAction.requestId
           ? {
               ...r,
-              status: confirmAction.type === 'accept' ? 'accepted' : 'cancelled',
-              ...(confirmAction.type === 'accept' ? { pricing: Number(pricingValue) } : {}),
+              status:
+                confirmAction.type === 'accept' ? 'accepted' : 'cancelled',
+              ...(confirmAction.type === 'accept'
+                ? { pricing: Number(pricingValue) }
+                : {}),
             }
-          : r
-      )
+          : r,
+      ),
     );
     if (selectedRequest?.id === confirmAction.requestId) {
       setSelectedRequest((prev) =>
         prev
           ? {
               ...prev,
-              status: confirmAction.type === 'accept' ? 'accepted' : 'cancelled',
-              ...(confirmAction.type === 'accept' ? { pricing: Number(pricingValue) } : {}),
+              status:
+                confirmAction.type === 'accept' ? 'accepted' : 'cancelled',
+              ...(confirmAction.type === 'accept'
+                ? { pricing: Number(pricingValue) }
+                : {}),
             }
-          : prev
+          : prev,
       );
     }
     toast.success(
-      `Request ${confirmAction.type === 'accept' ? 'accepted' : 'cancelled'} successfully.`
+      `Request ${confirmAction.type === 'accept' ? 'accepted' : 'cancelled'} successfully.`,
     );
     setConfirmAction(null);
   };
@@ -362,9 +398,15 @@ const Requests = () => {
       sender: 'business',
       senderName: 'Servix Team',
       content,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
     };
-    setChatMessages((prev) => ({ ...prev, [requestId]: [...(prev[requestId] || []), newMsg] }));
+    setChatMessages((prev) => ({
+      ...prev,
+      [requestId]: [...(prev[requestId] || []), newMsg],
+    }));
   };
 
   const handleSaveDates = () => {
@@ -375,19 +417,23 @@ const Requests = () => {
           ? {
               ...r,
               date: format(adjustedDate, 'yyyy-MM-dd'),
-              endDate: adjustedEndDate ? format(adjustedEndDate, 'yyyy-MM-dd') : r.endDate,
+              endDate: adjustedEndDate
+                ? format(adjustedEndDate, 'yyyy-MM-dd')
+                : r.endDate,
             }
-          : r
-      )
+          : r,
+      ),
     );
     setSelectedRequest((prev) =>
       prev
         ? {
             ...prev,
             date: format(adjustedDate, 'yyyy-MM-dd'),
-            endDate: adjustedEndDate ? format(adjustedEndDate, 'yyyy-MM-dd') : prev.endDate,
+            endDate: adjustedEndDate
+              ? format(adjustedEndDate, 'yyyy-MM-dd')
+              : prev.endDate,
           }
-        : prev
+        : prev,
     );
     toast.success('Dates updated successfully.');
   };
@@ -397,25 +443,27 @@ const Requests = () => {
       title: 'Total Requests',
       value: counts.total,
       icon: Inbox,
-      gradient: 'from-primary to-secondary',
+      iconGradient:
+        'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
     },
     {
       title: 'Pending',
       value: counts.pending,
       icon: Clock,
-      gradient: 'from-amber-500 to-amber-400',
+      iconGradient: 'linear-gradient(135deg, rgb(245 158 11), rgb(251 191 36))',
     },
     {
       title: 'Accepted',
       value: counts.accepted,
       icon: CheckCircle2,
-      gradient: 'from-emerald-500 to-emerald-400',
+      iconGradient: 'linear-gradient(135deg, rgb(16 185 129), rgb(52 211 153))',
     },
     {
       title: 'Cancelled',
       value: counts.cancelled,
       icon: XCircle,
-      gradient: 'from-destructive to-destructive/80',
+      iconGradient:
+        'linear-gradient(135deg, hsl(var(--destructive)), hsl(var(--destructive) / 0.8))',
     },
   ];
 
@@ -425,7 +473,9 @@ const Requests = () => {
   return (
     <div className='space-y-6'>
       <div>
-        <h1 className='font-display text-2xl font-bold md:text-3xl'>Requests</h1>
+        <h1 className='font-display text-2xl font-bold md:text-3xl'>
+          Requests
+        </h1>
         <p className='text-sm text-muted-foreground'>
           Manage incoming service requests from clients.
         </p>
@@ -451,12 +501,17 @@ const Requests = () => {
               <Card>
                 <CardContent className='relative p-6'>
                   <div
-                    className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={20} />
                   </div>
-                  <p className='text-sm font-medium text-muted-foreground'>{stat.title}</p>
-                  <p className='mt-1 font-display text-2xl font-bold'>{stat.value}</p>
+                  <p className='text-sm font-medium text-muted-foreground'>
+                    {stat.title}
+                  </p>
+                  <p className='mt-1 font-display text-2xl font-bold'>
+                    {stat.value}
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -503,21 +558,22 @@ const Requests = () => {
                     >
                       <div className='flex-1 min-w-0'>
                         <div className='flex items-center gap-2 flex-wrap'>
-                          <span className='font-medium text-sm'>{req.clientName}</span>
+                          <span className='font-medium text-sm'>
+                            {req.clientName}
+                          </span>
                           <Badge
                             variant='outline'
                             className={`text-xs ${statusStyles[req.status]}`}
                           >
                             {req.status}
                           </Badge>
-                          {unreadCounts[req.id] && (
-                            <span className='flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground'>
-                              {unreadCounts[req.id]}
-                            </span>
-                          )}
                         </div>
-                        <p className='text-sm text-muted-foreground mt-0.5'>{req.service}</p>
-                        <p className='text-xs text-muted-foreground mt-0.5'>{req.createdAt}</p>
+                        <p className='text-sm text-muted-foreground mt-0.5'>
+                          {req.service}
+                        </p>
+                        <p className='text-xs text-muted-foreground mt-0.5'>
+                          {req.createdAt}
+                        </p>
                       </div>
                       <div className='flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end'>
                         <Button
@@ -549,7 +605,10 @@ const Requests = () => {
                               onClick={() => {
                                 setSelectedRequest(req);
                                 setPricingValue(req.pricing?.toString() || '');
-                                setConfirmAction({ type: 'accept', requestId: req.id });
+                                setConfirmAction({
+                                  type: 'accept',
+                                  requestId: req.id,
+                                });
                               }}
                             >
                               <CheckCircle2 size={14} /> Accept
@@ -559,7 +618,10 @@ const Requests = () => {
                               size='sm'
                               className='flex-1 gap-1.5 lg:flex-none'
                               onClick={() =>
-                                setConfirmAction({ type: 'cancel', requestId: req.id })
+                                setConfirmAction({
+                                  type: 'cancel',
+                                  requestId: req.id,
+                                })
                               }
                             >
                               <XCircle size={14} /> Cancel
@@ -616,17 +678,29 @@ const Requests = () => {
             <div className='space-y-4'>
               <div className='grid gap-4 sm:grid-cols-2'>
                 <div>
-                  <p className='text-xs font-medium text-muted-foreground'>Client</p>
-                  <p className='text-sm font-semibold'>{selectedRequest.clientName}</p>
-                  <p className='text-xs text-muted-foreground'>{selectedRequest.clientEmail}</p>
+                  <p className='text-xs font-medium text-muted-foreground'>
+                    Client
+                  </p>
+                  <p className='text-sm font-semibold'>
+                    {selectedRequest.clientName}
+                  </p>
+                  <p className='text-xs text-muted-foreground'>
+                    {selectedRequest.clientEmail}
+                  </p>
                 </div>
                 <div className='flex flex-wrap gap-4'>
                   <div>
-                    <p className='text-xs font-medium text-muted-foreground'>Service</p>
-                    <p className='text-sm font-semibold'>{selectedRequest.service}</p>
+                    <p className='text-xs font-medium text-muted-foreground'>
+                      Service
+                    </p>
+                    <p className='text-sm font-semibold'>
+                      {selectedRequest.service}
+                    </p>
                   </div>
                   <div>
-                    <p className='text-xs font-medium text-muted-foreground'>Status</p>
+                    <p className='text-xs font-medium text-muted-foreground'>
+                      Status
+                    </p>
                     <Badge
                       variant='outline'
                       className={`mt-0.5 ${statusStyles[selectedRequest.status]}`}
@@ -641,7 +715,9 @@ const Requests = () => {
               <div className='space-y-2'>
                 <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
                   <div>
-                    <p className='text-xs font-medium text-muted-foreground mb-1'>Start Date</p>
+                    <p className='text-xs font-medium text-muted-foreground mb-1'>
+                      Start Date
+                    </p>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -650,10 +726,15 @@ const Requests = () => {
                           className='w-full justify-start gap-1.5 text-left font-normal text-xs'
                         >
                           <CalendarIcon size={12} />
-                          {adjustedDate ? format(adjustedDate, 'MMM d, yyyy') : 'Pick'}
+                          {adjustedDate
+                            ? format(adjustedDate, 'MMM d, yyyy')
+                            : 'Pick'}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className='w-auto p-0 backdrop-blur-xl' align='start'>
+                      <PopoverContent
+                        className='w-auto p-0 backdrop-blur-xl'
+                        align='start'
+                      >
                         <Calendar
                           mode='single'
                           selected={adjustedDate}
@@ -664,7 +745,9 @@ const Requests = () => {
                     </Popover>
                   </div>
                   <div>
-                    <p className='text-xs font-medium text-muted-foreground mb-1'>End Date</p>
+                    <p className='text-xs font-medium text-muted-foreground mb-1'>
+                      End Date
+                    </p>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -673,10 +756,15 @@ const Requests = () => {
                           className='w-full justify-start gap-1.5 text-left font-normal text-xs'
                         >
                           <CalendarIcon size={12} />
-                          {adjustedEndDate ? format(adjustedEndDate, 'MMM d, yyyy') : 'Pick'}
+                          {adjustedEndDate
+                            ? format(adjustedEndDate, 'MMM d, yyyy')
+                            : 'Pick'}
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className='w-auto p-0 backdrop-blur-xl' align='start'>
+                      <PopoverContent
+                        className='w-auto p-0 backdrop-blur-xl'
+                        align='start'
+                      >
                         <Calendar
                           mode='single'
                           selected={adjustedEndDate}
@@ -687,7 +775,11 @@ const Requests = () => {
                     </Popover>
                   </div>
                 </div>
-                <Button size='sm' onClick={handleSaveDates} className='w-full h-7 text-xs'>
+                <Button
+                  size='sm'
+                  onClick={handleSaveDates}
+                  className='w-full h-7 text-xs'
+                >
                   Save Dates
                 </Button>
               </div>
@@ -713,7 +805,11 @@ const Requests = () => {
                         <motion.div
                           className='h-3 w-3 rounded-full border-2 border-primary border-t-transparent'
                           animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                          transition={{
+                            duration: 1,
+                            repeat: Infinity,
+                            ease: 'linear',
+                          }}
                         />
                       ) : (
                         <Sparkles size={12} />
@@ -723,7 +819,9 @@ const Requests = () => {
                   )}
                 </div>
                 <div className='flex items-center gap-2'>
-                  <span className='text-sm font-bold text-muted-foreground'>$</span>
+                  <span className='text-sm font-bold text-muted-foreground'>
+                    $
+                  </span>
                   <Input
                     type='number'
                     min={1}
@@ -743,7 +841,9 @@ const Requests = () => {
 
               {/* Client Message */}
               <div>
-                <p className='text-xs font-medium text-muted-foreground mb-1'>Client Message</p>
+                <p className='text-xs font-medium text-muted-foreground mb-1'>
+                  Client Message
+                </p>
                 <div className='rounded-lg bg-muted/50 p-2.5 text-sm'>
                   {selectedRequest.message}
                 </div>
@@ -768,7 +868,10 @@ const Requests = () => {
                     <Button
                       className='w-full gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 sm:flex-1'
                       onClick={() =>
-                        setConfirmAction({ type: 'accept', requestId: selectedRequest.id })
+                        setConfirmAction({
+                          type: 'accept',
+                          requestId: selectedRequest.id,
+                        })
                       }
                     >
                       <CheckCircle2 size={14} /> Accept
@@ -777,7 +880,10 @@ const Requests = () => {
                       variant='destructive'
                       className='w-full gap-1.5 sm:flex-1'
                       onClick={() =>
-                        setConfirmAction({ type: 'cancel', requestId: selectedRequest.id })
+                        setConfirmAction({
+                          type: 'cancel',
+                          requestId: selectedRequest.id,
+                        })
                       }
                     >
                       <XCircle size={14} /> Cancel
@@ -813,16 +919,19 @@ const Requests = () => {
               {isChatDisabled(chatRequest) ? (
                 <div className='flex h-full items-center justify-center'>
                   <div className='text-center space-y-2'>
-                    <MessageCircle className='h-10 w-10 text-muted-foreground/30 mx-auto' />
+                    <MessageCircle className='mx-auto h-10 w-10 text-muted-foreground dark:text-muted-foreground/60' />
                     <p className='text-sm text-muted-foreground'>
-                      Chat is disabled after the request has been {chatRequest.status}.
+                      Chat is disabled after the request has been{' '}
+                      {chatRequest.status}.
                     </p>
                   </div>
                 </div>
               ) : (
                 <ChatUI
                   messages={chatMessages[chatRequest.id] || []}
-                  onSendMessage={(content) => handleSendMessage(chatRequest.id, content)}
+                  onSendMessage={(content) =>
+                    handleSendMessage(chatRequest.id, content)
+                  }
                   clientName={chatRequest.clientName}
                   className='h-full'
                 />
@@ -836,13 +945,19 @@ const Requests = () => {
       <ConfirmModal
         open={!!confirmAction}
         onOpenChange={(open) => !open && setConfirmAction(null)}
-        title={confirmAction?.type === 'accept' ? 'Accept this request?' : 'Cancel this request?'}
+        title={
+          confirmAction?.type === 'accept'
+            ? 'Accept this request?'
+            : 'Cancel this request?'
+        }
         description={
           confirmAction?.type === 'accept'
             ? 'This will confirm the booking and notify the client.'
             : 'This will cancel the request. The client will be notified.'
         }
-        confirmLabel={confirmAction?.type === 'accept' ? 'Accept' : 'Cancel Request'}
+        confirmLabel={
+          confirmAction?.type === 'accept' ? 'Accept' : 'Cancel Request'
+        }
         variant={confirmAction?.type === 'cancel' ? 'destructive' : 'default'}
         onConfirm={handleConfirmAction}
       />
