@@ -29,7 +29,7 @@ import {
   mockContracts,
   mockMessages,
 } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-500/10 text-green-600 dark:text-green-400',

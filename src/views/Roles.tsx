@@ -26,7 +26,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import ConfirmModal from '@/components/ConfirmModal';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const ALL_PERMISSIONS = [
   'dashboard.view',

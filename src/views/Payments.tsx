@@ -47,7 +47,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import PaginationControls from '@/components/ui/pagination-controls';
 import { mockPayments, mockInvoices, type Payment } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { getPaginationRange, paginateArray } from '@/lib/pagination';
 
 const ITEMS_PER_PAGE = 6;

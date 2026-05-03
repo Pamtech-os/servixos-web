@@ -59,7 +59,7 @@ import { Separator } from '@/components/ui/separator';
 import PaginationControls from '@/components/ui/pagination-controls';
 import ConfirmModal from '@/components/ConfirmModal';
 import { mockJobs, mockClients, type Job } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { paginateArray } from '@/lib/pagination';
 
 const ITEMS_PER_PAGE = 8;

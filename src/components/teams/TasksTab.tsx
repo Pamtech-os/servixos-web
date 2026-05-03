@@ -42,7 +42,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { mockTasks, mockEmployees, Task, Subtask, TaskComment } from '@/lib/team-mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const stages = [
   {
