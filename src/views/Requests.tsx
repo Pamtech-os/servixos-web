@@ -25,7 +25,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import PaginationControls from '@/components/ui/pagination-controls';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import ConfirmModal from '@/components/ConfirmModal';
 import ChatUI, { type ChatMessage } from '@/components/ChatUI';
 import { paginateArray } from '@/lib/pagination';
@@ -41,6 +41,7 @@ interface ServiceRequest {
   status: 'pending' | 'accepted' | 'cancelled';
   createdAt: string;
   pricing?: number;
+  hasAiPriceEstimate?: boolean;
 }
 
 const initialRequests: ServiceRequest[] = [
@@ -341,6 +342,16 @@ const Requests = () => {
     await new Promise((r) => setTimeout(r, 1500));
     const suggested = getAISuggestedPrice(selectedRequest.service, selectedRequest.message);
     setPricingValue(suggested.toString());
+    setRequests((prev) =>
+      prev.map((request) =>
+        request.id === selectedRequest.id
+          ? { ...request, pricing: suggested, hasAiPriceEstimate: true }
+          : request
+      )
+    );
+    setSelectedRequest((prev) =>
+      prev ? { ...prev, pricing: suggested, hasAiPriceEstimate: true } : prev
+    );
     setAiPricingLoading(false);
     toast.success('AI Pricing Suggested', {
       description: `Recommended price: $${suggested} based on service analysis.`,
@@ -441,6 +452,7 @@ const Requests = () => {
 
   const isChatDisabled = (req: ServiceRequest) =>
     req.status === 'accepted' || req.status === 'cancelled';
+  const hasAiPriceEstimate = selectedRequest?.hasAiPriceEstimate === true;
 
   return (
     <div className='space-y-6'>
@@ -719,7 +731,7 @@ const Requests = () => {
                       variant='outline'
                       className='gap-1.5 h-7 text-xs'
                       onClick={handleAISuggestPricing}
-                      disabled={aiPricingLoading}
+                      disabled={aiPricingLoading || hasAiPriceEstimate}
                     >
                       {aiPricingLoading ? (
                         <motion.div
@@ -734,7 +746,11 @@ const Requests = () => {
                       ) : (
                         <Sparkles size={12} />
                       )}
-                      {aiPricingLoading ? 'Analyzing...' : 'AI Suggest Price'}
+                      {aiPricingLoading
+                        ? 'Analyzing...'
+                        : hasAiPriceEstimate
+                          ? 'Price Suggested'
+                          : 'AI Suggest Price'}
                     </Button>
                   )}
                 </div>

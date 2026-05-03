@@ -21,7 +21,7 @@ import {
 import ConfirmModal from '@/components/ConfirmModal';
 import SubscriptionTab from '@/components/settings/SubscriptionTab';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { Building2, Bell, Shield, CreditCard } from 'lucide-react';
 
 const Settings = () => {

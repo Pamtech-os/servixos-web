@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { mockShifts, mockEmployees, days, timeSlots, Shift } from '@/lib/team-mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const parseTime = (t: string): number => {
   const [h] = t.split(':').map(Number);

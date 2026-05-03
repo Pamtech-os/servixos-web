@@ -4,7 +4,7 @@ import { Sparkles, ChevronLeft, ChevronRight, X, Target, TrendingUp, Zap } from 
 import { Button } from '@/components/ui/button';
 import ConfirmModal from '@/components/ConfirmModal';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const HINT_STORAGE_KEY = 'ai_suggestions_hint_seen';
 

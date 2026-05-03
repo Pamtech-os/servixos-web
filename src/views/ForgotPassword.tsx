@@ -9,7 +9,7 @@ import { ArrowLeft, Mail, Sparkles, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useForgotPassword, useResetPassword } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';

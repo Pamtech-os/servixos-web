@@ -21,7 +21,7 @@ export function AppProviders({ children }: PropsWithChildren) {
                 <UpgradePlanProvider>
                   {children}
                 </UpgradePlanProvider>
-                <Toaster richColors closeButton />
+                <Toaster closeButton />
               </UiProvider>
             </ClockProvider>
           </AuthProvider>

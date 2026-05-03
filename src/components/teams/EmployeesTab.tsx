@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import PaginationControls from '@/components/ui/pagination-controls';
 import { mockEmployees, Employee } from '@/lib/team-mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { paginateArray } from '@/lib/pagination';
 
 const PAGE_SIZE = 5;

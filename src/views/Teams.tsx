@@ -9,7 +9,7 @@ import SchedulingTab from '@/components/teams/SchedulingTab';
 import TimeTrackingTab from '@/components/teams/TimeTrackingTab';
 import TasksTab from '@/components/teams/TasksTab';
 import CommunicationsTab from '@/components/teams/CommunicationsTab';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const Teams = () => {
   const handleConferenceCall = () => {

@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { mockClients } from '@/lib/mock-data';
 import type { Client } from '@/lib/mock-data';
 import ConfirmModal from '@/components/ConfirmModal';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const Clients = () => {
   const [loading, setLoading] = useState(true);

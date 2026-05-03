@@ -20,7 +20,7 @@ import {
   TeamMessage,
   Announcement,
 } from '@/lib/team-mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 
 const CommunicationsTab = () => {
   const [messages, setMessages] = useState<TeamMessage[]>(mockTeamMessages);
