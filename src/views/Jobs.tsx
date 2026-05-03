@@ -28,6 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -143,6 +144,9 @@ const Jobs = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ExtendedJob | null>(null);
   const [viewJob, setViewJob] = useState<ExtendedJob | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<Job['status']>('pending');
 
   // Contract states
   const [contractGenerating, setContractGenerating] = useState(false);
@@ -154,7 +158,6 @@ const Jobs = () => {
   const [formClientId, setFormClientId] = useState('');
   const [formDate, setFormDate] = useState<Date>(new Date());
   const [formPrice, setFormPrice] = useState('');
-  const [formTime, setFormTime] = useState('');
   const [formLocation, setFormLocation] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -200,6 +203,7 @@ const Jobs = () => {
   const handleDelete = () => {
     if (!deleteTarget) return;
     setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
+    setSelectedJobIds((prev) => prev.filter((id) => id !== deleteTarget.id));
     toast.success('Job deleted', { description: `"${deleteTarget.title}" has been removed.` });
     setDeleteTarget(null);
   };
@@ -209,7 +213,6 @@ const Jobs = () => {
     setFormClientId('');
     setFormDate(new Date());
     setFormPrice('');
-    setFormTime('');
     setFormLocation('');
     setFormNotes('');
   };
@@ -226,7 +229,6 @@ const Jobs = () => {
       date: format(formDate, 'yyyy-MM-dd'),
       status: 'pending',
       price: Number(formPrice) || 0,
-      time: formTime,
       location: formLocation,
       notes: formNotes,
     };
@@ -235,6 +237,66 @@ const Jobs = () => {
     setCreateOpen(false);
     resetForm();
   };
+
+  const selectedJobsCount = selectedJobIds.length;
+  const allVisibleSelected =
+    paginated.length > 0 && paginated.every((job) => selectedJobIds.includes(job.id));
+  const someVisibleSelected =
+    paginated.some((job) => selectedJobIds.includes(job.id)) && !allVisibleSelected;
+
+  const handleToggleJobSelection = (jobId: string, checked: boolean) => {
+    setSelectedJobIds((prev) => {
+      if (checked) {
+        if (prev.includes(jobId)) return prev;
+        return [...prev, jobId];
+      }
+      return prev.filter((id) => id !== jobId);
+    });
+  };
+
+  const handleToggleVisibleSelection = (checked: boolean) => {
+    if (!paginated.length) return;
+    const visibleIds = paginated.map((job) => job.id);
+    setSelectedJobIds((prev) => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...visibleIds]));
+      }
+      return prev.filter((id) => !visibleIds.includes(id));
+    });
+  };
+
+  const handleBulkStatusUpdate = () => {
+    if (!selectedJobsCount) return;
+    const selectedIds = new Set(selectedJobIds);
+    setJobs((prev) =>
+      prev.map((job) => (selectedIds.has(job.id) ? { ...job, status: bulkStatus } : job))
+    );
+    setViewJob((prev) => (prev && selectedIds.has(prev.id) ? { ...prev, status: bulkStatus } : prev));
+    toast.success('Jobs updated', {
+      description: `${selectedJobsCount} job${selectedJobsCount > 1 ? 's' : ''} marked as ${statusLabel(bulkStatus)}.`,
+    });
+    setSelectedJobIds([]);
+  };
+
+  const handleBulkDelete = () => {
+    if (!selectedJobsCount) return;
+    const selectedIds = new Set(selectedJobIds);
+    setJobs((prev) => prev.filter((job) => !selectedIds.has(job.id)));
+    setViewJob((prev) => (prev && selectedIds.has(prev.id) ? null : prev));
+    toast.success('Jobs deleted', {
+      description: `${selectedJobsCount} job${selectedJobsCount > 1 ? 's have' : ' has'} been removed.`,
+    });
+    setSelectedJobIds([]);
+    setBulkDeleteOpen(false);
+  };
+
+  useEffect(() => {
+    setSelectedJobIds((prev) => {
+      if (!prev.length) return prev;
+      const existingIds = new Set(jobs.map((job) => job.id));
+      return prev.filter((id) => existingIds.has(id));
+    });
+  }, [jobs]);
 
   const handleStartJob = (job: ExtendedJob) => {
     setJobs((prev) =>
@@ -339,6 +401,37 @@ const Jobs = () => {
         </Select>
       </div>
 
+      {selectedJobsCount > 0 && (
+        <Card className='card-shadow p-3'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <p className='text-sm font-medium'>
+              {selectedJobsCount} job{selectedJobsCount > 1 ? 's' : ''} selected
+            </p>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <Select
+                value={bulkStatus}
+                onValueChange={(value: Job['status']) => setBulkStatus(value)}
+              >
+                <SelectTrigger className='w-full sm:w-[180px]'>
+                  <SelectValue placeholder='Set status' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='pending'>Pending</SelectItem>
+                  <SelectItem value='in_progress'>In Progress</SelectItem>
+                  <SelectItem value='completed'>Completed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant='outline' onClick={handleBulkStatusUpdate}>
+                Update Status
+              </Button>
+              <Button variant='destructive' onClick={() => setBulkDeleteOpen(true)}>
+                Delete Selected
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className='space-y-3'>
@@ -367,7 +460,16 @@ const Jobs = () => {
                     <Card className='card-shadow p-3'>
                       <div className='space-y-2'>
                         <div className='flex items-start justify-between gap-2'>
-                          <p className='text-sm font-medium leading-tight'>{job.title}</p>
+                          <div className='flex items-start gap-2'>
+                            <Checkbox
+                              checked={selectedJobIds.includes(job.id)}
+                              onCheckedChange={(checked) =>
+                                handleToggleJobSelection(job.id, checked === true)
+                              }
+                              aria-label={`Select ${job.title}`}
+                            />
+                            <p className='text-sm font-medium leading-tight'>{job.title}</p>
+                          </div>
                           <Badge variant='outline' className={statusColor(job.status)}>
                             {statusLabel(job.status)}
                           </Badge>
@@ -399,6 +501,13 @@ const Jobs = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className='w-10'>
+                    <Checkbox
+                      checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+                      onCheckedChange={(checked) => handleToggleVisibleSelection(checked === true)}
+                      aria-label='Select visible jobs'
+                    />
+                  </TableHead>
                   <TableHead>Job Title</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Date</TableHead>
@@ -409,7 +518,7 @@ const Jobs = () => {
               <TableBody>
                 {paginated.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className='py-10 text-center text-muted-foreground'>
+                    <TableCell colSpan={6} className='py-10 text-center text-muted-foreground'>
                       <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' /> No jobs found.
                     </TableCell>
                   </TableRow>
@@ -424,6 +533,15 @@ const Jobs = () => {
                         transition={{ delay: i * 0.03 }}
                         className='border-b transition-colors hover:bg-muted/50'
                       >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedJobIds.includes(job.id)}
+                            onCheckedChange={(checked) =>
+                              handleToggleJobSelection(job.id, checked === true)
+                            }
+                            aria-label={`Select ${job.title}`}
+                          />
+                        </TableCell>
                         <TableCell className='font-medium'>{job.title}</TableCell>
                         <TableCell>{client?.fullName ?? 'Unknown'}</TableCell>
                         <TableCell>{job.date}</TableCell>
@@ -473,6 +591,16 @@ const Jobs = () => {
         description={`Are you sure you want to delete "${deleteTarget?.title}"? This action cannot be undone.`}
         confirmLabel='Delete'
         onConfirm={handleDelete}
+        variant='destructive'
+      />
+
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title='Delete Selected Jobs'
+        description={`Are you sure you want to delete ${selectedJobsCount} selected job${selectedJobsCount > 1 ? 's' : ''}? This action cannot be undone.`}
+        confirmLabel='Delete Selected'
+        onConfirm={handleBulkDelete}
         variant='destructive'
       />
 
@@ -743,19 +871,13 @@ const Jobs = () => {
                 />
               </div>
             </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
-              <div className='space-y-1.5'>
-                <Label>Time</Label>
-                <Input type='time' value={formTime} onChange={(e) => setFormTime(e.target.value)} />
-              </div>
-              <div className='space-y-1.5'>
-                <Label>Location</Label>
-                <Input
-                  placeholder='Job location'
-                  value={formLocation}
-                  onChange={(e) => setFormLocation(e.target.value)}
-                />
-              </div>
+            <div className='space-y-1.5'>
+              <Label>Location</Label>
+              <Input
+                placeholder='Job location'
+                value={formLocation}
+                onChange={(e) => setFormLocation(e.target.value)}
+              />
             </div>
             <div className='space-y-1.5'>
               <Label>Notes</Label>
