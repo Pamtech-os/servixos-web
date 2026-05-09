@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
@@ -14,6 +14,10 @@ import {
   LogIn,
   Shield,
   CalendarIcon,
+  UserCheck,
+  CheckSquare,
+  Inbox,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,21 +43,39 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import PaginationControls from '@/components/ui/pagination-controls';
-import { getPaginationRange, paginateArray } from '@/lib/pagination';
+import { getPaginationRange } from '@/lib/pagination';
+import { useActivityLogs } from '@/hooks/queries/use-activity-logs';
+import type { ActivityLogCategory } from '@/lib/api-client';
 
-interface ActivityLog {
-  id: string;
-  user: string;
-  role: 'owner' | 'admin' | 'employee';
-  action: string;
-  category: 'auth' | 'client' | 'job' | 'invoice' | 'payment' | 'settings' | 'role';
-  timestamp: string;
+const ITEMS_PER_PAGE = 20;
+const SEARCH_DEBOUNCE_MS = 400;
+
+// The backend marks timestamp with Z but it's already in business local time — parse without conversion.
+function parseLocalTimestamp(ts: string): Date {
+  return new Date(ts.endsWith('Z') ? ts.slice(0, -1) : ts);
 }
 
-const ITEMS_PER_PAGE = 10;
+function parseUserAgent(ua?: string): string {
+  if (!ua) return '—';
+  let browser = 'Unknown browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\/|Opera\//.test(ua)) browser = 'Opera';
+  else if (/Chrome\//.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+
+  let os = 'Unknown OS';
+  if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+  else if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Macintosh|Mac OS X/.test(ua)) os = 'macOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+
+  return `${browser} · ${os}`;
+}
 
 const categoryConfig: Record<
-  ActivityLog['category'],
+  ActivityLogCategory,
   { icon: typeof Activity; color: string; label: string }
 > = {
   auth: {
@@ -91,226 +113,65 @@ const categoryConfig: Record<
     color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20',
     label: 'Role',
   },
+  employee: {
+    icon: UserCheck,
+    color: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20',
+    label: 'Employee',
+  },
+  task: {
+    icon: CheckSquare,
+    color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+    label: 'Task',
+  },
+  request: {
+    icon: Inbox,
+    color: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20',
+    label: 'Request',
+  },
+  website: {
+    icon: Globe,
+    color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+    label: 'Website',
+  },
 };
-
-const roleColor = (role: ActivityLog['role']) => {
-  switch (role) {
-    case 'owner':
-      return 'bg-primary/10 text-primary border-primary/20';
-    case 'admin':
-      return 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20';
-    case 'employee':
-      return 'bg-muted text-muted-foreground border-border';
-  }
-};
-
-const mockLogs: ActivityLog[] = [
-  {
-    id: 'log1',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Logged into the system',
-    category: 'auth',
-    timestamp: '2024-04-22T14:30:00',
-  },
-  {
-    id: 'log2',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Updated business profile in Settings',
-    category: 'settings',
-    timestamp: '2024-04-22T14:25:00',
-  },
-  {
-    id: 'log3',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: "Created new client 'Benjamin Lee'",
-    category: 'client',
-    timestamp: '2024-04-22T13:45:00',
-  },
-  {
-    id: 'log4',
-    user: 'Mike Johnson',
-    role: 'employee',
-    action: "Started job 'Cloud Migration' for Olivia Davis",
-    category: 'job',
-    timestamp: '2024-04-22T12:00:00',
-  },
-  {
-    id: 'log5',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Recorded payment of $3,500 from Sarah Johnson',
-    category: 'payment',
-    timestamp: '2024-04-22T11:30:00',
-  },
-  {
-    id: 'log6',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: 'Sent invoice INV-007 to Olivia Davis',
-    category: 'invoice',
-    timestamp: '2024-04-22T10:15:00',
-  },
-  {
-    id: 'log7',
-    user: 'Mike Johnson',
-    role: 'employee',
-    action: "Completed job 'Website Redesign' for Sarah Johnson",
-    category: 'job',
-    timestamp: '2024-04-21T16:45:00',
-  },
-  {
-    id: 'log8',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: "Assigned 'Admin' role to Jane Smith",
-    category: 'role',
-    timestamp: '2024-04-21T15:30:00',
-  },
-  {
-    id: 'log9',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: "Updated client Emma Williams' contact info",
-    category: 'client',
-    timestamp: '2024-04-21T14:00:00',
-  },
-  {
-    id: 'log10',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Received payment of $4,100 from Emma Williams',
-    category: 'payment',
-    timestamp: '2024-04-21T12:30:00',
-  },
-  {
-    id: 'log11',
-    user: 'Mike Johnson',
-    role: 'employee',
-    action: "Created new job 'SEO Optimization' for Sarah Johnson",
-    category: 'job',
-    timestamp: '2024-04-21T10:00:00',
-  },
-  {
-    id: 'log12',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: 'Generated invoice INV-010 for Sophia Martinez',
-    category: 'invoice',
-    timestamp: '2024-04-20T16:00:00',
-  },
-  {
-    id: 'log13',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Updated notification preferences',
-    category: 'settings',
-    timestamp: '2024-04-20T14:30:00',
-  },
-  {
-    id: 'log14',
-    user: 'Mike Johnson',
-    role: 'employee',
-    action: 'Logged into the system',
-    category: 'auth',
-    timestamp: '2024-04-20T09:00:00',
-  },
-  {
-    id: 'log15',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: 'Deleted client William Garcia',
-    category: 'client',
-    timestamp: '2024-04-19T17:00:00',
-  },
-  {
-    id: 'log16',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Marked payment from Michael Chen as partial',
-    category: 'payment',
-    timestamp: '2024-04-19T15:00:00',
-  },
-  {
-    id: 'log17',
-    user: 'Mike Johnson',
-    role: 'employee',
-    action: "Started job 'Mobile App Development' for Michael Chen",
-    category: 'job',
-    timestamp: '2024-04-19T11:30:00',
-  },
-  {
-    id: 'log18',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: 'Changed account password',
-    category: 'settings',
-    timestamp: '2024-04-18T16:00:00',
-  },
-  {
-    id: 'log19',
-    user: 'Jane Smith',
-    role: 'admin',
-    action: "Created new client 'James Brown'",
-    category: 'client',
-    timestamp: '2024-04-18T10:45:00',
-  },
-  {
-    id: 'log20',
-    user: 'John Doe (Owner)',
-    role: 'owner',
-    action: "Removed 'Employee' role from Alex Turner",
-    category: 'role',
-    timestamp: '2024-04-17T14:00:00',
-  },
-];
 
 const ActivityLogs = () => {
-  const [loading, setLoading] = useState(true);
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState<ActivityLogCategory | 'all'>('all');
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLogs(mockLogs);
-      setLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return logs.filter((log) => {
-      const matchSearch =
-        log.user.toLowerCase().includes(q) || log.action.toLowerCase().includes(q);
-      const matchCategory = categoryFilter === 'all' || log.category === categoryFilter;
-      const matchRole = roleFilter === 'all' || log.role === roleFilter;
-      const matchDate = !dateFilter || log.timestamp.startsWith(format(dateFilter, 'yyyy-MM-dd'));
-      return matchSearch && matchCategory && matchRole && matchDate;
-    });
-  }, [logs, search, categoryFilter, roleFilter, dateFilter]);
+  const query = useMemo(() => {
+    const dateStr = dateFilter ? format(dateFilter, 'yyyy-MM-dd') : undefined;
+    return {
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      ...(categoryFilter !== 'all' ? { category: categoryFilter } : {}),
+      ...(dateStr ? { dateFrom: dateStr, dateTo: dateStr } : {}),
+      page,
+      limit: ITEMS_PER_PAGE,
+    };
+  }, [debouncedSearch, categoryFilter, dateFilter, page]);
 
-  const pagination = useMemo(
-    () => paginateArray(filtered, page, ITEMS_PER_PAGE),
-    [filtered, page]
-  );
-  const { data: paginated, meta: paginationMeta } = pagination;
-  const paginationRange = useMemo(
-    () => getPaginationRange(paginationMeta),
-    [paginationMeta]
-  );
+  const { data, isLoading, isError } = useActivityLogs(query);
 
-  useEffect(() => {
-    if (page !== paginationMeta.page) {
-      setPage(paginationMeta.page);
-    }
-  }, [page, paginationMeta.page]);
+  const logs = data?.data ?? [];
+  const meta = data?.meta;
+  const paginationRange = meta ? getPaginationRange(meta) : { from: 0, to: 0 };
+
+  const resetPage = () => setPage(1);
 
   return (
     <div className='space-y-6'>
@@ -329,21 +190,18 @@ const ActivityLogs = () => {
           <Input
             placeholder='Search logs...'
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             className='pl-9'
           />
         </div>
         <Select
           value={categoryFilter}
           onValueChange={(v) => {
-            setCategoryFilter(v);
-            setPage(1);
+            setCategoryFilter(v as ActivityLogCategory | 'all');
+            resetPage();
           }}
         >
-          <SelectTrigger className='w-full sm:w-[150px]'>
+          <SelectTrigger className='w-full sm:w-[160px]'>
             <SelectValue placeholder='All Categories' />
           </SelectTrigger>
           <SelectContent>
@@ -355,23 +213,10 @@ const ActivityLogs = () => {
             <SelectItem value='payment'>Payment</SelectItem>
             <SelectItem value='settings'>Settings</SelectItem>
             <SelectItem value='role'>Role</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={roleFilter}
-          onValueChange={(v) => {
-            setRoleFilter(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className='w-full sm:w-[140px]'>
-            <SelectValue placeholder='All Roles' />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value='all'>All Roles</SelectItem>
-            <SelectItem value='owner'>Owner</SelectItem>
-            <SelectItem value='admin'>Admin</SelectItem>
             <SelectItem value='employee'>Employee</SelectItem>
+            <SelectItem value='task'>Task</SelectItem>
+            <SelectItem value='request'>Request</SelectItem>
+            <SelectItem value='website'>Website</SelectItem>
           </SelectContent>
         </Select>
         <Popover>
@@ -393,7 +238,7 @@ const ActivityLogs = () => {
               selected={dateFilter}
               onSelect={(d) => {
                 setDateFilter(d);
-                setPage(1);
+                resetPage();
               }}
               initialFocus
               className={cn('p-3 pointer-events-auto')}
@@ -407,7 +252,7 @@ const ActivityLogs = () => {
             className='self-start'
             onClick={() => {
               setDateFilter(undefined);
-              setPage(1);
+              resetPage();
             }}
           >
             Clear date
@@ -419,17 +264,26 @@ const ActivityLogs = () => {
       <Card>
         <CardHeader className='pb-3'>
           <CardTitle className='text-base'>
-            {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'} found
+            {meta != null
+              ? `${meta.total} ${meta.total === 1 ? 'entry' : 'entries'} found`
+              : 'Activity logs'}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className='space-y-3'>
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className='h-12 w-full' />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : isError ? (
+            <div className='py-12 text-center'>
+              <Activity className='mx-auto mb-3 h-10 w-10 text-muted-foreground dark:text-muted-foreground/60' />
+              <p className='text-sm text-muted-foreground'>
+                Failed to load activity logs. Please try again.
+              </p>
+            </div>
+          ) : logs.length === 0 ? (
             <div className='py-12 text-center'>
               <Activity className='mx-auto mb-3 h-10 w-10 text-muted-foreground dark:text-muted-foreground/60' />
               <p className='text-sm text-muted-foreground'>No activity logs found.</p>
@@ -437,12 +291,12 @@ const ActivityLogs = () => {
           ) : (
             <>
               <div className='space-y-3 md:hidden'>
-                {paginated.map((log, i) => {
+                {logs.map((log, i) => {
                   const config = categoryConfig[log.category];
                   const Icon = config.icon;
                   return (
                     <motion.div
-                      key={log.id}
+                      key={log._id}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
@@ -450,13 +304,14 @@ const ActivityLogs = () => {
                     >
                       <div className='flex items-start justify-between gap-2'>
                         <div className='min-w-0'>
-                          <p className='truncate text-sm font-medium'>{log.user}</p>
+                          <p className='truncate text-sm font-medium'>{log.actorName}</p>
+                          <p className='mt-0.5 text-xs text-muted-foreground'>{log.actorRole}</p>
                           <p className='mt-1 text-xs text-muted-foreground'>
-                            {format(new Date(log.timestamp), "MMM dd, yyyy 'at' hh:mm a")}
+                            {format(parseLocalTimestamp(log.timestamp), "MMM dd, yyyy 'at' hh:mm a")}
                           </p>
                         </div>
-                        <Badge variant='outline' className={roleColor(log.role)}>
-                          {log.role.charAt(0).toUpperCase() + log.role.slice(1)}
+                        <Badge variant='outline' className={config.color}>
+                          {config.label}
                         </Badge>
                       </div>
                       <div className='mt-3 flex items-start gap-2'>
@@ -465,10 +320,16 @@ const ActivityLogs = () => {
                         </div>
                         <p className='text-sm leading-snug'>{log.action}</p>
                       </div>
-                      <div className='mt-3'>
-                        <Badge variant='outline' className={config.color}>
-                          {config.label}
-                        </Badge>
+                      <div className='mt-2 space-y-0.5'>
+                        {(log.city ?? log.country) && (
+                          <p className='text-xs text-muted-foreground'>
+                            {[log.city, log.country].filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                        {log.ipAddress && (
+                          <p className='font-mono text-xs text-muted-foreground'>{log.ipAddress}</p>
+                        )}
+                        <p className='text-xs text-muted-foreground'>{parseUserAgent(log.userAgent)}</p>
                       </div>
                     </motion.div>
                   );
@@ -483,23 +344,25 @@ const ActivityLogs = () => {
                       <TableHead>Action</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Origin</TableHead>
+                      <TableHead>Device</TableHead>
                       <TableHead>Date & Time</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginated.map((log, i) => {
+                    {logs.map((log, i) => {
                       const config = categoryConfig[log.category];
                       const Icon = config.icon;
                       return (
                         <motion.tr
-                          key={log.id}
+                          key={log._id}
                           initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.03 }}
                           className='border-b transition-colors hover:bg-muted/50'
                         >
                           <TableCell className='font-medium whitespace-nowrap'>
-                            {log.user}
+                            {log.actorName}
                           </TableCell>
                           <TableCell className='max-w-[300px]'>
                             <div className='flex items-center gap-2'>
@@ -517,13 +380,22 @@ const ActivityLogs = () => {
                               {config.label}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant='outline' className={roleColor(log.role)}>
-                              {log.role.charAt(0).toUpperCase() + log.role.slice(1)}
-                            </Badge>
+                          <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                            {log.actorRole}
+                          </TableCell>
+                          <TableCell className='text-sm text-muted-foreground'>
+                            <div className='space-y-0.5'>
+                              <p>{[log.city, log.country].filter(Boolean).join(', ') || '—'}</p>
+                              {log.ipAddress && (
+                                <p className='font-mono text-xs'>{log.ipAddress}</p>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
-                            {format(new Date(log.timestamp), "MMM dd, yyyy 'at' hh:mm a")}
+                            {parseUserAgent(log.userAgent)}
+                          </TableCell>
+                          <TableCell className='whitespace-nowrap text-sm text-muted-foreground'>
+                            {format(parseLocalTimestamp(log.timestamp), "MMM dd, yyyy 'at' hh:mm a")}
                           </TableCell>
                         </motion.tr>
                       );
@@ -532,17 +404,18 @@ const ActivityLogs = () => {
                 </Table>
               </div>
 
-              {/* Pagination */}
-              <PaginationControls
-                meta={paginationMeta}
-                onPageChange={setPage}
-                hideWhenSinglePage={false}
-                className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'
-                labelClassName='text-xs text-muted-foreground'
-                label={`Showing ${paginationRange.from}–${paginationRange.to} of ${paginationMeta.total}`}
-                controlsClassName='flex gap-1 self-end sm:self-auto'
-                buttonClassName='h-8 w-8'
-              />
+              {meta && (
+                <PaginationControls
+                  meta={meta}
+                  onPageChange={setPage}
+                  hideWhenSinglePage={false}
+                  className='mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'
+                  labelClassName='text-xs text-muted-foreground'
+                  label={`Showing ${paginationRange.from}–${paginationRange.to} of ${meta.total}`}
+                  controlsClassName='flex gap-1 self-end sm:self-auto'
+                  buttonClassName='h-8 w-8'
+                />
+              )}
             </>
           )}
         </CardContent>

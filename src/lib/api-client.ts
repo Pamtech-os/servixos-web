@@ -16,6 +16,7 @@ interface ApiEnvelope<T> {
   statusCode: number;
   message: string;
   data: T;
+  meta?: PaginationMeta;
 }
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -103,6 +104,48 @@ export interface PaginationQuery {
 export interface PaginatedListResponse<T> {
   items: T[];
   meta: PaginationMeta;
+}
+
+// ─── Activity Logs types ──────────────────────────────────────────────────────
+
+export type ActivityLogCategory =
+  | 'auth'
+  | 'client'
+  | 'job'
+  | 'invoice'
+  | 'payment'
+  | 'settings'
+  | 'role'
+  | 'employee'
+  | 'task'
+  | 'request'
+  | 'website';
+
+export interface ActivityLog {
+  _id: string;
+  businessId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  category: ActivityLogCategory;
+  resourceId?: string;
+  resourceType?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  city?: string;
+  country?: string;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface ActivityLogsQuery {
+  search?: string;
+  category?: ActivityLogCategory;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface BusinessCategory {
@@ -356,6 +399,33 @@ async function protectedCall<T>(
   }
 }
 
+async function protectedGet<T>(
+  path: string,
+  businessId: string,
+): Promise<ApiEnvelope<T>> {
+  const token = await resolveToken();
+
+  const makeRequest = (t: string) =>
+    requestEnvelope<T>({
+      method: 'GET',
+      path,
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'x-business-id': businessId,
+      },
+    });
+
+  try {
+    return await makeRequest(token);
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 401) {
+      const refreshed = await silentRefresh();
+      return makeRequest(refreshed);
+    }
+    throw err;
+  }
+}
+
 // ─── Onboarding API ───────────────────────────────────────────────────────────
 
 export const onboarding = {
@@ -429,4 +499,26 @@ export const website = {
 
 export const categories = {
   list: () => publicGet<BusinessCategory[]>('/business-categories'),
+};
+
+// ─── Activity Logs API ────────────────────────────────────────────────────────
+
+export const activityLogs = {
+  list: async (
+    businessId: string,
+    query: ActivityLogsQuery = {},
+  ): Promise<{ data: ActivityLog[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.search) params.set('search', query.search);
+    if (query.category) params.set('category', query.category);
+    if (query.dateFrom) params.set('dateFrom', query.dateFrom);
+    if (query.dateTo) params.set('dateTo', query.dateTo);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/activity-logs${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<ActivityLog[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
 };
