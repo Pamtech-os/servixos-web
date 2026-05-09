@@ -1,9 +1,11 @@
 type TokenRefreshListener = (accessToken: string) => void;
+type SessionExpiredListener = () => void;
 
 const REFRESH_KEY = 'servixos_rt';
 
 let _accessToken: string | null = null;
-const _listeners: TokenRefreshListener[] = [];
+const _refreshListeners: TokenRefreshListener[] = [];
+const _expiredListeners: SessionExpiredListener[] = [];
 
 export const tokenStore = {
   getAccessToken(): string | null {
@@ -12,7 +14,7 @@ export const tokenStore = {
 
   setAccessToken(token: string): void {
     _accessToken = token;
-    _listeners.forEach((fn) => fn(token));
+    _refreshListeners.forEach((fn) => fn(token));
   },
 
   getRefreshToken(): string | null {
@@ -30,10 +32,22 @@ export const tokenStore = {
   },
 
   onAccessTokenRefreshed(fn: TokenRefreshListener): () => void {
-    _listeners.push(fn);
+    _refreshListeners.push(fn);
     return () => {
-      const i = _listeners.indexOf(fn);
-      if (i !== -1) _listeners.splice(i, 1);
+      const i = _refreshListeners.indexOf(fn);
+      if (i !== -1) _refreshListeners.splice(i, 1);
+    };
+  },
+
+  notifyExpired(): void {
+    _expiredListeners.forEach((fn) => fn());
+  },
+
+  onSessionExpired(fn: SessionExpiredListener): () => void {
+    _expiredListeners.push(fn);
+    return () => {
+      const i = _expiredListeners.indexOf(fn);
+      if (i !== -1) _expiredListeners.splice(i, 1);
     };
   },
 };

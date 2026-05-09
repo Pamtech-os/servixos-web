@@ -25,7 +25,7 @@ const PinEntry = () => {
   const [error, setError] = useState('');
   const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
-  const { auth, completeVerification, isHydrated } = useAuth();
+  const { auth, completeVerification, logout, isHydrated } = useAuth();
   const verifyPinMutation = useVerifyPin();
   const [shuffledNumbers] = useState(() => shuffleArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]));
 
@@ -242,6 +242,17 @@ const PinEntry = () => {
               />
             </div>
           )}
+
+          <div className='mt-6 flex justify-center'>
+            <button
+              type='button'
+              onClick={logout}
+              disabled={loading}
+              className='text-sm text-muted-foreground transition-colors hover:text-destructive disabled:pointer-events-none disabled:opacity-40'
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

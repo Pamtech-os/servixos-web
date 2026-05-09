@@ -68,22 +68,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (!persisted?.isLoggedIn) return;
 
-      let accessToken = persisted.accessToken ?? null;
+      const accessToken = persisted.accessToken ?? null;
 
-      // Access token missing or expired — try a silent refresh.
-      if (!accessToken || isTokenExpired(accessToken)) {
-        const refreshToken = tokenStore.getRefreshToken();
-        if (!refreshToken) {
-          sessionStorage.removeItem(AUTH_STORAGE_KEY);
-          return;
-        }
-        try {
-          accessToken = await authApi.refresh(refreshToken);
-        } catch {
-          sessionStorage.removeItem(AUTH_STORAGE_KEY);
-          tokenStore.clear();
-          return;
-        }
+      if (!accessToken) {
+        sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        return;
+      }
+
+      // Token expired — keep the session alive but require PIN re-verification.
+      // The expired token is preserved so the /pin page can still send it.
+      if (isTokenExpired(accessToken)) {
+        setAuth({
+          isLoggedIn: true,
+          isPinVerified: false,
+          userEmail: persisted.userEmail ?? '',
+          accessToken,
+          user: persisted.user ?? null,
+        });
+        return;
       }
 
       tokenStore.setAccessToken(accessToken);
@@ -98,15 +100,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     void hydrate().finally(() => setIsHydrated(true));
 
-    const unsubscribe = tokenStore.onAccessTokenRefreshed((token) => {
-      setAuth((prev) => ({
-        ...prev,
-        accessToken: token,
-        isPinVerified: decodeJwt(token).pinVerified,
-      }));
+    const unsubRefresh = tokenStore.onAccessTokenRefreshed((token) => {
+      setAuth((prev) => ({ ...prev, accessToken: token }));
     });
 
-    return unsubscribe;
+    const unsubExpired = tokenStore.onSessionExpired(() => {
+      setAuth((prev) => ({ ...prev, isPinVerified: false }));
+    });
+
+    return () => {
+      unsubRefresh();
+      unsubExpired();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
