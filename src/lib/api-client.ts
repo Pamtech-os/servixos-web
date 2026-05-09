@@ -17,6 +17,7 @@ interface ApiEnvelope<T> {
   message: string;
   data: T;
   meta?: PaginationMeta;
+  statistics?: Record<string, number>;
 }
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -104,6 +105,31 @@ export interface PaginationQuery {
 export interface PaginatedListResponse<T> {
   items: T[];
   meta: PaginationMeta;
+}
+
+// ─── Roles & Permissions types ────────────────────────────────────────────────
+
+export type Permission = string;
+
+export interface Role {
+  _id: string;
+  businessId: string;
+  name: string;
+  permissions: Permission[];
+  isSystem: boolean;
+  isOwnerRole: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRoleInput {
+  name: string;
+  permissions: Permission[];
+}
+
+export interface UpdateRoleInput {
+  name?: string;
+  permissions?: Permission[];
 }
 
 // ─── Activity Logs types ──────────────────────────────────────────────────────
@@ -336,36 +362,37 @@ async function publicCall<T>(path: string, body: unknown): Promise<T> {
   return envelope.data;
 }
 
-// ─── Silent token refresh (deduplicates concurrent calls) ─────────────────────
+// ─── Silent token refresh (temporarily disabled) ──────────────────────────────
 
-let _refreshPromise: Promise<string> | null = null;
+// let _refreshPromise: Promise<string> | null = null;
 
-async function silentRefresh(): Promise<string> {
-  if (_refreshPromise) return _refreshPromise;
-
-  _refreshPromise = (async () => {
-    const refreshToken = tokenStore.getRefreshToken();
-    if (!refreshToken) throw new Error('Session expired. Please log in again.');
-
-    const envelope = await requestEnvelope<{ accessToken: string }>({
-      method: 'POST',
-      path: '/auth/refresh',
-      body: { refreshToken },
-    });
-    const newToken = envelope.data.accessToken;
-    tokenStore.setAccessToken(newToken);
-    return newToken;
-  })().finally(() => {
-    _refreshPromise = null;
-  });
-
-  return _refreshPromise;
-}
+// async function silentRefresh(): Promise<string> {
+//   if (_refreshPromise) return _refreshPromise;
+//
+//   _refreshPromise = (async () => {
+//     const refreshToken = tokenStore.getRefreshToken();
+//     if (!refreshToken) throw new Error('Session expired. Please log in again.');
+//
+//     const envelope = await requestEnvelope<{ accessToken: string }>({
+//       method: 'POST',
+//       path: '/auth/refresh',
+//       body: { refreshToken },
+//     });
+//     const newToken = envelope.data.accessToken;
+//     tokenStore.setAccessToken(newToken);
+//     return newToken;
+//   })().finally(() => {
+//     _refreshPromise = null;
+//   });
+//
+//   return _refreshPromise;
+// }
 
 async function resolveToken(): Promise<string> {
   const current = tokenStore.getAccessToken();
   if (current && !isTokenExpired(current)) return current;
-  return silentRefresh();
+  tokenStore.notifyExpired();
+  throw new Error('Session expired. Please re-verify your PIN.');
 }
 
 async function protectedCall<T>(
@@ -386,17 +413,31 @@ async function protectedCall<T>(
       },
     });
 
-  try {
-    const envelope = await makeRequest(token);
-    return envelope.data;
-  } catch (err) {
-    if (err instanceof HttpError && err.status === 401) {
-      const refreshed = await silentRefresh();
-      const envelope = await makeRequest(refreshed);
-      return envelope.data;
-    }
-    throw err;
-  }
+  const envelope = await makeRequest(token);
+  return envelope.data;
+}
+
+async function protectedRequest<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  businessId: string,
+  body?: unknown,
+): Promise<T> {
+  const token = await resolveToken();
+
+  const makeRequest = (t: string) =>
+    requestEnvelope<T>({
+      method,
+      path,
+      body,
+      headers: {
+        Authorization: `Bearer ${t}`,
+        'x-business-id': businessId,
+      },
+    });
+
+  const envelope = await makeRequest(token);
+  return envelope.data;
 }
 
 async function protectedGet<T>(
@@ -415,15 +456,7 @@ async function protectedGet<T>(
       },
     });
 
-  try {
-    return await makeRequest(token);
-  } catch (err) {
-    if (err instanceof HttpError && err.status === 401) {
-      const refreshed = await silentRefresh();
-      return makeRequest(refreshed);
-    }
-    throw err;
-  }
+  return makeRequest(token);
 }
 
 // ─── Onboarding API ───────────────────────────────────────────────────────────
@@ -499,6 +532,160 @@ export const website = {
 
 export const categories = {
   list: () => publicGet<BusinessCategory[]>('/business-categories'),
+};
+
+// ─── Permissions API ─────────────────────────────────────────────────────────
+
+export const permissions = {
+  list: async (businessId: string): Promise<Permission[]> => {
+    const envelope = await protectedGet<Permission[]>('/permissions', businessId);
+    return envelope.data;
+  },
+};
+
+// ─── Roles API ────────────────────────────────────────────────────────────────
+
+export const roles = {
+  list: async (businessId: string): Promise<Role[]> => {
+    const envelope = await protectedGet<Role[]>('/roles', businessId);
+    return envelope.data;
+  },
+
+  get: async (businessId: string, id: string): Promise<Role> => {
+    const envelope = await protectedGet<Role>(`/roles/${id}`, businessId);
+    return envelope.data;
+  },
+
+  create: (businessId: string, input: CreateRoleInput): Promise<Role> =>
+    protectedRequest<Role>('POST', '/roles', businessId, input),
+
+  update: (businessId: string, id: string, input: UpdateRoleInput): Promise<Role> =>
+    protectedRequest<Role>('PATCH', `/roles/${id}`, businessId, input),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/roles/${id}`, businessId),
+};
+
+// ─── Service Requests types ───────────────────────────────────────────────────
+
+export type RequestStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled';
+
+export interface AiPriceEstimate {
+  suggestedPrice: number;
+  lowPrice: number;
+  highPrice: number;
+  confidence: 'low' | 'medium' | 'high';
+  currency: string;
+  reasoning: string;
+}
+
+export interface ServiceRequest {
+  _id: string;
+  businessId: string;
+  clientId?: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string;
+  service: string;
+  requestedDate: string;
+  requestedEndDate?: string;
+  message?: string;
+  status: RequestStatus;
+  quotedPrice?: number;
+  startDate?: string;
+  endDate?: string;
+  actionedAt?: string;
+  actionedBy?: string;
+  conversationId?: string;
+  aiPriceEstimate?: AiPriceEstimate;
+  hasAiPriceEstimate: boolean;
+  aiPriceEstimatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RequestStatistics {
+  total: number;
+  pending: number;
+  accepted: number;
+  rejected: number;
+  cancelled: number;
+}
+
+export interface ServiceRequestsQuery {
+  status?: RequestStatus;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface RequestConversation {
+  _id: string;
+  businessId: string;
+  clientId: string;
+  lastMessageContent: string;
+  lastMessageAt: string | null;
+  businessUnreadCount: number;
+  clientUnreadCount: number;
+}
+
+export interface UpdateRequestInput {
+  status?: 'accepted' | 'rejected' | 'cancelled';
+  quotedPrice?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+// ─── Service Requests API ────────────────────────────────────────────────────
+
+export const serviceRequests = {
+  list: async (
+    businessId: string,
+    query: ServiceRequestsQuery = {},
+  ): Promise<{ data: ServiceRequest[]; meta: PaginationMeta; statistics: RequestStatistics }> => {
+    const params = new URLSearchParams();
+    if (query.status) params.set('status', query.status);
+    if (query.search) params.set('search', query.search);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/requests${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<ServiceRequest[]>(path, businessId);
+    const stats = envelope.statistics as RequestStatistics | undefined;
+    return {
+      data: envelope.data,
+      meta: envelope.meta!,
+      statistics: stats ?? { total: 0, pending: 0, accepted: 0, rejected: 0, cancelled: 0 },
+    };
+  },
+
+  get: async (businessId: string, id: string): Promise<ServiceRequest> => {
+    const envelope = await protectedGet<ServiceRequest>(`/requests/${id}`, businessId);
+    return envelope.data;
+  },
+
+  getConversation: async (businessId: string, id: string): Promise<RequestConversation> => {
+    const envelope = await protectedGet<RequestConversation>(
+      `/requests/${id}/conversation`,
+      businessId,
+    );
+    return envelope.data;
+  },
+
+  getPriceEstimate: async (businessId: string, id: string): Promise<AiPriceEstimate> => {
+    const envelope = await protectedGet<AiPriceEstimate>(
+      `/requests/${id}/price-estimate`,
+      businessId,
+    );
+    return envelope.data;
+  },
+
+  update: (businessId: string, id: string, input: UpdateRequestInput): Promise<ServiceRequest> =>
+    protectedRequest<ServiceRequest>('PATCH', `/requests/${id}`, businessId, input),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/requests/${id}`, businessId),
 };
 
 // ─── Activity Logs API ────────────────────────────────────────────────────────
