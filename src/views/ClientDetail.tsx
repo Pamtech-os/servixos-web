@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -8,28 +8,27 @@ import {
   Download,
   Mail,
   Phone,
-  MapPin,
-  DollarSign,
   FileText,
-  FolderOpen,
+  Briefcase,
   ScrollText,
   Send,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import ChatUI, { type ChatMessage } from '@/components/ChatUI';
-import {
-  mockClients,
-  mockInvoices,
-  mockJobs,
-  mockFiles,
-  mockContracts,
-  mockMessages,
-} from '@/lib/mock-data';
+import { useClient } from '@/hooks/queries/use-clients';
+import { useJobs } from '@/hooks/queries/use-jobs';
+import { useExportClient } from '@/hooks/mutations/use-clients';
+import { mockInvoices, mockFiles, mockContracts, mockMessages } from '@/lib/mock-data';
 import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import ChatUI, { type ChatMessage } from '@/components/ChatUI';
+import { format } from 'date-fns';
+import type { JobStatus } from '@/lib/api-client';
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-500/10 text-green-600 dark:text-green-400',
@@ -37,77 +36,79 @@ const statusColors: Record<string, string> = {
   partial: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
   in_progress: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
   completed: 'bg-green-500/10 text-green-600 dark:text-green-400',
+  cancelled: 'bg-red-500/10 text-red-600 dark:text-red-400',
   signed: 'bg-green-500/10 text-green-600 dark:text-green-400',
 };
+
+const jobStatusLabel = (s: JobStatus) => {
+  switch (s) {
+    case 'pending': return 'Pending';
+    case 'in_progress': return 'In Progress';
+    case 'completed': return 'Completed';
+    case 'cancelled': return 'Cancelled';
+  }
+};
+
+const formatStatus = (s: string) =>
+  s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const ClientDetail = () => {
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === 'string' ? params.id : '';
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+  const { data: client, isLoading: clientLoading } = useClient(id);
+  const { data: jobsData, isLoading: jobsLoading } = useJobs({ clientId: id, limit: 50 });
+  const exportClient = useExportClient();
 
-  const client = mockClients.find((c) => c.id === id);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const jobList = jobsData?.data ?? [];
 
-  useEffect(() => {
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
     const clientMessages = mockMessages.filter((m) => m.clientId === id);
-    const businessName = 'Servix Team';
-    const convertedMessages: ChatMessage[] = [...clientMessages].reverse().map((msg) => {
+    return [...clientMessages].reverse().map((msg) => {
       const isBusinessSender = /servix|team|business|support/i.test(msg.sender);
       return {
         id: `chat-${msg.id}`,
-        sender: isBusinessSender ? 'business' : 'client',
+        sender: isBusinessSender ? 'business' : ('client' as const),
         senderName: msg.sender,
         content: msg.content,
         timestamp: msg.timeSent,
       };
     });
+  });
 
-    const hasClientMessage = convertedMessages.some((msg) => msg.sender === 'client');
-    if (!hasClientMessage && client) {
-      convertedMessages.unshift({
-        id: `chat-${id}-client-intro`,
-        sender: 'client',
-        senderName: client.fullName,
-        content: 'Hi Servix Team, I wanted to check in on the latest update for my project.',
-        timestamp: 'Yesterday',
-      });
-    }
-
-    if (convertedMessages.length === 0 && client) {
-      convertedMessages.push({
-        id: `chat-${id}-welcome`,
-        sender: 'business',
-        senderName: businessName,
-        content: `Hello ${client.fullName.split(' ')[0]}, this is the start of your conversation history with ${businessName}.`,
-        timestamp: 'Now',
-      });
-    }
-
-    setChatMessages(convertedMessages);
-  }, [client, id]);
+  const invoices = mockInvoices.filter((inv) => inv.clientId === id);
+  const files = mockFiles.filter((f) => f.clientId === id);
+  const contracts = mockContracts.filter((c) => c.clientId === id);
 
   const handleSendMessage = (content: string) => {
     const text = content.trim();
     if (!text) return;
-
-    const newMessage: ChatMessage = {
-      id: `chat-${Date.now()}`,
-      sender: 'business',
-      senderName: 'Servix Team',
-      content: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setChatMessages((prev) => [...prev, newMessage]);
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: `chat-${Date.now()}`,
+        sender: 'business',
+        senderName: 'Servix Team',
+        content: text,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
   };
 
-  if (!client && !loading) {
+  const handleExport = () => {
+    exportClient.mutate(id, {
+      onSuccess: ({ exportUrl }) => {
+        window.open(exportUrl, '_blank', 'noreferrer');
+        toast.success('Export ready', { description: 'Client data has been exported.' });
+      },
+      onError: (err) => {
+        toast.error('Export failed', { description: getApiErrorMessage(err) });
+      },
+    });
+  };
+
+  if (!client && !clientLoading) {
     return (
       <div className='flex flex-col items-center justify-center py-20'>
         <p className='text-muted-foreground'>Client not found.</p>
@@ -121,40 +122,22 @@ const ClientDetail = () => {
     );
   }
 
-  const invoices = mockInvoices.filter((inv) => inv.clientId === id);
-  const jobs = mockJobs.filter((j) => j.clientId === id);
-  const files = mockFiles.filter((f) => f.clientId === id);
-  const contracts = mockContracts.filter((c) => c.clientId === id);
-
-  const formatStatus = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-  const totalSpent = client?.totalSpent || 0;
-  const invoiceCount = invoices.length;
-  const fileCount = files.length;
-  const contractCount = contracts.length;
-
   const quickStats = [
     {
-      title: 'Total Spent',
-      value: `$${totalSpent.toLocaleString()}`,
-      icon: DollarSign,
-      iconGradient: 'linear-gradient(135deg, rgb(16 185 129), rgb(5 150 105))',
-    },
-    {
-      title: 'Invoices',
-      value: invoiceCount.toString(),
-      icon: FileText,
+      title: 'Jobs',
+      value: jobsLoading ? '...' : String(jobsData?.meta.total ?? jobList.length),
+      icon: Briefcase,
       iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
     },
     {
-      title: 'Files',
-      value: fileCount.toString(),
-      icon: FolderOpen,
-      iconGradient: 'linear-gradient(135deg, rgb(139 92 246), rgb(124 58 237))',
+      title: 'Invoices',
+      value: String(invoices.length),
+      icon: FileText,
+      iconGradient: 'linear-gradient(135deg, rgb(16 185 129), rgb(5 150 105))',
     },
     {
       title: 'Contracts',
-      value: contractCount.toString(),
+      value: String(contracts.length),
       icon: ScrollText,
       iconGradient: 'linear-gradient(135deg, rgb(245 158 11), rgb(217 119 6))',
     },
@@ -169,20 +152,36 @@ const ClientDetail = () => {
         >
           <ArrowLeft size={16} /> Back to Clients
         </button>
-        <Button
-          size='sm'
-          className='gap-1.5'
-          onClick={() => toast.info('Send invoice feature coming soon!')}
-        >
-          <Send size={14} /> Send Invoice
-        </Button>
+        <div className='flex items-center gap-2'>
+          <Button
+            size='sm'
+            variant='outline'
+            className='gap-1.5'
+            onClick={handleExport}
+            disabled={exportClient.isPending}
+          >
+            {exportClient.isPending ? (
+              <Loader2 size={14} className='animate-spin' />
+            ) : (
+              <ExternalLink size={14} />
+            )}{' '}
+            Export Data
+          </Button>
+          <Button
+            size='sm'
+            className='gap-1.5'
+            onClick={() => toast.info('Send invoice feature coming soon!')}
+          >
+            <Send size={14} /> Send Invoice
+          </Button>
+        </div>
       </div>
 
       {/* Client Info Header */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Card>
           <CardContent className='p-6'>
-            {loading ? (
+            {clientLoading ? (
               <div className='flex flex-col gap-4 sm:flex-row sm:items-center'>
                 <Skeleton className='h-16 w-16 rounded-full' />
                 <div className='space-y-2'>
@@ -195,23 +194,22 @@ const ClientDetail = () => {
               <div className='flex flex-col gap-4 sm:flex-row sm:items-center'>
                 <div className='flex items-center gap-4'>
                   <div className='gradient-bg flex h-16 w-16 items-center justify-center rounded-full text-lg font-bold text-primary-foreground'>
-                    {client!.fullName
+                    {client!.name
                       .split(' ')
                       .map((n) => n[0])
                       .join('')}
                   </div>
                   <div>
-                    <h1 className='font-display text-xl font-bold'>{client!.fullName}</h1>
+                    <h1 className='font-display text-xl font-bold'>{client!.name}</h1>
                     <div className='mt-1 flex flex-wrap gap-3 text-sm text-muted-foreground'>
                       <span className='flex items-center gap-1'>
                         <Mail size={14} /> {client!.email}
                       </span>
-                      <span className='flex items-center gap-1'>
-                        <Phone size={14} /> {client!.phone}
-                      </span>
-                      <span className='flex items-center gap-1'>
-                        <MapPin size={14} /> {client!.jobLocation}
-                      </span>
+                      {client!.phone && (
+                        <span className='flex items-center gap-1'>
+                          <Phone size={14} /> {client!.phone}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -222,7 +220,7 @@ const ClientDetail = () => {
       </motion.div>
 
       {/* Quick Stat Cards */}
-      <div className='grid grid-cols-2 gap-4 sm:grid-cols-4'>
+      <div className='grid grid-cols-3 gap-4'>
         {quickStats.map((stat, i) => (
           <motion.div
             key={stat.title}
@@ -230,7 +228,7 @@ const ClientDetail = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + i * 0.05 }}
           >
-            {loading ? (
+            {clientLoading ? (
               <Card>
                 <CardContent className='p-4'>
                   <Skeleton className='mb-2 h-4 w-16' />
@@ -261,14 +259,55 @@ const ClientDetail = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <Tabs defaultValue='invoices'>
+        <Tabs defaultValue='jobs'>
           <TabsList className='w-full flex-wrap justify-start'>
-            <TabsTrigger value='invoices'>Invoices</TabsTrigger>
             <TabsTrigger value='jobs'>Jobs</TabsTrigger>
+            <TabsTrigger value='invoices'>Invoices</TabsTrigger>
             <TabsTrigger value='files'>Files</TabsTrigger>
             <TabsTrigger value='contracts'>Contracts</TabsTrigger>
             <TabsTrigger value='messages'>Messages</TabsTrigger>
           </TabsList>
+
+          {/* Jobs */}
+          <TabsContent value='jobs'>
+            <Card>
+              <CardHeader>
+                <CardTitle className='text-base'>Jobs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {jobsLoading ? (
+                  <div className='space-y-3'>
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className='h-12 w-full' />
+                    ))}
+                  </div>
+                ) : jobList.length === 0 ? (
+                  <p className='py-4 text-center text-sm text-muted-foreground'>No jobs found.</p>
+                ) : (
+                  <div className='space-y-3'>
+                    {jobList.map((job) => (
+                      <div
+                        key={job._id}
+                        className='flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between'
+                      >
+                        <div>
+                          <p className='font-medium'>{job.title}</p>
+                          <p className='text-sm text-muted-foreground'>
+                            {format(new Date(job.scheduledDate), 'PP')}
+                          </p>
+                        </div>
+                        <span
+                          className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[job.status]}`}
+                        >
+                          {jobStatusLabel(job.status)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Invoices */}
           <TabsContent value='invoices'>
@@ -277,13 +316,7 @@ const ClientDetail = () => {
                 <CardTitle className='text-base'>Invoices</CardTitle>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className='space-y-3'>
-                    {[...Array(3)].map((_, i) => (
-                      <Skeleton key={i} className='h-12 w-full' />
-                    ))}
-                  </div>
-                ) : invoices.length === 0 ? (
+                {invoices.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>
                     No invoices found.
                   </p>
@@ -303,54 +336,11 @@ const ClientDetail = () => {
                             ${inv.price.toLocaleString()}
                           </span>
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              statusColors[inv.status]
-                            }`}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[inv.status]}`}
                           >
                             {formatStatus(inv.status)}
                           </span>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Jobs */}
-          <TabsContent value='jobs'>
-            <Card>
-              <CardHeader>
-                <CardTitle className='text-base'>Jobs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className='space-y-3'>
-                    {[...Array(3)].map((_, i) => (
-                      <Skeleton key={i} className='h-12 w-full' />
-                    ))}
-                  </div>
-                ) : jobs.length === 0 ? (
-                  <p className='py-4 text-center text-sm text-muted-foreground'>No jobs found.</p>
-                ) : (
-                  <div className='space-y-3'>
-                    {jobs.map((job) => (
-                      <div
-                        key={job.id}
-                        className='flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between'
-                      >
-                        <div>
-                          <p className='font-medium'>{job.title}</p>
-                          <p className='text-sm text-muted-foreground'>{job.date}</p>
-                        </div>
-                        <span
-                          className={`w-fit rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            statusColors[job.status]
-                          }`}
-                        >
-                          {formatStatus(job.status)}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -366,13 +356,7 @@ const ClientDetail = () => {
                 <CardTitle className='text-base'>Files</CardTitle>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className='space-y-3'>
-                    {[...Array(2)].map((_, i) => (
-                      <Skeleton key={i} className='h-12 w-full' />
-                    ))}
-                  </div>
-                ) : files.length === 0 ? (
+                {files.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>No files found.</p>
                 ) : (
                   <div className='space-y-3'>
@@ -412,13 +396,7 @@ const ClientDetail = () => {
                 <CardTitle className='text-base'>Contracts</CardTitle>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className='space-y-3'>
-                    {[...Array(2)].map((_, i) => (
-                      <Skeleton key={i} className='h-12 w-full' />
-                    ))}
-                  </div>
-                ) : contracts.length === 0 ? (
+                {contracts.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>
                     No contracts found.
                   </p>
@@ -438,9 +416,7 @@ const ClientDetail = () => {
                             ${contract.amount.toLocaleString()}
                           </span>
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                              statusColors[contract.status]
-                            }`}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[contract.status]}`}
                           >
                             {formatStatus(contract.status)}
                           </span>
@@ -457,22 +433,14 @@ const ClientDetail = () => {
           <TabsContent value='messages' className='mt-1'>
             <Card>
               <CardContent className='p-0'>
-                {loading ? (
-                  <div className='space-y-3 px-6 pb-6 pt-4'>
-                    {[...Array(2)].map((_, i) => (
-                      <Skeleton key={i} className='h-16 w-full' />
-                    ))}
-                  </div>
-                ) : (
-                  <div className='h-[400px] px-4 pb-4 pt-2 sm:h-[440px] sm:px-6 sm:pb-6 sm:pt-3'>
-                    <ChatUI
-                      messages={chatMessages}
-                      onSendMessage={handleSendMessage}
-                      clientName={client?.fullName ?? 'Client'}
-                      className='h-full border-border/70'
-                    />
-                  </div>
-                )}
+                <div className='h-[400px] px-4 pb-4 pt-2 sm:h-[440px] sm:px-6 sm:pb-6 sm:pt-3'>
+                  <ChatUI
+                    messages={chatMessages}
+                    onSendMessage={handleSendMessage}
+                    clientName={client?.name ?? 'Client'}
+                    className='h-full border-border/70'
+                  />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

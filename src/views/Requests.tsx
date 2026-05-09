@@ -14,7 +14,6 @@ import {
   Sparkles,
   DollarSign,
   Loader2,
-  Trash2,
   Ban,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +31,11 @@ import { toast } from '@/components/ui/sonner';
 import ConfirmModal from '@/components/ConfirmModal';
 import ChatUI, { type ChatMessage } from '@/components/ChatUI';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import { useServiceRequests, useRequestPriceEstimate, useRequestConversation } from '@/hooks/queries/use-requests';
+import {
+  useServiceRequests,
+  useRequestPriceEstimate,
+  useRequestConversation,
+} from '@/hooks/queries/use-requests';
 import { useUpdateRequest, useDeleteRequest } from '@/hooks/mutations/use-requests';
 import { buildPaginationMeta } from '@/lib/pagination';
 import type { ServiceRequest, RequestStatus } from '@/lib/api-client';
@@ -75,7 +78,7 @@ function RequestChatSheet({
 
   const { isLoading: isLoadingConversation } = useRequestConversation(
     request?._id ?? '',
-    open && !!request,
+    open && !!request
   );
 
   const handleSend = (content: string) => {
@@ -139,7 +142,9 @@ function AiPriceButton({
     if (result.data) {
       onEstimate(result.data.suggestedPrice);
       toast.success('AI Pricing Suggested', {
-        description: `Recommended price: ${result.data.currency} ${result.data.suggestedPrice.toLocaleString()} — ${result.data.confidence} confidence.`,
+        description: `Recommended price: ${
+          result.data.currency
+        } ${result.data.suggestedPrice.toLocaleString()} — ${result.data.confidence} confidence.`,
       });
     }
   };
@@ -152,11 +157,7 @@ function AiPriceButton({
       onClick={handleClick}
       disabled={isFetching || hasEstimate}
     >
-      {isFetching ? (
-        <Loader2 className='h-3 w-3 animate-spin' />
-      ) : (
-        <Sparkles size={12} />
-      )}
+      {isFetching ? <Loader2 className='h-3 w-3 animate-spin' /> : <Sparkles size={12} />}
       {isFetching ? 'Analyzing...' : hasEstimate ? 'Price Suggested' : 'AI Suggest Price'}
     </Button>
   );
@@ -192,7 +193,7 @@ const Requests = () => {
 
   const minEndDate = useMemo(
     () => (adjustedDate && adjustedDate > today ? adjustedDate : today),
-    [adjustedDate, today],
+    [adjustedDate, today]
   );
 
   useEffect(() => {
@@ -226,11 +227,7 @@ const Requests = () => {
     const rawEnd = req.requestedEndDate ? new Date(req.requestedEndDate) : undefined;
     const reqEndDate = rawEnd && isValid(rawEnd) ? rawEnd : undefined;
     if (reqEndDate) reqEndDate.setHours(0, 0, 0, 0);
-    const endDate = reqEndDate
-      ? reqEndDate < startDate
-        ? startDate
-        : reqEndDate
-      : undefined;
+    const endDate = reqEndDate ? (reqEndDate < startDate ? startDate : reqEndDate) : undefined;
 
     setSelectedRequest(req);
     setAdjustedDate(startDate);
@@ -299,7 +296,7 @@ const Requests = () => {
           toast.error(`Failed to update request`, { description: getApiErrorMessage(err) });
           setConfirmAction(null);
         },
-      },
+      }
     );
   };
 
@@ -473,7 +470,9 @@ const Requests = () => {
                               className='flex-1 gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 lg:flex-none'
                               onClick={() => {
                                 setSelectedRequest(req);
-                                setPricingValue(req.quotedPrice != null ? String(req.quotedPrice) : '');
+                                setPricingValue(
+                                  req.quotedPrice != null ? String(req.quotedPrice) : ''
+                                );
                                 setConfirmAction({ type: 'accept', request: req });
                               }}
                             >
@@ -561,7 +560,9 @@ const Requests = () => {
                         disabled={selectedRequest.status !== 'pending'}
                       >
                         <CalendarIcon size={12} />
-                        {adjustedDate && isValid(adjustedDate) ? format(adjustedDate, 'MMM d, yyyy') : 'Pick'}
+                        {adjustedDate && isValid(adjustedDate)
+                          ? format(adjustedDate, 'MMM d, yyyy')
+                          : 'Pick'}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className='w-auto p-0 backdrop-blur-xl' align='start'>
@@ -588,7 +589,9 @@ const Requests = () => {
                         disabled={selectedRequest.status !== 'pending'}
                       >
                         <CalendarIcon size={12} />
-                        {adjustedEndDate && isValid(adjustedEndDate) ? format(adjustedEndDate, 'MMM d, yyyy') : 'Pick'}
+                        {adjustedEndDate && isValid(adjustedEndDate)
+                          ? format(adjustedEndDate, 'MMM d, yyyy')
+                          : 'Pick'}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className='w-auto p-0 backdrop-blur-xl' align='start'>
@@ -649,7 +652,9 @@ const Requests = () => {
               {selectedRequest.message && (
                 <div>
                   <p className='text-xs font-medium text-muted-foreground mb-1'>Message</p>
-                  <div className='rounded-lg bg-muted/50 p-2.5 text-sm'>{selectedRequest.message}</div>
+                  <div className='rounded-lg bg-muted/50 p-2.5 text-sm'>
+                    {selectedRequest.message}
+                  </div>
                 </div>
               )}
 
@@ -670,43 +675,19 @@ const Requests = () => {
                   <>
                     <Button
                       className='w-full gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 sm:flex-1'
-                      onClick={() =>
-                        setConfirmAction({ type: 'accept', request: selectedRequest })
-                      }
+                      onClick={() => setConfirmAction({ type: 'accept', request: selectedRequest })}
                     >
                       <CheckCircle2 size={14} /> Accept
                     </Button>
                     <Button
                       variant='destructive'
                       className='w-full gap-1.5 sm:flex-1'
-                      onClick={() =>
-                        setConfirmAction({ type: 'reject', request: selectedRequest })
-                      }
+                      onClick={() => setConfirmAction({ type: 'reject', request: selectedRequest })}
                     >
                       <Ban size={14} /> Reject
                     </Button>
                   </>
                 )}
-                {(selectedRequest.status === 'pending' || selectedRequest.status === 'accepted') && (
-                  <Button
-                    variant='outline'
-                    className='w-full gap-1.5 text-muted-foreground sm:flex-1'
-                    onClick={() =>
-                      setConfirmAction({ type: 'cancel', request: selectedRequest })
-                    }
-                  >
-                    <XCircle size={14} /> Cancel
-                  </Button>
-                )}
-                <Button
-                  variant='outline'
-                  className='w-full gap-1.5 text-destructive hover:bg-destructive/10 sm:w-auto'
-                  onClick={() =>
-                    setConfirmAction({ type: 'delete', request: selectedRequest })
-                  }
-                >
-                  <Trash2 size={14} />
-                </Button>
               </div>
             </div>
           )}
@@ -714,11 +695,7 @@ const Requests = () => {
       </Dialog>
 
       {/* Chat sheet */}
-      <RequestChatSheet
-        request={chatRequest}
-        open={chatOpen}
-        onClose={() => setChatOpen(false)}
-      />
+      <RequestChatSheet request={chatRequest} open={chatOpen} onClose={() => setChatOpen(false)} />
 
       {/* Confirm modals */}
       <ConfirmModal
@@ -728,32 +705,30 @@ const Requests = () => {
           confirmAction?.type === 'accept'
             ? 'Accept this request?'
             : confirmAction?.type === 'reject'
-              ? 'Reject this request?'
-              : confirmAction?.type === 'cancel'
-                ? 'Cancel this request?'
-                : 'Delete this request?'
+            ? 'Reject this request?'
+            : confirmAction?.type === 'cancel'
+            ? 'Cancel this request?'
+            : 'Delete this request?'
         }
         description={
           confirmAction?.type === 'accept'
             ? 'This will confirm the booking. A client record and job will be created automatically.'
             : confirmAction?.type === 'reject'
-              ? 'The client will not be onboarded. This action cannot be undone.'
-              : confirmAction?.type === 'cancel'
-                ? 'This will cancel the request.'
-                : 'This will permanently remove the request.'
+            ? 'The client will not be onboarded. This action cannot be undone.'
+            : confirmAction?.type === 'cancel'
+            ? 'This will cancel the request.'
+            : 'This will permanently remove the request.'
         }
         confirmLabel={
           confirmAction?.type === 'accept'
             ? 'Accept'
             : confirmAction?.type === 'reject'
-              ? 'Reject'
-              : confirmAction?.type === 'cancel'
-                ? 'Cancel Request'
-                : 'Delete'
+            ? 'Reject'
+            : confirmAction?.type === 'cancel'
+            ? 'Cancel Request'
+            : 'Delete'
         }
-        variant={
-          confirmAction?.type === 'accept' ? 'default' : 'destructive'
-        }
+        variant={confirmAction?.type === 'accept' ? 'default' : 'destructive'}
         onConfirm={handleConfirmAction}
       />
     </div>

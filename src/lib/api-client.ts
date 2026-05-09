@@ -688,6 +688,198 @@ export const serviceRequests = {
     protectedRequest<null>('DELETE', `/requests/${id}`, businessId),
 };
 
+// ─── Clients types ────────────────────────────────────────────────────────────
+
+export interface Client {
+  _id: string;
+  businessId: string;
+  userId?: string;
+  name: string;
+  email: string;
+  phone?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClientsQuery {
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateClientInput {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
+export interface UpdateClientInput {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface ClientExportResult {
+  exportUrl: string;
+}
+
+// ─── Clients API ──────────────────────────────────────────────────────────────
+
+export const clients = {
+  list: async (
+    businessId: string,
+    query: ClientsQuery = {},
+  ): Promise<{ data: Client[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.search) params.set('search', query.search);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/clients${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<Client[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+
+  get: async (businessId: string, id: string): Promise<Client> => {
+    const envelope = await protectedGet<Client>(`/clients/${id}`, businessId);
+    return envelope.data;
+  },
+
+  create: (businessId: string, input: CreateClientInput): Promise<Client> =>
+    protectedRequest<Client>('POST', '/clients', businessId, input),
+
+  update: (businessId: string, id: string, input: UpdateClientInput): Promise<Client> =>
+    protectedRequest<Client>('PATCH', `/clients/${id}`, businessId, input),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/clients/${id}`, businessId),
+
+  export: async (businessId: string, id: string): Promise<ClientExportResult> => {
+    const envelope = await protectedGet<ClientExportResult>(`/clients/${id}/export`, businessId);
+    return envelope.data;
+  },
+};
+
+// ─── Jobs types ───────────────────────────────────────────────────────────────
+
+export type JobStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface Job {
+  _id: string;
+  businessId: string;
+  clientId: string;
+  sourceRequestId?: string;
+  title: string;
+  description?: string;
+  scheduledDate: string;
+  location?: string;
+  price?: number;
+  notes?: string;
+  status: JobStatus;
+  startedAt?: string;
+  completedAt?: string;
+  timezone: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ContractStatus = 'draft' | 'sent' | 'signed' | 'cancelled';
+
+export interface Contract {
+  _id: string;
+  businessId: string;
+  jobId: string;
+  clientId: string;
+  title: string;
+  pdfUrl: string;
+  status: ContractStatus;
+  sentAt?: string;
+  signedAt?: string;
+  timezone: string;
+}
+
+export interface JobsQuery {
+  search?: string;
+  clientId?: string;
+  status?: JobStatus;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateJobInput {
+  clientId: string;
+  title: string;
+  description?: string;
+  scheduledDate: string;
+  location?: string;
+  price?: number;
+  notes?: string;
+}
+
+export interface UpdateJobInput {
+  title?: string;
+  description?: string;
+  scheduledDate?: string;
+  location?: string;
+  price?: number;
+  notes?: string;
+}
+
+export interface BulkDeleteResult {
+  deletedCount: number;
+}
+
+// ─── Jobs API ─────────────────────────────────────────────────────────────────
+
+export const jobs = {
+  list: async (
+    businessId: string,
+    query: JobsQuery = {},
+  ): Promise<{ data: Job[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.search) params.set('search', query.search);
+    if (query.clientId) params.set('clientId', query.clientId);
+    if (query.status) params.set('status', query.status);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/jobs${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<Job[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+
+  get: async (businessId: string, id: string): Promise<Job> => {
+    const envelope = await protectedGet<Job>(`/jobs/${id}`, businessId);
+    return envelope.data;
+  },
+
+  create: (businessId: string, input: CreateJobInput): Promise<Job> =>
+    protectedRequest<Job>('POST', '/jobs', businessId, input),
+
+  update: (businessId: string, id: string, input: UpdateJobInput): Promise<Job> =>
+    protectedRequest<Job>('PATCH', `/jobs/${id}`, businessId, input),
+
+  start: (businessId: string, id: string): Promise<Job> =>
+    protectedRequest<Job>('PATCH', `/jobs/${id}/start`, businessId),
+
+  complete: (businessId: string, id: string): Promise<Job> =>
+    protectedRequest<Job>('PATCH', `/jobs/${id}/complete`, businessId),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/jobs/${id}`, businessId),
+
+  bulkDelete: (businessId: string, ids: string[]): Promise<BulkDeleteResult> =>
+    protectedRequest<BulkDeleteResult>('DELETE', '/jobs', businessId, { ids }),
+
+  generateContract: async (businessId: string, id: string): Promise<Contract> =>
+    protectedRequest<Contract>('POST', `/jobs/${id}/contract/generate`, businessId),
+
+  sendContract: async (businessId: string, id: string): Promise<Contract> =>
+    protectedRequest<Contract>('POST', `/jobs/${id}/contract/send`, businessId),
+};
+
 // ─── Activity Logs API ────────────────────────────────────────────────────────
 
 export const activityLogs = {
