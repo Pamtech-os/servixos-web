@@ -12,8 +12,11 @@ export function useUpdateRequest() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateRequestInput }) =>
       serviceRequests.update(businessId, id, input),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       void queryClient.invalidateQueries({ queryKey: ['requests', businessId] });
+      if (updated.status === 'accepted') {
+        void queryClient.invalidateQueries({ queryKey: ['jobs', businessId] });
+      }
     },
   });
 }
