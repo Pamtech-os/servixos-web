@@ -98,8 +98,14 @@ const PinEntry = () => {
 
   useEffect(() => {
     if (!isHydrated) return;
-    if (!auth.isLoggedIn) router.replace('/login');
-  }, [auth.isLoggedIn, isHydrated, router]);
+    if (!auth.isLoggedIn) {
+      router.replace('/login');
+      return;
+    }
+    if (auth.user?.mustChangePassword) {
+      router.replace('/complete-setup');
+    }
+  }, [auth.isLoggedIn, auth.user?.mustChangePassword, isHydrated, router]);
 
   // Auto-submit when 4 digits entered.
   // verifyPinMutation.isPending is intentionally NOT a dependency — listing it
@@ -113,7 +119,7 @@ const PinEntry = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin.length]);
 
-  if (!isHydrated || !auth.isLoggedIn) return null;
+  if (!isHydrated || !auth.isLoggedIn || auth.user?.mustChangePassword) return null;
 
   return (
     <div className='relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 py-6 sm:items-center sm:py-8'>

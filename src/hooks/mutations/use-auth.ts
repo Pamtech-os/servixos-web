@@ -1,7 +1,12 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { auth, type LoginInput, type ResetPasswordInput } from '@/lib/api-client';
+import {
+  auth,
+  type LoginInput,
+  type ResetPasswordInput,
+  type CompleteSetupInput,
+} from '@/lib/api-client';
 
 export function useLogin() {
   return useMutation({
@@ -13,6 +18,18 @@ export function useVerifyPin() {
   return useMutation({
     mutationFn: ({ pin, token }: { pin: string; token: string }) =>
       auth.verifyPin(pin, token),
+  });
+}
+
+export function useCompleteSetup() {
+  return useMutation({
+    mutationFn: ({
+      input,
+      token,
+    }: {
+      input: CompleteSetupInput;
+      token: string;
+    }) => auth.completeSetup(input, token),
   });
 }
 

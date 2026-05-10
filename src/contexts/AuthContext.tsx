@@ -31,6 +31,7 @@ interface AuthContextType {
   isHydrated: boolean;
   setSession: (data: SessionData) => void;
   completeVerification: (accessToken: string) => void;
+  completeSetup: (accessToken: string) => void;
   logout: () => void;
 }
 
@@ -143,6 +144,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuth((prev) => ({ ...prev, accessToken, isPinVerified: true }));
   }, []);
 
+  const completeSetup = useCallback((accessToken: string) => {
+    const pinVerified = (() => {
+      try {
+        return decodeJwt(accessToken).pinVerified;
+      } catch {
+        return false;
+      }
+    })();
+
+    tokenStore.setAccessToken(accessToken);
+    setAuth((prev) => ({
+      ...prev,
+      accessToken,
+      isPinVerified: pinVerified,
+      user: prev.user ? { ...prev.user, mustChangePassword: false } : prev.user,
+    }));
+  }, []);
+
   const logout = useCallback(() => {
     const refreshToken = tokenStore.getRefreshToken();
     tokenStore.clear();
@@ -152,8 +171,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = useMemo(
-    () => ({ auth, isHydrated, setSession, completeVerification, logout }),
-    [auth, isHydrated, setSession, completeVerification, logout]
+    () => ({ auth, isHydrated, setSession, completeVerification, completeSetup, logout }),
+    [auth, isHydrated, setSession, completeVerification, completeSetup, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

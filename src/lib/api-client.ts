@@ -25,7 +25,7 @@ interface ApiEnvelope<T> {
 export interface JwtPayload {
   sub: string;
   businessId: string;
-  userRole: 'owner' | 'employee';
+  userRole: 'owner' | 'employee' | 'client';
   pinVerified: boolean;
   iat: number;
   exp: number;
@@ -37,6 +37,7 @@ export interface SessionUser {
   lastName: string;
   email: string;
   businessId: string;
+  mustChangePassword?: boolean;
   subdomain?: string;
 }
 
@@ -90,6 +91,13 @@ export interface LoginInput {
 export interface ResetPasswordInput {
   otp: string;
   newPassword: string;
+}
+
+export interface CompleteSetupInput {
+  newPassword: string;
+  confirmPassword: string;
+  pin: string;
+  confirmPin: string;
 }
 
 export interface WebsiteGenerateResult {
@@ -479,6 +487,16 @@ export const auth = {
     return envelope.data.accessToken;
   },
 
+  completeSetup: async (input: CompleteSetupInput, token: string): Promise<string> => {
+    const envelope = await requestEnvelope<{ accessToken: string }>({
+      method: 'POST',
+      path: '/auth/complete-setup',
+      body: input,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return envelope.data.accessToken;
+  },
+
   refresh: (refreshToken: string) =>
     requestEnvelope<{ accessToken: string }>({
       method: 'POST',
@@ -549,6 +567,184 @@ export const roles = {
 
   delete: (businessId: string, id: string): Promise<null> =>
     protectedRequest<null>('DELETE', `/roles/${id}`, businessId),
+};
+
+// ─── Employees & Time Tracking types ─────────────────────────────────────────
+
+export type EmployeeClockStatus = 'clocked_in' | 'clocked_out' | 'on_break';
+
+export interface Employee {
+  _id: string;
+  businessId: string;
+  userId?: string;
+  roleId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  weeklyHoursTarget: number;
+  dateJoined?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeesQuery {
+  search?: string;
+  roleId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateEmployeeInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  roleId: string;
+  weeklyHoursTarget: number;
+  dateJoined?: string;
+}
+
+export interface UpdateEmployeeInput {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  roleId?: string;
+  weeklyHoursTarget?: number;
+  dateJoined?: string;
+}
+
+export interface OnlineEmployee {
+  _id: string;
+  fullName: string;
+  email: string;
+  clockStatus: EmployeeClockStatus;
+}
+
+export interface ClockRecord {
+  _id: string;
+  businessId: string;
+  employeeId: string;
+  clockInAt: string;
+  clockOutAt?: string | null;
+  breakMinutes: number;
+  breakStartedAt?: string | null;
+  status: EmployeeClockStatus;
+  totalHours?: number;
+  timezone: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface EmployeeClockHistoryQuery {
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ClockStatusData {
+  status: EmployeeClockStatus;
+  clockInAt?: string | null;
+  breakMinutes: number;
+  currentRecord?: ClockRecord | null;
+}
+
+// ─── Employees & Time Tracking API ───────────────────────────────────────────
+
+export const employees = {
+  list: async (
+    businessId: string,
+    query: EmployeesQuery = {}
+  ): Promise<{ data: Employee[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.search) params.set('search', query.search);
+    if (query.roleId) params.set('roleId', query.roleId);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/employees${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<Employee[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+
+  online: async (businessId: string): Promise<OnlineEmployee[]> => {
+    const envelope = await protectedGet<unknown>('/employees/online', businessId);
+    const payload = envelope.data as unknown;
+
+    if (Array.isArray(payload)) {
+      return payload as OnlineEmployee[];
+    }
+
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      Array.isArray((payload as { data?: unknown }).data)
+    ) {
+      return (payload as { data: OnlineEmployee[] }).data;
+    }
+
+    return [];
+  },
+
+  get: async (businessId: string, id: string): Promise<Employee> => {
+    const envelope = await protectedGet<Employee>(`/employees/${id}`, businessId);
+    return envelope.data;
+  },
+
+  create: (businessId: string, input: CreateEmployeeInput): Promise<Employee> =>
+    protectedRequest<Employee>('POST', '/employees', businessId, input),
+
+  update: (businessId: string, id: string, input: UpdateEmployeeInput): Promise<Employee> =>
+    protectedRequest<Employee>('PATCH', `/employees/${id}`, businessId, input),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/employees/${id}`, businessId),
+
+  getClockHistory: async (
+    businessId: string,
+    id: string,
+    query: EmployeeClockHistoryQuery = {}
+  ): Promise<{ data: ClockRecord[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.startDate) params.set('startDate', query.startDate);
+    if (query.endDate) params.set('endDate', query.endDate);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/employees/${id}/clock-history${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<ClockRecord[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+};
+
+export const clock = {
+  in: (businessId: string, employeeId: string): Promise<ClockRecord> =>
+    protectedRequest<ClockRecord>('POST', '/clock/in', businessId, { employeeId }),
+
+  out: (businessId: string, employeeId: string): Promise<ClockRecord> =>
+    protectedRequest<ClockRecord>('POST', '/clock/out', businessId, { employeeId }),
+
+  startBreak: (businessId: string, employeeId: string): Promise<ClockRecord> =>
+    protectedRequest<ClockRecord>('POST', '/clock/break/start', businessId, { employeeId }),
+
+  endBreak: (
+    businessId: string,
+    employeeId: string,
+    breakDurationMinutes: number
+  ): Promise<ClockRecord> =>
+    protectedRequest<ClockRecord>('POST', '/clock/break/end', businessId, {
+      employeeId,
+      breakDurationMinutes,
+    }),
+
+  status: async (businessId: string, employeeId: string): Promise<ClockStatusData> => {
+    const envelope = await protectedGet<ClockStatusData>(
+      `/clock/status/${employeeId}`,
+      businessId
+    );
+    return envelope.data;
+  },
 };
 
 // ─── Service Requests types ───────────────────────────────────────────────────

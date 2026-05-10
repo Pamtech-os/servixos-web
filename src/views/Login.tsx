@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLogin } from '@/hooks/mutations/use-auth';
+import { decodeJwt } from '@/lib/api-client';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -23,8 +24,46 @@ const Login = () => {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const router = useRouter();
-  const { setSession } = useAuth();
+  const { auth, isHydrated, setSession } = useAuth();
   const loginMutation = useLogin();
+  const hasNavigatedRef = useRef(false);
+
+  const routeAfterAuth = useCallback(
+    (options: { mustChangePassword?: boolean; isPinVerified: boolean }) => {
+      if (hasNavigatedRef.current) return;
+      hasNavigatedRef.current = true;
+      setIsRedirecting(true);
+
+      if (options.mustChangePassword) {
+        router.replace('/complete-setup');
+        return;
+      }
+
+      router.replace(options.isPinVerified ? '/dashboard' : '/pin');
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (!isHydrated || !auth.isLoggedIn || hasNavigatedRef.current) return;
+    routeAfterAuth({
+      mustChangePassword: auth.user?.mustChangePassword,
+      isPinVerified: auth.isPinVerified,
+    });
+  }, [
+    auth.isLoggedIn,
+    auth.isPinVerified,
+    auth.user?.mustChangePassword,
+    isHydrated,
+    routeAfterAuth,
+  ]);
+
+  useEffect(() => {
+    if (!auth.isLoggedIn) {
+      hasNavigatedRef.current = false;
+      setIsRedirecting(false);
+    }
+  }, [auth.isLoggedIn]);
 
   const validate = () => {
     const errs: typeof fieldErrors = {};
@@ -41,9 +80,18 @@ const Login = () => {
 
     try {
       const session = await loginMutation.mutateAsync({ email, password });
-      setIsRedirecting(true);
       setSession(session);
-      router.replace('/pin');
+      const pinVerified = (() => {
+        try {
+          return decodeJwt(session.accessToken).pinVerified;
+        } catch {
+          return false;
+        }
+      })();
+      routeAfterAuth({
+        mustChangePassword: session.user.mustChangePassword,
+        isPinVerified: pinVerified,
+      });
     } catch (err) {
       setIsRedirecting(false);
       toast.error(getApiErrorMessage(err));
