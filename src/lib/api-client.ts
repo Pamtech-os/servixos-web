@@ -278,11 +278,7 @@ async function hmacSha256Hex(payload: string, secret: string): Promise<string> {
     false,
     ['sign']
   );
-  const signatureBuffer = await globalThis.crypto.subtle.sign(
-    'HMAC',
-    key,
-    encoder.encode(payload)
-  );
+  const signatureBuffer = await globalThis.crypto.subtle.sign('HMAC', key, encoder.encode(payload));
 
   return Array.from(new Uint8Array(signatureBuffer))
     .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -395,11 +391,7 @@ async function resolveToken(): Promise<string> {
   throw new Error('Session expired. Please re-verify your PIN.');
 }
 
-async function protectedCall<T>(
-  path: string,
-  businessId: string,
-  body: unknown = {}
-): Promise<T> {
+async function protectedCall<T>(path: string, businessId: string, body: unknown = {}): Promise<T> {
   const token = await resolveToken();
 
   const makeRequest = (t: string) =>
@@ -421,7 +413,7 @@ async function protectedRequest<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
   businessId: string,
-  body?: unknown,
+  body?: unknown
 ): Promise<T> {
   const token = await resolveToken();
 
@@ -440,10 +432,7 @@ async function protectedRequest<T>(
   return envelope.data;
 }
 
-async function protectedGet<T>(
-  path: string,
-  businessId: string,
-): Promise<ApiEnvelope<T>> {
+async function protectedGet<T>(path: string, businessId: string): Promise<ApiEnvelope<T>> {
   const token = await resolveToken();
 
   const makeRequest = (t: string) =>
@@ -462,17 +451,14 @@ async function protectedGet<T>(
 // ─── Onboarding API ───────────────────────────────────────────────────────────
 
 export const onboarding = {
-  createAccount: (input: CreateAccountInput) =>
-    publicCall<null>('/auth/onboarding/account', input),
+  createAccount: (input: CreateAccountInput) => publicCall<null>('/auth/onboarding/account', input),
 
   verifyEmail: (input: VerifyEmailInput) =>
     publicCall<null>('/auth/onboarding/verify-email', input),
 
-  resendOtp: (email: string) =>
-    publicCall<null>('/auth/onboarding/resend-otp', { email }),
+  resendOtp: (email: string) => publicCall<null>('/auth/onboarding/resend-otp', { email }),
 
-  setPin: (input: SetPinInput) =>
-    publicCall<null>('/auth/onboarding/set-pin', input),
+  setPin: (input: SetPinInput) => publicCall<null>('/auth/onboarding/set-pin', input),
 
   createBusiness: (input: CreateBusinessInput) =>
     publicCall<SessionData>('/auth/onboarding/business', input),
@@ -517,8 +503,7 @@ export const auth = {
     return envelope.message;
   },
 
-  resetPassword: (input: ResetPasswordInput) =>
-    publicCall<null>('/auth/reset-password', input),
+  resetPassword: (input: ResetPasswordInput) => publicCall<null>('/auth/reset-password', input),
 };
 
 // ─── Website API ──────────────────────────────────────────────────────────────
@@ -641,7 +626,7 @@ export interface UpdateRequestInput {
 export const serviceRequests = {
   list: async (
     businessId: string,
-    query: ServiceRequestsQuery = {},
+    query: ServiceRequestsQuery = {}
   ): Promise<{ data: ServiceRequest[]; meta: PaginationMeta; statistics: RequestStatistics }> => {
     const params = new URLSearchParams();
     if (query.status) params.set('status', query.status);
@@ -668,7 +653,7 @@ export const serviceRequests = {
   getConversation: async (businessId: string, id: string): Promise<RequestConversation> => {
     const envelope = await protectedGet<RequestConversation>(
       `/requests/${id}/conversation`,
-      businessId,
+      businessId
     );
     return envelope.data;
   },
@@ -676,7 +661,7 @@ export const serviceRequests = {
   getPriceEstimate: async (businessId: string, id: string): Promise<AiPriceEstimate> => {
     const envelope = await protectedGet<AiPriceEstimate>(
       `/requests/${id}/price-estimate`,
-      businessId,
+      businessId
     );
     return envelope.data;
   },
@@ -728,7 +713,7 @@ export interface ClientExportResult {
 export const clients = {
   list: async (
     businessId: string,
-    query: ClientsQuery = {},
+    query: ClientsQuery = {}
   ): Promise<{ data: Client[]; meta: PaginationMeta }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
@@ -835,7 +820,7 @@ export interface BulkDeleteResult {
 export const jobs = {
   list: async (
     businessId: string,
-    query: JobsQuery = {},
+    query: JobsQuery = {}
   ): Promise<{ data: Job[]; meta: PaginationMeta }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
@@ -950,7 +935,7 @@ export interface UpdateInvoiceInput {
 export const invoices = {
   list: async (
     businessId: string,
-    query: InvoicesQuery = {},
+    query: InvoicesQuery = {}
   ): Promise<{ data: Invoice[]; meta: PaginationMeta; statistics: InvoiceStatistics }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
@@ -1014,10 +999,11 @@ export interface Payment {
 }
 
 export interface PaymentStatistics {
-  totalAmount: number;
-  completedCount: number;
-  partialCount: number;
-  totalCount: number;
+  totalIncome: number;
+  received: number;
+  pending: number;
+  overdue: number;
+  outstanding: number;
 }
 
 export interface PaymentsQuery {
@@ -1055,7 +1041,7 @@ export interface UpdatePaymentInput {
 export const payments = {
   list: async (
     businessId: string,
-    query: PaymentsQuery = {},
+    query: PaymentsQuery = {}
   ): Promise<{ data: Payment[]; meta: PaginationMeta; statistics: PaymentStatistics }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
@@ -1073,7 +1059,7 @@ export const payments = {
     return {
       data: envelope.data,
       meta: envelope.meta!,
-      statistics: stats ?? { totalAmount: 0, completedCount: 0, partialCount: 0, totalCount: 0 },
+      statistics: stats ?? { totalIncome: 0, received: 0, pending: 0, overdue: 0, outstanding: 0 },
     };
   },
 
@@ -1097,7 +1083,7 @@ export const payments = {
 export const activityLogs = {
   list: async (
     businessId: string,
-    query: ActivityLogsQuery = {},
+    query: ActivityLogsQuery = {}
   ): Promise<{ data: ActivityLog[]; meta: PaginationMeta }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
