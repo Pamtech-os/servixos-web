@@ -986,7 +986,10 @@ export type PaymentStatus = 'completed' | 'partial';
 export interface Payment {
   _id: string;
   businessId: string;
-  invoiceId?: string;
+  invoiceId?: {
+    _id: string;
+    invoiceNumber: string;
+  };
   clientId?: string;
   paymentDate: string;
   paymentMode: PaymentMode;

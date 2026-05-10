@@ -107,7 +107,6 @@ const Payments = () => {
   const meta = data?.meta;
   const statistics = data?.statistics;
   const clientList = clientsData?.data ?? [];
-  console.log('client list:', clientList);
   const invoiceList = invoicesData?.data ?? [];
 
   // Create form state
@@ -389,13 +388,14 @@ const Payments = () => {
                     {paymentList.map((p) => {
                       const client = clientList.find((c) => c._id === p.clientId);
                       const invoice = p.invoiceId
-                        ? invoiceList.find((inv) => inv._id === p.invoiceId)
+                        ? invoiceList.find((inv) => inv._id === p.invoiceId?.invoiceNumber)
                         : null;
                       return (
                         <TableRow key={p._id}>
                           <TableCell className='font-medium'>{client?.name ?? '—'}</TableCell>
                           <TableCell>
-                            {invoice?.invoiceNumber ?? (p.invoiceId ? '...' : '—')}
+                            {invoice?.invoiceNumber ??
+                              (p.invoiceId ? p.invoiceId.invoiceNumber : '—')}
                           </TableCell>
                           <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
                           <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
@@ -409,22 +409,26 @@ const Payments = () => {
                           </TableCell>
                           <TableCell className='text-right'>
                             <div className='flex items-center justify-end gap-1'>
-                              <Button
-                                variant='ghost'
-                                size='icon'
-                                className='h-8 w-8'
-                                onClick={() => openEditDialog(p)}
-                              >
-                                <Pencil size={14} />
-                              </Button>
-                              <Button
-                                variant='ghost'
-                                size='icon'
-                                className='h-8 w-8 text-destructive hover:text-destructive'
-                                onClick={() => setDeleteTarget(p)}
-                              >
-                                <Trash2 size={14} />
-                              </Button>
+                              {p.status !== 'completed' && (
+                                <>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-8 w-8'
+                                    onClick={() => openEditDialog(p)}
+                                  >
+                                    <Pencil size={14} />
+                                  </Button>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-8 w-8 text-destructive hover:text-destructive'
+                                    onClick={() => setDeleteTarget(p)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
