@@ -52,7 +52,11 @@ import { toast } from '@/components/ui/sonner';
 import { usePayments } from '@/hooks/queries/use-payments';
 import { useClients } from '@/hooks/queries/use-clients';
 import { useInvoices } from '@/hooks/queries/use-invoices';
-import { useCreatePayment, useUpdatePayment, useDeletePayment } from '@/hooks/mutations/use-payments';
+import {
+  useCreatePayment,
+  useUpdatePayment,
+  useDeletePayment,
+} from '@/hooks/mutations/use-payments';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import type { Payment, PaymentMode, PaymentStatus, UpdatePaymentInput } from '@/lib/api-client';
 
@@ -103,6 +107,7 @@ const Payments = () => {
   const meta = data?.meta;
   const statistics = data?.statistics;
   const clientList = clientsData?.data ?? [];
+  console.log('client list:', clientList);
   const invoiceList = invoicesData?.data ?? [];
 
   // Create form state
@@ -164,14 +169,16 @@ const Payments = () => {
       },
       {
         onSuccess: () => {
-          toast.success('Payment recorded', { description: `$${amount.toLocaleString()} has been recorded.` });
+          toast.success('Payment recorded', {
+            description: `$${amount.toLocaleString()} has been recorded.`,
+          });
           setDialogOpen(false);
           resetForm();
         },
         onError: (err) => {
           toast.error('Failed to record payment', { description: getApiErrorMessage(err) });
         },
-      },
+      }
     );
   };
 
@@ -202,7 +209,7 @@ const Payments = () => {
         onError: (err) => {
           toast.error('Failed to update payment', { description: getApiErrorMessage(err) });
         },
-      },
+      }
     );
   };
 
@@ -222,28 +229,44 @@ const Payments = () => {
 
   const summaryCards = [
     {
-      label: 'Total Received',
-      value: statistics?.totalAmount ?? 0,
+      label: 'Total Income',
+      value: statistics?.totalIncome ?? 0,
       icon: DollarSign,
       color: 'text-green-600 dark:text-green-400',
       bg: 'bg-green-500/10',
       currency: true,
     },
     {
-      label: 'Completed',
-      value: statistics?.completedCount ?? 0,
+      label: 'Received',
+      value: statistics?.received ?? 0,
       icon: CheckCircle2,
       color: 'text-green-600 dark:text-green-400',
       bg: 'bg-green-500/10',
-      currency: false,
+      currency: true,
     },
     {
-      label: 'Partial',
-      value: statistics?.partialCount ?? 0,
+      label: 'Pending',
+      value: statistics?.pending ?? 0,
       icon: AlertTriangle,
       color: 'text-yellow-600 dark:text-yellow-400',
       bg: 'bg-yellow-500/10',
-      currency: false,
+      currency: true,
+    },
+    {
+      label: 'Overdue',
+      value: statistics?.overdue ?? 0,
+      icon: AlertTriangle,
+      color: 'text-yellow-600 dark:text-yellow-400',
+      bg: 'bg-yellow-500/10',
+      currency: true,
+    },
+    {
+      label: 'Outstanding',
+      value: statistics?.outstanding ?? 0,
+      icon: AlertTriangle,
+      color: 'text-red-600 dark:text-red-400',
+      bg: 'bg-red-500/10',
+      currency: true,
     },
   ];
 
@@ -286,7 +309,9 @@ const Payments = () => {
                     <Skeleton className='mt-1 h-5 w-20' />
                   ) : (
                     <p className='text-lg font-bold'>
-                      {card.currency ? `$${card.value.toLocaleString()}` : card.value.toLocaleString()}
+                      {card.currency
+                        ? `$${card.value.toLocaleString()}`
+                        : card.value.toLocaleString()}
                     </p>
                   )}
                 </div>
@@ -369,7 +394,9 @@ const Payments = () => {
                       return (
                         <TableRow key={p._id}>
                           <TableCell className='font-medium'>{client?.name ?? '—'}</TableCell>
-                          <TableCell>{invoice?.invoiceNumber ?? (p.invoiceId ? '...' : '—')}</TableCell>
+                          <TableCell>
+                            {invoice?.invoiceNumber ?? (p.invoiceId ? '...' : '—')}
+                          </TableCell>
                           <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
                           <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
                           <TableCell className='text-right font-medium'>
@@ -423,7 +450,9 @@ const Payments = () => {
       {/* Delete confirm */}
       <ConfirmModal
         open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
         title='Delete Payment'
         description='Are you sure you want to delete this payment? This will reverse the corresponding invoice amount.'
         confirmLabel='Delete'
@@ -441,13 +470,14 @@ const Payments = () => {
 
           <div className='space-y-4 py-2'>
             <div className='space-y-2'>
-              <Label>Client <span className='text-muted-foreground'>(optional)</span></Label>
+              <Label>
+                Client <span className='text-muted-foreground'>(optional)</span>
+              </Label>
               <Select value={formClientId} onValueChange={setFormClientId}>
                 <SelectTrigger>
                   <SelectValue placeholder='Select a client' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value=''>None</SelectItem>
                   {clientList.map((c) => (
                     <SelectItem key={c._id} value={c._id}>
                       {c.name}
@@ -458,13 +488,14 @@ const Payments = () => {
             </div>
 
             <div className='space-y-2'>
-              <Label>Invoice <span className='text-muted-foreground'>(optional)</span></Label>
+              <Label>
+                Invoice <span className='text-muted-foreground'>(optional)</span>
+              </Label>
               <Select value={formInvoiceId} onValueChange={setFormInvoiceId}>
                 <SelectTrigger>
                   <SelectValue placeholder='Link to invoice' />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value=''>None</SelectItem>
                   {invoiceList.map((inv) => (
                     <SelectItem key={inv._id} value={inv._id}>
                       {inv.invoiceNumber} — ${inv.totalAmount.toLocaleString()}
@@ -481,7 +512,10 @@ const Payments = () => {
                   <PopoverTrigger asChild>
                     <Button
                       variant='outline'
-                      className={cn('w-full justify-start text-left font-normal', !formDate && 'text-muted-foreground')}
+                      className={cn(
+                        'w-full justify-start text-left font-normal',
+                        !formDate && 'text-muted-foreground'
+                      )}
                     >
                       <CalendarIcon className='mr-2 h-4 w-4' />
                       {formDate ? format(formDate, 'PPP') : <span>Pick a date</span>}
@@ -520,9 +554,13 @@ const Payments = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
+                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
+                      ([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -541,7 +579,9 @@ const Payments = () => {
             </div>
 
             <div className='space-y-2'>
-              <Label>Notes <span className='text-muted-foreground'>(optional)</span></Label>
+              <Label>
+                Notes <span className='text-muted-foreground'>(optional)</span>
+              </Label>
               <Textarea
                 placeholder='e.g. Paid via GTBank'
                 value={formNotes}
@@ -581,7 +621,10 @@ const Payments = () => {
                 <PopoverTrigger asChild>
                   <Button
                     variant='outline'
-                    className={cn('w-full justify-start text-left font-normal', !editFormDate && 'text-muted-foreground')}
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !editFormDate && 'text-muted-foreground'
+                    )}
                   >
                     <CalendarIcon className='mr-2 h-4 w-4' />
                     {editFormDate ? format(editFormDate, 'PPP') : <span>Pick a date</span>}
@@ -602,14 +645,21 @@ const Payments = () => {
             <div className='grid grid-cols-2 gap-4'>
               <div className='space-y-2'>
                 <Label>Payment Mode</Label>
-                <Select value={editFormMode} onValueChange={(v) => setEditFormMode(v as PaymentMode)}>
+                <Select
+                  value={editFormMode}
+                  onValueChange={(v) => setEditFormMode(v as PaymentMode)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
-                    ))}
+                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
+                      ([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -627,7 +677,10 @@ const Payments = () => {
 
             <div className='space-y-2'>
               <Label>Status</Label>
-              <Select value={editFormStatus} onValueChange={(v) => setEditFormStatus(v as PaymentStatus)}>
+              <Select
+                value={editFormStatus}
+                onValueChange={(v) => setEditFormStatus(v as PaymentStatus)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -639,7 +692,9 @@ const Payments = () => {
             </div>
 
             <div className='space-y-2'>
-              <Label>Notes <span className='text-muted-foreground'>(optional)</span></Label>
+              <Label>
+                Notes <span className='text-muted-foreground'>(optional)</span>
+              </Label>
               <Textarea
                 value={editFormNotes}
                 onChange={(e) => setEditFormNotes(e.target.value)}
