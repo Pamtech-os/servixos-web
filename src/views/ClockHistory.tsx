@@ -10,20 +10,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import PaginationControls from '@/components/ui/pagination-controls';
 import { useEmployee, useEmployeeClockHistory } from '@/hooks/queries/use-employees';
 import { useRoles } from '@/hooks/queries/use-roles';
+import { parseBusinessLocalDateTime } from '@/common/utils/datetime';
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 function formatDate(value?: string): string {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
+  const parsed = parseBusinessLocalDateTime(value);
+  if (!parsed) return '—';
   return parsed.toLocaleDateString();
 }
 
 function formatTime(value?: string | null): string {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
+  const parsed = parseBusinessLocalDateTime(value);
+  if (!parsed) return '—';
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -39,13 +38,12 @@ const ClockHistory = () => {
 
   const employee = employeeQuery.data;
   const history = historyQuery.data?.data ?? [];
-  const paginationMeta =
-    historyQuery.data?.meta ?? {
-      page: 1,
-      limit: PAGE_SIZE,
-      total: 0,
-      totalPages: 0,
-    };
+  const paginationMeta = historyQuery.data?.meta ?? {
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  };
 
   const roleName = useMemo(() => {
     if (!employee) return 'Unknown role';
