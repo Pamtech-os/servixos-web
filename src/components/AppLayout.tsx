@@ -25,10 +25,14 @@ const AppLayout = ({ children }: PropsWithChildren) => {
       router.replace('/login');
       return;
     }
+    if (auth.user?.mustChangePassword) {
+      router.replace('/complete-setup');
+      return;
+    }
     if (!auth.isPinVerified) {
       router.replace('/pin');
     }
-  }, [auth.isLoggedIn, auth.isPinVerified, isHydrated, router]);
+  }, [auth.isLoggedIn, auth.isPinVerified, auth.user?.mustChangePassword, isHydrated, router]);
 
   useEffect(() => {
     setIsRouteLoading(false);
@@ -69,7 +73,7 @@ const AppLayout = ({ children }: PropsWithChildren) => {
     return () => window.clearTimeout(timeout);
   }, [isRouteLoading]);
 
-  if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified) {
+  if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified || auth.user?.mustChangePassword) {
     return null;
   }
 
