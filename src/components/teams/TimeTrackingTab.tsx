@@ -12,20 +12,19 @@ import PaginationControls from '@/components/ui/pagination-controls';
 import { useEmployees, useEmployeeClockHistory, useEmployeeClockStatus } from '@/hooks/queries/use-employees';
 import { useRoles } from '@/hooks/queries/use-roles';
 import type { Employee, EmployeeClockStatus } from '@/lib/api-client';
+import { parseBusinessLocalDateTime } from '@/common/utils/datetime';
 
 const PAGE_SIZE = 5;
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
+  const parsed = parseBusinessLocalDateTime(value);
+  if (!parsed) return '—';
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDate(value?: string): string {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
+  const parsed = parseBusinessLocalDateTime(value);
+  if (!parsed) return '—';
   return parsed.toLocaleDateString();
 }
 

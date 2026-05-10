@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCurrentEmployee, useEmployeeClockStatus } from '@/hooks/queries/use-employees';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { parseBusinessLocalDateTime } from '@/common/utils/datetime';
 
 export type ClockStatus = EmployeeClockStatus;
 export type ClockTrackingMode = 'api' | 'local';
@@ -42,9 +43,7 @@ interface ClockContextType {
 const ClockContext = createContext<ClockContextType | null>(null);
 
 function toSafeDate(value?: string | null): Date | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseBusinessLocalDateTime(value);
 }
 
 export const ClockProvider = ({ children }: { children: ReactNode }) => {
