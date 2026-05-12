@@ -42,6 +42,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { mockTasks, mockEmployees, Task, Subtask, TaskComment } from '@/lib/team-mock-data';
+import { startOfWeek, endOfWeek, isToday, isPast, isWithinInterval } from 'date-fns';
 import { toast } from '@/components/ui/sonner';
 
 const stages = [
@@ -76,7 +77,9 @@ const TasksTab = () => {
   const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [showCreate, setShowCreate] = useState(false);
   const [showDetail, setShowDetail] = useState<Task | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'active' | 'closed'>('active');
+  const [filterAssignee, setFilterAssignee] = useState('all');
+  const [filterPriority, setFilterPriority] = useState('all');
+  const [filterDueDate, setFilterDueDate] = useState('all');
   const [newComment, setNewComment] = useState('');
   const [newSubtask, setNewSubtask] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -91,7 +94,20 @@ const TasksTab = () => {
     stage: 'todo' as Task['stage'],
   });
 
-  const filteredTasks = tasks.filter((t) => t.status === statusFilter);
+  const filteredTasks = tasks.filter((t) => {
+    if (filterAssignee !== 'all' && t.assigneeId !== filterAssignee) return false;
+    if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+    if (filterDueDate !== 'all') {
+      if (!t.dueDate) return filterDueDate === 'none';
+      const due = new Date(t.dueDate);
+      const now = new Date();
+      if (filterDueDate === 'overdue') return isPast(due) && !isToday(due) && t.stage !== 'completed';
+      if (filterDueDate === 'today') return isToday(due);
+      if (filterDueDate === 'this_week')
+        return isWithinInterval(due, { start: startOfWeek(now), end: endOfWeek(now) });
+    }
+    return true;
+  });
 
   const handleCreate = () => {
     if (!form.title || !form.assigneeId) {
@@ -111,7 +127,6 @@ const TasksTab = () => {
       createdAt: new Date().toISOString().split('T')[0],
       comments: [],
       subtasks: [],
-      status: 'active',
     };
     setTasks((prev) => [newTask, ...prev]);
     setForm({
@@ -230,21 +245,43 @@ const TasksTab = () => {
   return (
     <div className='mt-4 space-y-4'>
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-        <div className='flex items-center gap-2'>
-          <Button
-            size='sm'
-            variant={statusFilter === 'active' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('active')}
-          >
-            Active
-          </Button>
-          <Button
-            size='sm'
-            variant={statusFilter === 'closed' ? 'default' : 'outline'}
-            onClick={() => setStatusFilter('closed')}
-          >
-            Closed
-          </Button>
+        <div className='flex flex-wrap items-center gap-2'>
+          <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+            <SelectTrigger className='h-8 w-[140px] text-xs'>
+              <SelectValue placeholder='Assignee' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Assignees</SelectItem>
+              {mockEmployees.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className='h-8 w-[120px] text-xs'>
+              <SelectValue placeholder='Priority' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Priorities</SelectItem>
+              <SelectItem value='urgent'>Urgent</SelectItem>
+              <SelectItem value='high'>High</SelectItem>
+              <SelectItem value='medium'>Medium</SelectItem>
+              <SelectItem value='low'>Low</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterDueDate} onValueChange={setFilterDueDate}>
+            <SelectTrigger className='h-8 w-[120px] text-xs'>
+              <SelectValue placeholder='Due Date' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='all'>All Dates</SelectItem>
+              <SelectItem value='overdue'>Overdue</SelectItem>
+              <SelectItem value='today'>Due Today</SelectItem>
+              <SelectItem value='this_week'>This Week</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button size='sm' className='w-full gap-1.5 sm:w-auto' onClick={() => setShowCreate(true)}>
           <Plus size={14} /> Create Task
