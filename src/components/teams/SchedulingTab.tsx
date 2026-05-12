@@ -30,10 +30,21 @@ import type { Shift } from '@/lib/api-client';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+function toLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function resolveEmployeeId(s: Shift): string {
+  return typeof s.employeeId === 'string' ? s.employeeId : s.employeeId._id;
+}
+
+function resolveEmployeeName(s: Shift): string | undefined {
+  return typeof s.employeeId === 'object' ? s.employeeId.fullName : undefined;
+}
+
 const TIME_SLOTS = Array.from({ length: 10 }, (_, i) => {
   const hour = i + 8;
-  const label =
-    hour < 12 ? `${hour}:00 AM` : hour === 12 ? '12:00 PM' : `${hour - 12}:00 PM`;
+  const label = hour < 12 ? `${hour}:00 AM` : hour === 12 ? '12:00 PM' : `${hour - 12}:00 PM`;
   return { hour, label };
 });
 
@@ -52,13 +63,13 @@ function getWeekMonday(date = new Date()): string {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
-  return d.toISOString().split('T')[0];
+  return toLocalDate(d);
 }
 
 function addWeeks(mondayStr: string, delta: number): string {
   const d = new Date(mondayStr + 'T00:00:00');
   d.setDate(d.getDate() + delta * 7);
-  return d.toISOString().split('T')[0];
+  return toLocalDate(d);
 }
 
 function getWeekDates(mondayStr: string): string[] {
@@ -66,7 +77,7 @@ function getWeekDates(mondayStr: string): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return d.toISOString().split('T')[0];
+    return toLocalDate(d);
   });
 }
 
@@ -84,8 +95,7 @@ function formatWeekRange(mondayStr: string): string {
   const monday = new Date(mondayStr + 'T00:00:00');
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const fmt = (d: Date) =>
-    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
@@ -102,7 +112,7 @@ const SchedulingTab = () => {
   });
 
   const { data: scheduleData, isLoading } = useSchedules({ weekStartDate: weekMonday });
-  const { data: employeesData } = useEmployees({ limit: 100 });
+  const { data: employeesData } = useEmployees({ limit: 50 });
   const createShift = useCreateShift();
   const deleteShift = useDeleteShift();
 
@@ -113,6 +123,10 @@ const SchedulingTab = () => {
   const empColorMap: Record<string, string> = {};
   employeeList.forEach((e, i) => {
     empColorMap[e._id] = COLORS[i % COLORS.length];
+  });
+  shifts.forEach((s) => {
+    const id = resolveEmployeeId(s);
+    if (!empColorMap[id]) empColorMap[id] = COLORS[Object.keys(empColorMap).length % COLORS.length];
   });
 
   function getShiftsForCell(colIndex: number, hour: number): Shift[] {
@@ -157,7 +171,7 @@ const SchedulingTab = () => {
   }
 
   const detailEmployee = showDetail
-    ? employeeList.find((e) => e._id === showDetail.employeeId)
+    ? employeeList.find((e) => e._id === resolveEmployeeId(showDetail))
     : null;
 
   return (
@@ -221,10 +235,7 @@ const SchedulingTab = () => {
               </div>
             ) : (
               TIME_SLOTS.map(({ hour, label }) => (
-                <div
-                  key={hour}
-                  className='grid grid-cols-8 border-b border-border last:border-b-0'
-                >
+                <div key={hour} className='grid grid-cols-8 border-b border-border last:border-b-0'>
                   <div className='flex items-center border-r border-border px-3 py-2 text-xs text-muted-foreground'>
                     {label}
                   </div>
@@ -242,12 +253,13 @@ const SchedulingTab = () => {
                                 key={s._id}
                                 onClick={() => setShowDetail(s)}
                                 className={`w-full rounded-md border px-2 py-1 text-left text-[11px] font-medium transition-all hover:opacity-80 ${
-                                  empColorMap[s.employeeId] ?? COLORS[0]
+                                  empColorMap[resolveEmployeeId(s)] ?? COLORS[0]
                                 }`}
                               >
-                                {employeeList.find((e) => e._id === s.employeeId)?.fullName.split(
-                                  ' '
-                                )[0] ?? '—'}
+                                {(
+                                  resolveEmployeeName(s) ??
+                                  employeeList.find((e) => e._id === resolveEmployeeId(s))?.fullName
+                                )?.split(' ')[0] ?? '—'}
                               </button>
                             )
                         )}
@@ -358,19 +370,20 @@ const SchedulingTab = () => {
                 <div>
                   <p className='text-xs text-muted-foreground'>Employee</p>
                   <p className='font-medium'>
-                    {detailEmployee?.fullName ?? showDetail.employeeId}
+                    {detailEmployee?.fullName ?? resolveEmployeeName(showDetail) ?? resolveEmployeeId(showDetail)}
                   </p>
                 </div>
                 <div>
                   <p className='text-xs text-muted-foreground'>Date</p>
                   <p className='font-medium'>
-                    {new Date(
-                      showDetail.shiftDate.slice(0, 10) + 'T00:00:00'
-                    ).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
+                    {new Date(showDetail.shiftDate.slice(0, 10) + 'T00:00:00').toLocaleDateString(
+                      'en-US',
+                      {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                      }
+                    )}
                   </p>
                 </div>
                 <div className='flex flex-col gap-2 sm:flex-row sm:gap-4'>

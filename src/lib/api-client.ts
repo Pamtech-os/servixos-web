@@ -1280,10 +1280,15 @@ export const payments = {
 
 // ─── Schedules types ─────────────────────────────────────────────────────────
 
+export interface ShiftEmployee {
+  _id: string;
+  fullName: string;
+}
+
 export interface Shift {
   _id: string;
   businessId: string;
-  employeeId: string;
+  employeeId: string | ShiftEmployee;
   shiftDate: string;
   startTime: string;
   endTime: string;
