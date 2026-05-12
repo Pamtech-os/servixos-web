@@ -1,5 +1,7 @@
+'use client';
+
 import { useState, type DragEvent } from 'react';
-import { format, parse } from 'date-fns';
+import { format, parse, isPast, isToday, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -12,8 +14,8 @@ import {
   Upload,
   Paperclip,
   Smile,
-  MoreHorizontal,
   CalendarIcon,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,9 +43,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { mockTasks, mockEmployees, Task, Subtask, TaskComment } from '@/lib/team-mock-data';
-import { startOfWeek, endOfWeek, isToday, isPast, isWithinInterval } from 'date-fns';
 import { toast } from '@/components/ui/sonner';
+import { type TaskStage, type TaskPriority, type CreateTaskInput } from '@/lib/api-client';
+import { useTasks, useTaskActivities } from '@/hooks/queries/use-tasks';
+import { useEmployees } from '@/hooks/queries/use-employees';
+import {
+  useCreateTask,
+  useUpdateTask,
+  useAddComment,
+  useAddSubtask,
+  useToggleSubtask,
+} from '@/hooks/mutations/use-tasks';
 
 const stages = [
   {
@@ -66,7 +76,16 @@ const stages = [
   },
 ];
 
-const priorityConfig = {
+function resolveAssigneeName(
+  assigneeId: string | { _id: string; fullName: string } | undefined,
+  employeeMap: Map<string, string>
+): string | null {
+  if (!assigneeId) return null;
+  if (typeof assigneeId === 'object') return assigneeId.fullName;
+  return employeeMap.get(assigneeId) ?? null;
+}
+
+const priorityConfig: Record<TaskPriority, { label: string; class: string }> = {
   urgent: { label: 'Urgent', class: 'bg-destructive/10 text-destructive border-destructive/30' },
   high: { label: 'High', class: 'bg-amber-500/10 text-amber-600 border-amber-500/30' },
   medium: { label: 'Medium', class: 'bg-primary/10 text-primary border-primary/30' },
@@ -74,9 +93,8 @@ const priorityConfig = {
 };
 
 const TasksTab = () => {
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
   const [showCreate, setShowCreate] = useState(false);
-  const [showDetail, setShowDetail] = useState<Task | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterDueDate, setFilterDueDate] = useState('all');
@@ -89,14 +107,37 @@ const TasksTab = () => {
     title: '',
     description: '',
     assigneeId: '',
-    priority: 'medium' as Task['priority'],
+    priority: 'medium' as TaskPriority,
     dueDate: '',
-    stage: 'todo' as Task['stage'],
+    stage: 'todo' as TaskStage,
   });
 
-  const filteredTasks = tasks.filter((t) => {
-    if (filterAssignee !== 'all' && t.assigneeId !== filterAssignee) return false;
-    if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+  const serverQuery = {
+    assigneeId: filterAssignee !== 'all' ? filterAssignee : undefined,
+    priority: filterPriority !== 'all' ? (filterPriority as TaskPriority) : undefined,
+    limit: 100,
+  };
+
+  const { data: tasksData, isLoading: tasksLoading } = useTasks(serverQuery);
+  const { data: employeesData } = useEmployees();
+  const { data: activitiesData, isLoading: activitiesLoading } = useTaskActivities(
+    selectedTaskId ?? ''
+  );
+
+  const allTasks = tasksData?.data ?? [];
+  const allEmployees = employeesData?.data ?? [];
+  const activities = activitiesData?.data ?? [];
+
+  const employeeMap = new Map(allEmployees.map((e) => [e._id, e.fullName]));
+  const selectedTask = selectedTaskId ? (allTasks.find((t) => t._id === selectedTaskId) ?? null) : null;
+
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const addCommentMutation = useAddComment();
+  const addSubtaskMutation = useAddSubtask();
+  const toggleSubtaskMutation = useToggleSubtask();
+
+  const filteredTasks = allTasks.filter((t) => {
     if (filterDueDate !== 'all') {
       if (!t.dueDate) return filterDueDate === 'none';
       const due = new Date(t.dueDate);
@@ -110,106 +151,69 @@ const TasksTab = () => {
   });
 
   const handleCreate = () => {
-    if (!form.title || !form.assigneeId) {
-      toast.error('Title and assignee are required.');
+    if (!form.title.trim()) {
+      toast.error('Title is required.');
       return;
     }
-    const emp = mockEmployees.find((e) => e.id === form.assigneeId);
-    const newTask: Task = {
-      id: `t${Date.now()}`,
+    const input: CreateTaskInput = {
       title: form.title,
-      description: form.description,
-      assigneeId: form.assigneeId,
-      assigneeName: emp?.fullName || 'Unknown',
+      description: form.description || undefined,
+      assigneeId: form.assigneeId || undefined,
       stage: form.stage,
       priority: form.priority,
-      dueDate: form.dueDate,
-      createdAt: new Date().toISOString().split('T')[0],
-      comments: [],
-      subtasks: [],
+      dueDate: form.dueDate || undefined,
     };
-    setTasks((prev) => [newTask, ...prev]);
-    setForm({
-      title: '',
-      description: '',
-      assigneeId: '',
-      priority: 'medium',
-      dueDate: '',
-      stage: 'todo',
+    createTask.mutate(input, {
+      onSuccess: () => {
+        setForm({ title: '', description: '', assigneeId: '', priority: 'medium', dueDate: '', stage: 'todo' });
+        setShowCreate(false);
+        toast.success('Task created!');
+      },
+      onError: () => toast.error('Failed to create task.'),
     });
-    setShowCreate(false);
-    toast.success('Task created!');
   };
 
-  const moveTask = (taskId: string, newStage: Task['stage']) => {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, stage: newStage } : t)));
-    if (showDetail?.id === taskId)
-      setShowDetail((prev) => (prev ? { ...prev, stage: newStage } : null));
-  };
-
-  const toggleSubtask = (taskId: string, subtaskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              subtasks: t.subtasks.map((st) =>
-                st.id === subtaskId ? { ...st, completed: !st.completed } : st
-              ),
-            }
-          : t
-      )
+  const moveTask = (taskId: string, newStage: TaskStage) => {
+    updateTask.mutate(
+      { id: taskId, input: { stage: newStage } },
+      {
+        onSuccess: () =>
+          toast.success(`Task moved to ${stages.find((s) => s.key === newStage)?.label}`),
+        onError: () => toast.error('Failed to update task.'),
+      }
     );
-    if (showDetail?.id === taskId) {
-      setShowDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              subtasks: prev.subtasks.map((st) =>
-                st.id === subtaskId ? { ...st, completed: !st.completed } : st
-              ),
-            }
-          : null
-      );
-    }
   };
 
-  const addComment = () => {
-    if (!newComment.trim() || !showDetail) return;
-    const comment: TaskComment = {
-      id: `tc${Date.now()}`,
-      author: 'Business Owner',
-      content: newComment,
-      time: new Date().toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      }),
-    };
-    setTasks((prev) =>
-      prev.map((t) => (t.id === showDetail.id ? { ...t, comments: [...t.comments, comment] } : t))
+  const handleToggleSubtask = (taskId: string, subtaskId: string, currentCompleted: boolean) => {
+    toggleSubtaskMutation.mutate(
+      { id: taskId, subtaskId, completed: !currentCompleted },
+      { onError: () => toast.error('Failed to update subtask.') }
     );
-    setShowDetail((prev) => (prev ? { ...prev, comments: [...prev.comments, comment] } : null));
-    setNewComment('');
   };
 
-  const addSubtask = () => {
-    if (!newSubtask.trim() || !showDetail) return;
-    const subtask: Subtask = { id: `st${Date.now()}`, title: newSubtask, completed: false };
-    setTasks((prev) =>
-      prev.map((t) => (t.id === showDetail.id ? { ...t, subtasks: [...t.subtasks, subtask] } : t))
+  const handleAddComment = () => {
+    if (!newComment.trim() || !selectedTaskId) return;
+    addCommentMutation.mutate(
+      { id: selectedTaskId, content: newComment },
+      {
+        onSuccess: () => setNewComment(''),
+        onError: () => toast.error('Failed to add comment.'),
+      }
     );
-    setShowDetail((prev) => (prev ? { ...prev, subtasks: [...prev.subtasks, subtask] } : null));
-    setNewSubtask('');
   };
 
-  // Drag and drop handlers
-  const handleDragStart = (taskId: string) => {
-    setDraggedTaskId(taskId);
+  const handleAddSubtask = () => {
+    if (!newSubtask.trim() || !selectedTaskId) return;
+    addSubtaskMutation.mutate(
+      { id: selectedTaskId, title: newSubtask },
+      {
+        onSuccess: () => setNewSubtask(''),
+        onError: () => toast.error('Failed to add subtask.'),
+      }
+    );
   };
+
+  const handleDragStart = (taskId: string) => setDraggedTaskId(taskId);
 
   const handleDragOver = (e: DragEvent, stageKey: string) => {
     e.preventDefault();
@@ -217,16 +221,11 @@ const TasksTab = () => {
     setDragOverStage(stageKey);
   };
 
-  const handleDragLeave = () => {
-    setDragOverStage(null);
-  };
+  const handleDragLeave = () => setDragOverStage(null);
 
-  const handleDrop = (e: DragEvent, stageKey: Task['stage']) => {
+  const handleDrop = (e: DragEvent, stageKey: TaskStage) => {
     e.preventDefault();
-    if (draggedTaskId) {
-      moveTask(draggedTaskId, stageKey);
-      toast.success(`Task moved to ${stages.find((s) => s.key === stageKey)?.label}`);
-    }
+    if (draggedTaskId) moveTask(draggedTaskId, stageKey);
     setDraggedTaskId(null);
     setDragOverStage(null);
   };
@@ -236,8 +235,7 @@ const TasksTab = () => {
     setDragOverStage(null);
   };
 
-  // Check if due date is overdue
-  const isOverdue = (dueDate: string) => {
+  const isOverdue = (dueDate?: string) => {
     if (!dueDate) return false;
     return new Date(dueDate) < new Date();
   };
@@ -252,8 +250,8 @@ const TasksTab = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value='all'>All Assignees</SelectItem>
-              {mockEmployees.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
+              {allEmployees.map((e) => (
+                <SelectItem key={e._id} value={e._id}>
                   {e.fullName}
                 </SelectItem>
               ))}
@@ -289,107 +287,123 @@ const TasksTab = () => {
       </div>
 
       {/* Board View with Drag and Drop */}
-      <div className='grid gap-4 lg:grid-cols-3'>
-        {stages.map((stage) => {
-          const stageTasks = filteredTasks.filter((t) => t.stage === stage.key);
-          return (
-            <div
-              key={stage.key}
-              className={`space-y-3 rounded-lg p-3 transition-colors ${
-                dragOverStage === stage.key ? 'bg-primary/5 ring-2 ring-primary/20' : ''
-              }`}
-              onDragOver={(e) => handleDragOver(e, stage.key)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, stage.key)}
-            >
-              <div className='flex items-center justify-between'>
-                <div className='flex items-center gap-2'>
-                  <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} />
-                  <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-                    {stage.label}
-                  </span>
-                  <span className='flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground'>
-                    {stageTasks.length}
-                  </span>
+      {tasksLoading ? (
+        <div className='flex items-center justify-center py-12'>
+          <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+        </div>
+      ) : (
+        <div className='grid gap-4 lg:grid-cols-3'>
+          {stages.map((stage) => {
+            const stageTasks = filteredTasks.filter((t) => t.stage === stage.key);
+            return (
+              <div
+                key={stage.key}
+                className={`space-y-3 rounded-lg p-3 transition-colors ${
+                  dragOverStage === stage.key ? 'bg-primary/5 ring-2 ring-primary/20' : ''
+                }`}
+                onDragOver={(e) => handleDragOver(e, stage.key)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, stage.key)}
+              >
+                <div className='flex items-center justify-between'>
+                  <div className='flex items-center gap-2'>
+                    <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} />
+                    <span className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
+                      {stage.label}
+                    </span>
+                    <span className='flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground'>
+                      {stageTasks.length}
+                    </span>
+                  </div>
+                </div>
+                <div className='min-h-[80px] space-y-2'>
+                  {stageTasks.map((task) => {
+                    const p = priorityConfig[task.priority ?? 'medium'];
+                    const assigneeName = resolveAssigneeName(task.assigneeId, employeeMap);
+                    return (
+                      <motion.div
+                        key={task._id}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: draggedTaskId === task._id ? 0.5 : 1 }}
+                        draggable
+                        onDragStart={() => handleDragStart(task._id)}
+                        onDragEnd={handleDragEnd}
+                        className='cursor-grab active:cursor-grabbing'
+                      >
+                        <Card
+                          className={`border-l-4 ${stage.color} transition-all hover:shadow-md`}
+                          onClick={() => {
+                            setSelectedTaskId(task._id);
+                            setDetailTab('details');
+                          }}
+                        >
+                          <CardContent className='space-y-2 p-3'>
+                            <div className='flex items-start justify-between'>
+                              <p className='text-sm font-medium leading-tight'>{task.title}</p>
+                              <Badge
+                                variant='outline'
+                                className={`ml-2 shrink-0 text-[10px] ${p.class}`}
+                              >
+                                {p.label}
+                              </Badge>
+                            </div>
+                            <div className='flex items-center justify-between'>
+                              <div className='flex items-center gap-1.5'>
+                                {assigneeName ? (
+                                  <>
+                                    <div className='flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold'>
+                                      {assigneeName
+                                        .split(' ')
+                                        .map((n) => n[0])
+                                        .join('')}
+                                    </div>
+                                    <span className='text-[10px] text-muted-foreground'>
+                                      {assigneeName.split(' ')[0]}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className='text-[10px] text-muted-foreground'>
+                                    Unassigned
+                                  </span>
+                                )}
+                              </div>
+                              <div className='flex items-center gap-2 text-[10px] text-muted-foreground'>
+                                {task.comments.length > 0 && (
+                                  <span className='flex items-center gap-0.5'>
+                                    <MessageSquare size={10} /> {task.comments.length}
+                                  </span>
+                                )}
+                                {task.dueDate && (
+                                  <span
+                                    className={`flex items-center gap-0.5 ${
+                                      isOverdue(task.dueDate) && task.stage !== 'completed'
+                                        ? 'font-semibold text-destructive'
+                                        : ''
+                                    }`}
+                                  >
+                                    <CalendarDays size={10} />
+                                    {format(new Date(task.dueDate), 'MM/dd')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                  {stageTasks.length === 0 && (
+                    <div className='rounded-lg border-2 border-dashed border-border p-6 text-center text-xs text-muted-foreground'>
+                      No tasks
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className='space-y-2 min-h-[80px]'>
-                {stageTasks.map((task) => {
-                  const p = priorityConfig[task.priority];
-                  return (
-                    <motion.div
-                      key={task.id}
-                      layout
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: draggedTaskId === task.id ? 0.5 : 1 }}
-                      draggable
-                      onDragStart={() => handleDragStart(task.id)}
-                      onDragEnd={handleDragEnd}
-                      className='cursor-grab active:cursor-grabbing'
-                    >
-                      <Card
-                        className={`border-l-4 ${stage.color} transition-all hover:shadow-md`}
-                        onClick={() => {
-                          setShowDetail(task);
-                          setDetailTab('details');
-                        }}
-                      >
-                        <CardContent className='p-3 space-y-2'>
-                          <div className='flex items-start justify-between'>
-                            <p className='text-sm font-medium leading-tight'>{task.title}</p>
-                            <Badge
-                              variant='outline'
-                              className={`text-[10px] shrink-0 ml-2 ${p.class}`}
-                            >
-                              {p.label}
-                            </Badge>
-                          </div>
-                          <div className='flex items-center justify-between'>
-                            <div className='flex items-center gap-1.5'>
-                              <div className='flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold'>
-                                {task.assigneeName
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')}
-                              </div>
-                              <span className='text-[10px] text-muted-foreground'>
-                                {task.assigneeName.split(' ')[0]}
-                              </span>
-                            </div>
-                            <div className='flex items-center gap-2 text-[10px] text-muted-foreground'>
-                              {task.comments.length > 0 && (
-                                <span className='flex items-center gap-0.5'>
-                                  <MessageSquare size={10} /> {task.comments.length}
-                                </span>
-                              )}
-                              {task.dueDate && (
-                                <span
-                                  className={`flex items-center gap-0.5 ${
-                                    isOverdue(task.dueDate) && task.stage !== 'completed'
-                                      ? 'text-destructive font-semibold'
-                                      : ''
-                                  }`}
-                                >
-                                  <CalendarDays size={10} /> {task.dueDate.slice(5)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-                {stageTasks.length === 0 && (
-                  <div className='rounded-lg border-2 border-dashed border-border p-6 text-center text-xs text-muted-foreground'>
-                    No tasks
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Create Task Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -417,7 +431,7 @@ const TasksTab = () => {
             </div>
             <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
               <div>
-                <Label>Assignee *</Label>
+                <Label>Assignee</Label>
                 <Select
                   value={form.assigneeId}
                   onValueChange={(v) => setForm({ ...form, assigneeId: v })}
@@ -426,8 +440,8 @@ const TasksTab = () => {
                     <SelectValue placeholder='Assign to' />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockEmployees.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
+                    {allEmployees.map((e) => (
+                      <SelectItem key={e._id} value={e._id}>
                         {e.fullName}
                       </SelectItem>
                     ))}
@@ -438,7 +452,7 @@ const TasksTab = () => {
                 <Label>Priority</Label>
                 <Select
                   value={form.priority}
-                  onValueChange={(v) => setForm({ ...form, priority: v as Task['priority'] })}
+                  onValueChange={(v) => setForm({ ...form, priority: v as TaskPriority })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -489,7 +503,7 @@ const TasksTab = () => {
                 <Label>Stage</Label>
                 <Select
                   value={form.stage}
-                  onValueChange={(v) => setForm({ ...form, stage: v as Task['stage'] })}
+                  onValueChange={(v) => setForm({ ...form, stage: v as TaskStage })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -507,24 +521,26 @@ const TasksTab = () => {
             <Button variant='outline' onClick={() => setShowCreate(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate}>Create Task</Button>
+            <Button onClick={handleCreate} disabled={createTask.isPending}>
+              {createTask.isPending ? <Loader2 className='h-4 w-4 animate-spin' /> : 'Create Task'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Task Detail Dialog - ClickUp style two-column layout */}
-      <Dialog open={!!showDetail} onOpenChange={(open) => !open && setShowDetail(null)}>
+      {/* Task Detail Dialog */}
+      <Dialog open={!!selectedTaskId} onOpenChange={(open) => !open && setSelectedTaskId(null)}>
         <DialogContent className='flex h-[90dvh] max-w-[95vw] flex-col overflow-hidden p-0 sm:max-w-4xl'>
-          {showDetail && (
+          {selectedTask ? (
             <>
               <div className='flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-4'>
-                <h2 className='text-base font-semibold'>task_details</h2>
+                <DialogTitle className='text-base font-semibold'>task_details</DialogTitle>
               </div>
 
               <div className='flex flex-1 flex-col overflow-hidden lg:flex-row'>
                 {/* Left side - Task details */}
                 <div className='flex-1 space-y-5 overflow-y-auto border-b border-border p-4 lg:border-b-0 lg:border-r lg:p-6'>
-                  <h3 className='text-xl font-bold'>{showDetail.title}</h3>
+                  <h3 className='text-xl font-bold'>{selectedTask.title}</h3>
 
                   {/* Meta fields */}
                   <div className='rounded-lg border border-border p-4 space-y-3'>
@@ -532,8 +548,8 @@ const TasksTab = () => {
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>stage</span>
                         <Select
-                          value={showDetail.stage}
-                          onValueChange={(v) => moveTask(showDetail.id, v as Task['stage'])}
+                          value={selectedTask.stage}
+                          onValueChange={(v) => moveTask(selectedTask._id, v as TaskStage)}
                         >
                           <SelectTrigger className='h-7 w-[120px] text-xs'>
                             <SelectValue />
@@ -548,15 +564,21 @@ const TasksTab = () => {
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>assignee</span>
                         <div className='flex items-center gap-1.5'>
-                          <Avatar className='h-6 w-6'>
-                            <AvatarFallback className='text-[9px] bg-muted'>
-                              {showDetail.assigneeName
-                                .split(' ')
-                                .map((n) => n[0])
-                                .join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className='text-sm'>{showDetail.assigneeName}</span>
+                          {(() => {
+                            const name = resolveAssigneeName(selectedTask.assigneeId, employeeMap);
+                            return name ? (
+                              <>
+                                <Avatar className='h-6 w-6'>
+                                  <AvatarFallback className='text-[9px] bg-muted'>
+                                    {name.split(' ').map((n) => n[0]).join('')}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className='text-sm'>{name}</span>
+                              </>
+                            ) : (
+                              <span className='text-sm text-muted-foreground'>Unassigned</span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -564,21 +586,27 @@ const TasksTab = () => {
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>start_date</span>
                         <span className='flex items-center gap-1 text-sm'>
-                          <CalendarDays size={14} /> {showDetail.createdAt}
+                          <CalendarDays size={14} />
+                          {selectedTask.createdAt
+                            ? format(new Date(selectedTask.createdAt), 'yyyy-MM-dd')
+                            : '—'}
                         </span>
                       </div>
                       <div className='flex items-center gap-3'>
                         <span className='text-sm text-muted-foreground'>due_date</span>
                         <span
                           className={`flex items-center gap-1 text-sm ${
-                            isOverdue(showDetail.dueDate) && showDetail.stage !== 'completed'
-                              ? 'text-destructive font-semibold'
+                            isOverdue(selectedTask.dueDate) && selectedTask.stage !== 'completed'
+                              ? 'font-semibold text-destructive'
                               : ''
                           }`}
                         >
-                          <CalendarDays size={14} /> {showDetail.dueDate || '—'}
+                          <CalendarDays size={14} />
+                          {selectedTask.dueDate
+                            ? format(new Date(selectedTask.dueDate), 'yyyy-MM-dd')
+                            : '—'}
                         </span>
-                        {isOverdue(showDetail.dueDate) && showDetail.stage !== 'completed' && (
+                        {isOverdue(selectedTask.dueDate) && selectedTask.stage !== 'completed' && (
                           <Badge
                             variant='outline'
                             className='text-[10px] bg-destructive/10 text-destructive border-destructive/30'
@@ -594,28 +622,23 @@ const TasksTab = () => {
                         <Flag
                           size={14}
                           className={
-                            showDetail.priority === 'urgent'
+                            selectedTask.priority === 'urgent'
                               ? 'text-destructive'
-                              : showDetail.priority === 'high'
-                              ? 'text-amber-500'
-                              : 'text-primary'
+                              : selectedTask.priority === 'high'
+                                ? 'text-amber-500'
+                                : 'text-primary'
                           }
                         />
                         <Select
-                          value={showDetail.priority}
-                          onValueChange={(v) => {
-                            const newPriority = v as Task['priority'];
-                            setTasks((prev) =>
-                              prev.map((t) =>
-                                t.id === showDetail.id ? { ...t, priority: newPriority } : t
-                              )
-                            );
-                            setShowDetail((prev) =>
-                              prev ? { ...prev, priority: newPriority } : null
-                            );
-                          }}
+                          value={selectedTask.priority ?? 'medium'}
+                          onValueChange={(v) =>
+                            updateTask.mutate({
+                              id: selectedTask._id,
+                              input: { priority: v as TaskPriority },
+                            })
+                          }
                         >
-                          <SelectTrigger className='h-7 w-[110px] text-xs border-none p-0'>
+                          <SelectTrigger className='h-7 w-[110px] border-none p-0 text-xs'>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -634,11 +657,11 @@ const TasksTab = () => {
                     <div className='flex items-center justify-between mb-2'>
                       <span className='text-sm font-semibold'>description</span>
                       <span className='text-xs text-muted-foreground'>
-                        {showDetail.description?.length || 0}/100
+                        {selectedTask.description?.length ?? 0}/100
                       </span>
                     </div>
                     <div className='rounded-lg border border-border bg-muted/30 p-3 min-h-[40px]'>
-                      <p className='text-sm'>{showDetail.description || ''}</p>
+                      <p className='text-sm'>{selectedTask.description ?? ''}</p>
                     </div>
                   </div>
 
@@ -672,13 +695,15 @@ const TasksTab = () => {
 
                     <TabsContent value='subtasks' className='mt-3 space-y-2'>
                       <p className='text-xs text-muted-foreground mb-2'>
-                        {showDetail.subtasks.filter((s) => s.completed).length}/
-                        {showDetail.subtasks.length} completed
+                        {selectedTask.subtasks.filter((s) => s.completed).length}/
+                        {selectedTask.subtasks.length} completed
                       </p>
-                      {showDetail.subtasks.map((st) => (
+                      {selectedTask.subtasks.map((st) => (
                         <button
-                          key={st.id}
-                          onClick={() => toggleSubtask(showDetail.id, st.id)}
+                          key={st._id}
+                          onClick={() =>
+                            handleToggleSubtask(selectedTask._id, st._id, st.completed)
+                          }
                           className='flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50'
                         >
                           {st.completed ? (
@@ -699,22 +724,27 @@ const TasksTab = () => {
                           onChange={(e) => setNewSubtask(e.target.value)}
                           placeholder='Add subtask...'
                           className='h-8 text-xs'
-                          onKeyDown={(e) => e.key === 'Enter' && addSubtask()}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
                         />
                         <Button
                           size='sm'
                           variant='outline'
                           className='h-8 shrink-0'
-                          onClick={addSubtask}
+                          onClick={handleAddSubtask}
+                          disabled={addSubtaskMutation.isPending}
                         >
-                          <Plus size={12} />
+                          {addSubtaskMutation.isPending ? (
+                            <Loader2 size={12} className='animate-spin' />
+                          ) : (
+                            <Plus size={12} />
+                          )}
                         </Button>
                       </div>
                     </TabsContent>
                   </Tabs>
                 </div>
 
-                {/* Right side - Activity / Comments timeline */}
+                {/* Right side - Activity timeline */}
                 <div className='flex h-[42dvh] flex-col bg-muted/20 lg:h-auto lg:w-[380px]'>
                   <div className='px-4 py-3 border-b border-border'>
                     <h4 className='text-sm font-bold'>activity</h4>
@@ -722,52 +752,46 @@ const TasksTab = () => {
 
                   <ScrollArea className='flex-1 p-4'>
                     <div className='space-y-4'>
-                      {/* Timeline */}
-                      {showDetail.comments.length === 0 && (
-                        <p className='text-xs text-muted-foreground text-center py-8'>
+                      {activitiesLoading ? (
+                        <div className='flex items-center justify-center py-8'>
+                          <Loader2 className='h-5 w-5 animate-spin text-muted-foreground' />
+                        </div>
+                      ) : activities.length === 0 ? (
+                        <p className='py-8 text-center text-xs text-muted-foreground'>
                           No activity yet.
                         </p>
+                      ) : (
+                        activities.map((activity, i) => (
+                          <div key={activity._id} className='relative'>
+                            {i < activities.length - 1 && (
+                              <div className='absolute left-4 top-10 bottom-0 w-px bg-border' />
+                            )}
+                            <div className='flex items-start gap-3'>
+                              <div className='w-full text-center text-[10px] text-muted-foreground whitespace-nowrap pt-1 mb-1'>
+                                {format(new Date(activity.createdAt), 'MMM d, yyyy h:mm a')}
+                              </div>
+                            </div>
+                            <div className='flex items-start gap-3 mt-1'>
+                              <Avatar className='h-7 w-7 shrink-0'>
+                                <AvatarFallback className='text-[9px] bg-primary/20 text-primary font-bold'>
+                                  {activity.actorName
+                                    .split(' ')
+                                    .map((n) => n[0])
+                                    .join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className='flex-1 rounded-lg border border-border bg-card p-3'>
+                                <span className='text-xs font-bold'>{activity.actorName}</span>
+                                <p className='mt-1 text-sm'>
+                                  {activity.type === 'comment_added'
+                                    ? (activity.metadata?.content ?? activity.description)
+                                    : activity.description}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
                       )}
-                      {showDetail.comments.map((c, i) => (
-                        <div key={c.id} className='relative'>
-                          {/* Timeline line */}
-                          {i < showDetail.comments.length - 1 && (
-                            <div className='absolute left-4 top-10 bottom-0 w-px bg-border' />
-                          )}
-                          <div className='flex items-start gap-3'>
-                            <div className='text-[10px] text-muted-foreground whitespace-nowrap pt-1 w-full text-center mb-1'>
-                              {c.time}
-                            </div>
-                          </div>
-                          <div className='flex items-start gap-3 mt-1'>
-                            <Avatar className='h-7 w-7 shrink-0'>
-                              <AvatarFallback className='text-[9px] bg-primary/20 text-primary font-bold'>
-                                {c.author
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className='flex-1 rounded-lg border border-border bg-card p-3'>
-                              <div className='flex items-center justify-between mb-1'>
-                                <span className='text-xs font-bold'>{c.author}</span>
-                                <button className='text-muted-foreground hover:text-foreground'>
-                                  <MoreHorizontal size={14} />
-                                </button>
-                              </div>
-                              <p className='text-sm'>{c.content}</p>
-                              <div className='flex items-center justify-between mt-2'>
-                                <button className='text-muted-foreground hover:text-foreground'>
-                                  <Smile size={14} />
-                                </button>
-                                <span className='text-[10px] text-primary cursor-pointer hover:underline'>
-                                  0 replies
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </ScrollArea>
 
@@ -778,10 +802,10 @@ const TasksTab = () => {
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder='write_a_comment'
-                        className='border-none bg-transparent p-0 h-6 text-sm focus-visible:ring-0 shadow-none'
-                        onKeyDown={(e) => e.key === 'Enter' && addComment()}
+                        className='h-6 border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0'
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
                       />
-                      <div className='flex items-center justify-between mt-2'>
+                      <div className='mt-2 flex items-center justify-between'>
                         <div className='flex items-center gap-2'>
                           <button className='text-muted-foreground hover:text-foreground'>
                             <Smile size={16} />
@@ -790,8 +814,17 @@ const TasksTab = () => {
                             <Paperclip size={16} />
                           </button>
                         </div>
-                        <Button size='sm' className='h-7 w-7 rounded-full p-0' onClick={addComment}>
-                          <Send size={12} />
+                        <Button
+                          size='sm'
+                          className='h-7 w-7 rounded-full p-0'
+                          onClick={handleAddComment}
+                          disabled={addCommentMutation.isPending}
+                        >
+                          {addCommentMutation.isPending ? (
+                            <Loader2 size={12} className='animate-spin' />
+                          ) : (
+                            <Send size={12} />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -799,6 +832,10 @@ const TasksTab = () => {
                 </div>
               </div>
             </>
+          ) : (
+            <div className='flex flex-1 items-center justify-center'>
+              <Loader2 className='h-6 w-6 animate-spin text-muted-foreground' />
+            </div>
           )}
         </DialogContent>
       </Dialog>
