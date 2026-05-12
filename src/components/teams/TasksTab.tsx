@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type DragEvent } from 'react';
+import { useState, useEffect, useRef, type DragEvent } from 'react';
 import { format, parse, isPast, isToday, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
@@ -11,11 +11,10 @@ import {
   Square,
   Flag,
   Send,
-  Upload,
-  Paperclip,
-  Smile,
   CalendarIcon,
   Loader2,
+  Paperclip,
+  X,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,8 +36,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -76,6 +75,14 @@ const stages = [
   },
 ];
 
+interface LocalAttachment {
+  id: string;
+  name: string;
+  size: number;
+  url: string;
+  type: string;
+}
+
 function resolveAssigneeName(
   assigneeId: string | { _id: string; fullName: string } | undefined,
   employeeMap: Map<string, string>
@@ -83,6 +90,20 @@ function resolveAssigneeName(
   if (!assigneeId) return null;
   if (typeof assigneeId === 'object') return assigneeId.fullName;
   return employeeMap.get(assigneeId) ?? null;
+}
+
+function resolveAssigneeId(
+  assigneeId: string | { _id: string; fullName: string } | undefined
+): string {
+  if (!assigneeId) return '';
+  if (typeof assigneeId === 'object') return assigneeId._id;
+  return assigneeId;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const priorityConfig: Record<TaskPriority, { label: string; class: string }> = {
@@ -102,7 +123,20 @@ const TasksTab = () => {
   const [newSubtask, setNewSubtask] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'details' | 'subtasks'>('details');
+  const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setAttachments((prev) => {
+      prev.forEach((f) => URL.revokeObjectURL(f.url));
+      return [];
+    });
+    setFileDragOver(false);
+    setNewComment('');
+    setNewSubtask('');
+  }, [selectedTaskId]);
+
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -129,7 +163,9 @@ const TasksTab = () => {
   const activities = activitiesData?.data ?? [];
 
   const employeeMap = new Map(allEmployees.map((e) => [e._id, e.fullName]));
-  const selectedTask = selectedTaskId ? (allTasks.find((t) => t._id === selectedTaskId) ?? null) : null;
+  const selectedTask = selectedTaskId
+    ? allTasks.find((t) => t._id === selectedTaskId) ?? null
+    : null;
 
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
@@ -142,7 +178,8 @@ const TasksTab = () => {
       if (!t.dueDate) return filterDueDate === 'none';
       const due = new Date(t.dueDate);
       const now = new Date();
-      if (filterDueDate === 'overdue') return isPast(due) && !isToday(due) && t.stage !== 'completed';
+      if (filterDueDate === 'overdue')
+        return isPast(due) && !isToday(due) && t.stage !== 'completed';
       if (filterDueDate === 'today') return isToday(due);
       if (filterDueDate === 'this_week')
         return isWithinInterval(due, { start: startOfWeek(now), end: endOfWeek(now) });
@@ -165,7 +202,14 @@ const TasksTab = () => {
     };
     createTask.mutate(input, {
       onSuccess: () => {
-        setForm({ title: '', description: '', assigneeId: '', priority: 'medium', dueDate: '', stage: 'todo' });
+        setForm({
+          title: '',
+          description: '',
+          assigneeId: '',
+          priority: 'medium',
+          dueDate: '',
+          stage: 'todo',
+        });
         setShowCreate(false);
         toast.success('Task created!');
       },
@@ -233,6 +277,26 @@ const TasksTab = () => {
   const handleDragEnd = () => {
     setDraggedTaskId(null);
     setDragOverStage(null);
+  };
+
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newFiles: LocalAttachment[] = Array.from(files).map((file) => ({
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: file.name,
+      size: file.size,
+      url: URL.createObjectURL(file),
+      type: file.type,
+    }));
+    setAttachments((prev) => [...prev, ...newFiles]);
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => {
+      const file = prev.find((f) => f.id === id);
+      if (file) URL.revokeObjectURL(file.url);
+      return prev.filter((f) => f.id !== id);
+    });
   };
 
   const isOverdue = (dueDate?: string) => {
@@ -333,10 +397,7 @@ const TasksTab = () => {
                       >
                         <Card
                           className={`border-l-4 ${stage.color} transition-all hover:shadow-md`}
-                          onClick={() => {
-                            setSelectedTaskId(task._id);
-                            setDetailTab('details');
-                          }}
+                          onClick={() => setSelectedTaskId(task._id)}
                         >
                           <CardContent className='space-y-2 p-3'>
                             <div className='flex items-start justify-between'>
@@ -530,103 +591,129 @@ const TasksTab = () => {
 
       {/* Task Detail Dialog */}
       <Dialog open={!!selectedTaskId} onOpenChange={(open) => !open && setSelectedTaskId(null)}>
-        <DialogContent className='flex h-[90dvh] max-w-[95vw] flex-col overflow-hidden p-0 sm:max-w-4xl'>
+        <DialogContent className='flex h-[90dvh] max-w-[95vw] flex-col overflow-hidden p-0 sm:max-w-5xl'>
           {selectedTask ? (
             <>
-              <div className='flex items-center justify-between border-b border-border px-4 py-3 sm:px-6 sm:py-4'>
-                <DialogTitle className='text-base font-semibold'>task_details</DialogTitle>
+              {/* Header */}
+              <div className='flex items-center border-b border-border px-5 py-3.5 sm:px-6'>
+                <DialogTitle className='text-sm font-medium text-muted-foreground'>
+                  Task Details
+                </DialogTitle>
               </div>
 
               <div className='flex flex-1 flex-col overflow-hidden lg:flex-row'>
-                {/* Left side - Task details */}
-                <div className='flex-1 space-y-5 overflow-y-auto border-b border-border p-4 lg:border-b-0 lg:border-r lg:p-6'>
-                  <h3 className='text-xl font-bold'>{selectedTask.title}</h3>
+                {/* Left column */}
+                <div className='flex-1 space-y-5 overflow-y-auto border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6'>
+                  {/* Title */}
+                  <h3 className='text-xl font-bold leading-snug'>{selectedTask.title}</h3>
 
-                  {/* Meta fields */}
-                  <div className='rounded-lg border border-border p-4 space-y-3'>
-                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-                      <div className='flex items-center gap-3'>
-                        <span className='text-sm text-muted-foreground'>stage</span>
-                        <Select
-                          value={selectedTask.stage}
-                          onValueChange={(v) => moveTask(selectedTask._id, v as TaskStage)}
-                        >
-                          <SelectTrigger className='h-7 w-[120px] text-xs'>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value='todo'>to do</SelectItem>
-                            <SelectItem value='in_progress'>in progress</SelectItem>
-                            <SelectItem value='completed'>completed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className='flex items-center gap-3'>
-                        <span className='text-sm text-muted-foreground'>assignee</span>
-                        <div className='flex items-center gap-1.5'>
-                          {(() => {
-                            const name = resolveAssigneeName(selectedTask.assigneeId, employeeMap);
-                            return name ? (
-                              <>
-                                <Avatar className='h-6 w-6'>
-                                  <AvatarFallback className='text-[9px] bg-muted'>
-                                    {name.split(' ').map((n) => n[0]).join('')}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className='text-sm'>{name}</span>
-                              </>
-                            ) : (
-                              <span className='text-sm text-muted-foreground'>Unassigned</span>
-                            );
-                          })()}
-                        </div>
-                      </div>
+                  {/* Properties */}
+                  <div className='grid grid-cols-2 gap-x-6 gap-y-3'>
+                    {/* Stage */}
+                    <div className='flex items-center gap-2'>
+                      <span className='w-20 shrink-0 text-xs text-muted-foreground'>Stage</span>
+                      <Select
+                        value={selectedTask.stage}
+                        onValueChange={(v) => moveTask(selectedTask._id, v as TaskStage)}
+                      >
+                        <SelectTrigger className='h-7 text-xs'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value='todo'>To Do</SelectItem>
+                          <SelectItem value='in_progress'>In Progress</SelectItem>
+                          <SelectItem value='completed'>Completed</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-                      <div className='flex items-center gap-3'>
-                        <span className='text-sm text-muted-foreground'>start_date</span>
-                        <span className='flex items-center gap-1 text-sm'>
-                          <CalendarDays size={14} />
-                          {selectedTask.createdAt
-                            ? format(new Date(selectedTask.createdAt), 'yyyy-MM-dd')
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className='flex items-center gap-3'>
-                        <span className='text-sm text-muted-foreground'>due_date</span>
-                        <span
-                          className={`flex items-center gap-1 text-sm ${
-                            isOverdue(selectedTask.dueDate) && selectedTask.stage !== 'completed'
-                              ? 'font-semibold text-destructive'
-                              : ''
-                          }`}
-                        >
-                          <CalendarDays size={14} />
-                          {selectedTask.dueDate
-                            ? format(new Date(selectedTask.dueDate), 'yyyy-MM-dd')
-                            : '—'}
-                        </span>
-                        {isOverdue(selectedTask.dueDate) && selectedTask.stage !== 'completed' && (
-                          <Badge
+
+                    {/* Assignee — editable */}
+                    <div className='flex items-center gap-2'>
+                      <span className='w-20 shrink-0 text-xs text-muted-foreground'>Assignee</span>
+                      <Select
+                        value={resolveAssigneeId(selectedTask.assigneeId)}
+                        onValueChange={(v) =>
+                          v &&
+                          updateTask.mutate({
+                            id: selectedTask._id,
+                            input: { assigneeId: v },
+                          })
+                        }
+                      >
+                        <SelectTrigger className='h-7 text-xs'>
+                          <SelectValue placeholder='Unassigned' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allEmployees.map((e) => (
+                            <SelectItem key={e._id} value={e._id}>
+                              {e.fullName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Due Date — editable */}
+                    <div className='flex items-center gap-2'>
+                      <span className='w-20 shrink-0 text-xs text-muted-foreground'>Due Date</span>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
                             variant='outline'
-                            className='text-[10px] bg-destructive/10 text-destructive border-destructive/30'
+                            size='sm'
+                            className={cn(
+                              'h-7 gap-1 text-xs font-normal',
+                              isOverdue(selectedTask.dueDate) &&
+                                selectedTask.stage !== 'completed' &&
+                                'border-destructive/50 text-destructive hover:text-destructive'
+                            )}
                           >
-                            overdue
-                          </Badge>
-                        )}
-                      </div>
+                            <CalendarDays size={11} />
+                            {selectedTask.dueDate
+                              ? format(new Date(selectedTask.dueDate), 'MMM d, yyyy')
+                              : 'Not set'}
+                            {isOverdue(selectedTask.dueDate) &&
+                              selectedTask.stage !== 'completed' && (
+                                <Badge
+                                  variant='outline'
+                                  className='border-destructive/30 bg-destructive/10 py-0 text-[9px] text-destructive'
+                                >
+                                  Overdue
+                                </Badge>
+                              )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className='w-auto p-0' align='start'>
+                          <Calendar
+                            mode='single'
+                            selected={
+                              selectedTask.dueDate ? new Date(selectedTask.dueDate) : undefined
+                            }
+                            onSelect={(d) =>
+                              d &&
+                              updateTask.mutate({
+                                id: selectedTask._id,
+                                input: { dueDate: format(d, 'yyyy-MM-dd') },
+                              })
+                            }
+                            className={cn('p-3 pointer-events-auto')}
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
-                    <div className='flex items-center gap-3'>
-                      <span className='text-sm text-muted-foreground'>priority</span>
-                      <div className='flex items-center gap-1.5'>
+
+                    {/* Priority */}
+                    <div className='flex items-center gap-2'>
+                      <span className='w-20 shrink-0 text-xs text-muted-foreground'>Priority</span>
+                      <div className='flex items-center gap-1'>
                         <Flag
-                          size={14}
+                          size={12}
                           className={
                             selectedTask.priority === 'urgent'
                               ? 'text-destructive'
                               : selectedTask.priority === 'high'
-                                ? 'text-amber-500'
-                                : 'text-primary'
+                              ? 'text-amber-500'
+                              : 'text-primary'
                           }
                         />
                         <Select
@@ -638,119 +725,209 @@ const TasksTab = () => {
                             })
                           }
                         >
-                          <SelectTrigger className='h-7 w-[110px] border-none p-0 text-xs'>
+                          <SelectTrigger className='h-7 border-none p-0 text-xs shadow-none focus:ring-0'>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value='low'>low</SelectItem>
-                            <SelectItem value='medium'>medium</SelectItem>
-                            <SelectItem value='high'>high</SelectItem>
-                            <SelectItem value='urgent'>urgent</SelectItem>
+                            <SelectItem value='low'>Low</SelectItem>
+                            <SelectItem value='medium'>Medium</SelectItem>
+                            <SelectItem value='high'>High</SelectItem>
+                            <SelectItem value='urgent'>Urgent</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
                   </div>
 
-                  {/* Description */}
-                  <div>
-                    <div className='flex items-center justify-between mb-2'>
-                      <span className='text-sm font-semibold'>description</span>
-                      <span className='text-xs text-muted-foreground'>
-                        {selectedTask.description?.length ?? 0}/100
-                      </span>
+                  <Separator />
+
+                  {/* Description — auto-saves on blur */}
+                  <div className='space-y-1.5'>
+                    <span className='text-sm font-semibold'>Description</span>
+                    <Textarea
+                      key={selectedTask._id}
+                      defaultValue={selectedTask.description ?? ''}
+                      placeholder='Add a description...'
+                      className='min-h-[80px] resize-none text-sm'
+                      onBlur={(e) => {
+                        const trimmed = e.target.value.trim();
+                        if (trimmed !== (selectedTask.description ?? '').trim()) {
+                          updateTask.mutate({
+                            id: selectedTask._id,
+                            input: { description: trimmed || undefined },
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* Subtasks */}
+                  <div className='space-y-3'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-semibold'>Subtasks</span>
+                      {selectedTask.subtasks.length > 0 && (
+                        <span className='text-xs text-muted-foreground'>
+                          {selectedTask.subtasks.filter((s) => s.completed).length} /{' '}
+                          {selectedTask.subtasks.length} completed
+                        </span>
+                      )}
                     </div>
-                    <div className='rounded-lg border border-border bg-muted/30 p-3 min-h-[40px]'>
-                      <p className='text-sm'>{selectedTask.description ?? ''}</p>
+                    {selectedTask.subtasks.length > 0 && (
+                      <div className='space-y-1'>
+                        {selectedTask.subtasks.map((st) => (
+                          <button
+                            key={st._id}
+                            onClick={() =>
+                              handleToggleSubtask(selectedTask._id, st._id, st.completed)
+                            }
+                            className='flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/50'
+                          >
+                            {st.completed ? (
+                              <CheckSquare size={14} className='shrink-0 text-emerald-500' />
+                            ) : (
+                              <Square size={14} className='shrink-0 text-muted-foreground' />
+                            )}
+                            <span
+                              className={st.completed ? 'text-muted-foreground line-through' : ''}
+                            >
+                              {st.title}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className='flex gap-2'>
+                      <Input
+                        value={newSubtask}
+                        onChange={(e) => setNewSubtask(e.target.value)}
+                        placeholder='Add a subtask...'
+                        className='h-8 text-xs'
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                      />
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='h-8 shrink-0'
+                        onClick={handleAddSubtask}
+                        disabled={addSubtaskMutation.isPending}
+                      >
+                        {addSubtaskMutation.isPending ? (
+                          <Loader2 size={12} className='animate-spin' />
+                        ) : (
+                          <Plus size={12} />
+                        )}
+                      </Button>
                     </div>
                   </div>
 
-                  {/* Tabs: details / subtasks */}
-                  <Tabs
-                    value={detailTab}
-                    onValueChange={(v) => setDetailTab(v as 'details' | 'subtasks')}
-                  >
-                    <TabsList className='h-8'>
-                      <TabsTrigger value='details' className='text-xs'>
-                        details
-                      </TabsTrigger>
-                      <TabsTrigger value='subtasks' className='text-xs'>
-                        subtasks
-                      </TabsTrigger>
-                    </TabsList>
+                  <Separator />
 
-                    <TabsContent value='details' className='mt-3 space-y-3'>
-                      <div>
-                        <span className='text-sm font-semibold'>attachments</span>
-                        <div className='mt-2 rounded-lg border-2 border-dashed border-border p-8 text-center'>
-                          <Upload size={24} className='mx-auto mb-2 text-muted-foreground' />
-                          <p className='text-sm text-muted-foreground'>drag_and_drop_file_here</p>
-                          <p className='text-xs text-muted-foreground my-1'>or</p>
-                          <Button variant='outline' size='sm' className='text-xs'>
-                            browse_file
-                          </Button>
+                  {/* Attachments */}
+                  <div className='space-y-3'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-semibold'>Attachments</span>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        className='h-7 gap-1.5 text-xs'
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Paperclip size={12} /> Attach
+                      </Button>
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type='file'
+                      multiple
+                      className='hidden'
+                      onChange={(e) => {
+                        handleFileSelect(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+
+                    {attachments.length === 0 ? (
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setFileDragOver(true);
+                        }}
+                        onDragLeave={(e) => {
+                          e.stopPropagation();
+                          setFileDragOver(false);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setFileDragOver(false);
+                          handleFileSelect(e.dataTransfer.files);
+                        }}
+                        className={cn(
+                          'rounded-lg border-2 border-dashed p-5 text-center text-xs text-muted-foreground transition-colors',
+                          fileDragOver ? 'border-primary bg-primary/5' : 'border-border'
+                        )}
+                      >
+                        Drop files here or click Attach
+                      </div>
+                    ) : (
+                      <div className='space-y-2'>
+                        <div
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFileDragOver(true);
+                          }}
+                          onDragLeave={(e) => {
+                            e.stopPropagation();
+                            setFileDragOver(false);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setFileDragOver(false);
+                            handleFileSelect(e.dataTransfer.files);
+                          }}
+                          className={cn(
+                            'rounded-md border border-dashed p-2 text-center text-[10px] text-muted-foreground transition-colors',
+                            fileDragOver ? 'border-primary bg-primary/5' : 'border-border/60'
+                          )}
+                        >
+                          Drop more files here
                         </div>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value='subtasks' className='mt-3 space-y-2'>
-                      <p className='text-xs text-muted-foreground mb-2'>
-                        {selectedTask.subtasks.filter((s) => s.completed).length}/
-                        {selectedTask.subtasks.length} completed
-                      </p>
-                      {selectedTask.subtasks.map((st) => (
-                        <button
-                          key={st._id}
-                          onClick={() =>
-                            handleToggleSubtask(selectedTask._id, st._id, st.completed)
-                          }
-                          className='flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50'
-                        >
-                          {st.completed ? (
-                            <CheckSquare size={14} className='text-emerald-500' />
-                          ) : (
-                            <Square size={14} className='text-muted-foreground' />
-                          )}
-                          <span
-                            className={st.completed ? 'text-muted-foreground line-through' : ''}
+                        {attachments.map((file) => (
+                          <div
+                            key={file.id}
+                            className='flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2'
                           >
-                            {st.title}
-                          </span>
-                        </button>
-                      ))}
-                      <div className='flex gap-2 mt-2'>
-                        <Input
-                          value={newSubtask}
-                          onChange={(e) => setNewSubtask(e.target.value)}
-                          placeholder='Add subtask...'
-                          className='h-8 text-xs'
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
-                        />
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          className='h-8 shrink-0'
-                          onClick={handleAddSubtask}
-                          disabled={addSubtaskMutation.isPending}
-                        >
-                          {addSubtaskMutation.isPending ? (
-                            <Loader2 size={12} className='animate-spin' />
-                          ) : (
-                            <Plus size={12} />
-                          )}
-                        </Button>
+                            <Paperclip size={12} className='shrink-0 text-muted-foreground' />
+                            <span className='flex-1 truncate text-xs'>{file.name}</span>
+                            <span className='shrink-0 text-[10px] text-muted-foreground'>
+                              {formatFileSize(file.size)}
+                            </span>
+                            <button
+                              onClick={() => removeAttachment(file.id)}
+                              className='shrink-0 text-muted-foreground hover:text-foreground'
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    </TabsContent>
-                  </Tabs>
+                    )}
+                  </div>
                 </div>
 
-                {/* Right side - Activity timeline */}
-                <div className='flex h-[42dvh] flex-col bg-muted/20 lg:h-auto lg:w-[380px]'>
-                  <div className='px-4 py-3 border-b border-border'>
-                    <h4 className='text-sm font-bold'>activity</h4>
+                {/* Right column — Activity */}
+                <div className='flex h-[42dvh] flex-col bg-muted/20 lg:h-auto lg:w-[360px]'>
+                  <div className='border-b border-border px-4 py-3'>
+                    <h4 className='text-sm font-semibold'>Activity</h4>
                   </div>
 
-                  <ScrollArea className='flex-1 p-4'>
+                  <ScrollArea className='flex-1 px-4 py-3'>
                     <div className='space-y-4'>
                       {activitiesLoading ? (
                         <div className='flex items-center justify-center py-8'>
@@ -761,33 +938,30 @@ const TasksTab = () => {
                           No activity yet.
                         </p>
                       ) : (
-                        activities.map((activity, i) => (
-                          <div key={activity._id} className='relative'>
-                            {i < activities.length - 1 && (
-                              <div className='absolute left-4 top-10 bottom-0 w-px bg-border' />
-                            )}
-                            <div className='flex items-start gap-3'>
-                              <div className='w-full text-center text-[10px] text-muted-foreground whitespace-nowrap pt-1 mb-1'>
-                                {format(new Date(activity.createdAt), 'MMM d, yyyy h:mm a')}
+                        activities.map((activity) => (
+                          <div key={activity._id} className='flex items-start gap-3'>
+                            <Avatar className='mt-0.5 h-7 w-7 shrink-0'>
+                              <AvatarFallback className='bg-primary/20 text-[9px] font-bold text-primary'>
+                                {activity.actorName
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className='min-w-0 flex-1'>
+                              <div className='mb-0.5 flex items-baseline justify-between gap-2'>
+                                <span className='truncate text-xs font-semibold'>
+                                  {activity.actorName}
+                                </span>
+                                <span className='shrink-0 text-[10px] text-muted-foreground'>
+                                  {format(new Date(activity.createdAt), 'MMM d, h:mm a')}
+                                </span>
                               </div>
-                            </div>
-                            <div className='flex items-start gap-3 mt-1'>
-                              <Avatar className='h-7 w-7 shrink-0'>
-                                <AvatarFallback className='text-[9px] bg-primary/20 text-primary font-bold'>
-                                  {activity.actorName
-                                    .split(' ')
-                                    .map((n) => n[0])
-                                    .join('')}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className='flex-1 rounded-lg border border-border bg-card p-3'>
-                                <span className='text-xs font-bold'>{activity.actorName}</span>
-                                <p className='mt-1 text-sm'>
-                                  {activity.type === 'comment_added'
-                                    ? (activity.metadata?.content ?? activity.description)
-                                    : activity.description}
-                                </p>
-                              </div>
+                              <p className='text-sm leading-snug text-muted-foreground'>
+                                {activity.type === 'comment_added'
+                                  ? activity.metadata?.content ?? activity.description
+                                  : activity.description}
+                              </p>
                             </div>
                           </div>
                         ))
@@ -797,36 +971,26 @@ const TasksTab = () => {
 
                   {/* Comment input */}
                   <div className='border-t border-border p-3'>
-                    <div className='rounded-lg border border-border bg-card p-3'>
+                    <div className='flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2'>
                       <Input
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
-                        placeholder='write_a_comment'
-                        className='h-6 border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0'
+                        placeholder='Write a comment...'
+                        className='h-auto border-none bg-transparent p-2 text-sm shadow-none focus-visible:ring-0'
                         onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
                       />
-                      <div className='mt-2 flex items-center justify-between'>
-                        <div className='flex items-center gap-2'>
-                          <button className='text-muted-foreground hover:text-foreground'>
-                            <Smile size={16} />
-                          </button>
-                          <button className='text-muted-foreground hover:text-foreground'>
-                            <Paperclip size={16} />
-                          </button>
-                        </div>
-                        <Button
-                          size='sm'
-                          className='h-7 w-7 rounded-full p-0'
-                          onClick={handleAddComment}
-                          disabled={addCommentMutation.isPending}
-                        >
-                          {addCommentMutation.isPending ? (
-                            <Loader2 size={12} className='animate-spin' />
-                          ) : (
-                            <Send size={12} />
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        size='icon'
+                        className='h-7 w-7 shrink-0 rounded-full'
+                        onClick={handleAddComment}
+                        disabled={addCommentMutation.isPending}
+                      >
+                        {addCommentMutation.isPending ? (
+                          <Loader2 size={12} className='animate-spin' />
+                        ) : (
+                          <Send size={12} />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </div>
