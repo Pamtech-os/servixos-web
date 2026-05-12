@@ -41,7 +41,6 @@ export interface Task {
   createdAt: string;
   comments: TaskComment[];
   subtasks: Subtask[];
-  status: 'active' | 'closed';
 }
 
 export interface Subtask {
@@ -362,7 +361,6 @@ export const mockTasks: Task[] = [
     priority: 'high',
     dueDate: '2024-04-20',
     createdAt: '2024-04-10',
-    status: 'active',
     comments: [
       {
         id: 'tc1',
@@ -395,7 +393,6 @@ export const mockTasks: Task[] = [
     priority: 'urgent',
     dueDate: '2024-04-18',
     createdAt: '2024-04-12',
-    status: 'active',
     comments: [
       {
         id: 'tc3',
@@ -421,7 +418,6 @@ export const mockTasks: Task[] = [
     priority: 'medium',
     dueDate: '2024-04-25',
     createdAt: '2024-04-11',
-    status: 'active',
     comments: [],
     subtasks: [
       { id: 'st8', title: 'Design email templates', completed: false },
@@ -439,7 +435,6 @@ export const mockTasks: Task[] = [
     priority: 'low',
     dueDate: '2024-04-10',
     createdAt: '2024-04-01',
-    status: 'active',
     comments: [
       {
         id: 'tc4',
@@ -465,7 +460,6 @@ export const mockTasks: Task[] = [
     priority: 'high',
     dueDate: '2024-04-22',
     createdAt: '2024-04-08',
-    status: 'active',
     comments: [],
     subtasks: [
       { id: 'st13', title: 'Optimize database queries', completed: true },

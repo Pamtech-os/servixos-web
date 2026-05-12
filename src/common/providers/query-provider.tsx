@@ -1,16 +1,9 @@
 'use client';
 
-import {
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type PropsWithChildren } from 'react';
 import { toast } from '@/components/ui/sonner';
-import {
-  NetworkOfflineError,
-  RequestTimeoutError,
-} from '@/common/network/http-client';
+import { NetworkOfflineError } from '@/common/network/http-client';
 
 function createQueryClient() {
   return new QueryClient({
@@ -23,16 +16,16 @@ function createQueryClient() {
           return;
         }
 
-        if (error instanceof RequestTimeoutError) {
-          toast.error('Network timeout', {
-            description: 'The network is slow. Please try again in a moment.',
-          });
-          return;
-        }
+        // if (error instanceof RequestTimeoutError) {
+        //   toast.error('Network timeout', {
+        //     description: 'The network is slow. Please try again in a moment.',
+        //   });
+        //   return;
+        // }
 
-        toast.error('Something went wrong', {
-          description: 'We could not load fresh data. Please try again.',
-        });
+        // toast.error('Something went wrong', {
+        //   description: 'We could not load fresh data. Please try again.',
+        // });
       },
     }),
     defaultOptions: {
@@ -54,7 +47,5 @@ function createQueryClient() {
 export function AppQueryProvider({ children }: PropsWithChildren) {
   const [queryClient] = useState(createQueryClient);
 
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
