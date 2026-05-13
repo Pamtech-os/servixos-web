@@ -1,5 +1,7 @@
+'use client';
+
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Plus, Megaphone, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,16 +23,37 @@ import { useAnnouncements } from '@/hooks/queries/use-announcements';
 import { useCreateAnnouncement } from '@/hooks/mutations/use-announcements';
 import { useTeamMessages } from '@/hooks/queries/use-team-messages';
 import { useSendTeamMessage } from '@/hooks/mutations/use-team-messages';
-import { useTeamSocket } from '@/hooks/use-team-socket';
+import { useTeamSocket, type TypingUser } from '@/hooks/use-team-socket';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useQueryClient, useQuery, type InfiniteData } from '@tanstack/react-query';
 import type { TeamMessage } from '@/lib/api-client';
 import type { PaginationMeta } from '@/lib/pagination';
 
 type MessagePage = { data: TeamMessage[]; meta: PaginationMeta };
 
+const TYPING_DEBOUNCE_MS = 2000;
+
 const ANN_LIMIT = 4;
+
+// Animated bouncing dots for the typing indicator
+const TypingDots = () => (
+  <span className='flex items-end gap-[3px]'>
+    {[0, 160, 320].map((delay) => (
+      <span
+        key={delay}
+        className='h-1 w-1 rounded-full bg-current animate-bounce'
+        style={{ animationDelay: `${delay}ms` }}
+      />
+    ))}
+  </span>
+);
+
+function buildTypingLabel(users: TypingUser[]): string {
+  if (users.length === 1) return `${users[0].userName} is typing`;
+  if (users.length === 2) return `${users[0].userName} and ${users[1].userName} are typing`;
+  return `${users[0].userName} and ${users.length - 1} others are typing`;
+}
 
 const CommunicationsTab = () => {
   const { auth } = useAuth();
@@ -48,6 +71,10 @@ const CommunicationsTab = () => {
   const isInitialLoadRef = useRef(true);
   const seenMessageIds = useRef<Set<string>>(new Set());
 
+  // Typing emit state
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEmittingTypingRef = useRef(false);
+
   const {
     data: messagesData,
     isLoading: messagesLoading,
@@ -63,7 +90,26 @@ const CommunicationsTab = () => {
   });
   const sendMessage = useSendTeamMessage();
   const createAnnouncement = useCreateAnnouncement();
-  useTeamSocket(seenMessageIds);
+  const socketRef = useTeamSocket(seenMessageIds);
+
+  const currentUserId = auth.user?.id ?? '';
+  const currentUserName = auth.user
+    ? `${auth.user.firstName} ${auth.user.lastName}`.trim()
+    : '';
+  const businessId = auth.user?.businessId ?? '';
+
+  // Typing users from socket-maintained cache, excluding self
+  const { data: rawTypingUsers = [] } = useQuery<TypingUser[]>({
+    queryKey: ['team-typing', businessId],
+    queryFn: () => [],
+    initialData: [],
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchInterval: false,
+    enabled: false,
+  });
+  const typingUsers = rawTypingUsers.filter((u) => u.userId !== currentUserId);
+  const typingLabel = typingUsers.length > 0 ? buildTypingLabel(typingUsers) : null;
 
   // API returns messages ascending (oldest first); flatten pages in order
   const messageList: TeamMessage[] = useMemo(() => {
@@ -92,7 +138,6 @@ const CommunicationsTab = () => {
     if (!el || messagesLoading) return;
 
     if (prevScrollHeightRef.current > 0) {
-      // Preserve position after prepending older messages
       el.scrollTop = el.scrollHeight - prevScrollHeightRef.current;
       prevScrollHeightRef.current = 0;
     } else if (isInitialLoadRef.current && displayMessages.length > 0) {
@@ -102,6 +147,20 @@ const CommunicationsTab = () => {
       el.scrollTop = el.scrollHeight;
     }
   }, [displayMessages.length, messagesLoading]);
+
+  // Scroll to bottom when typing indicator appears/disappears
+  useEffect(() => {
+    if (!isNearBottomRef.current) return;
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [typingLabel]);
+
+  // Cleanup typing timer on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
+  }, []);
 
   const handleChatScroll = () => {
     const el = chatScrollRef.current;
@@ -113,14 +172,36 @@ const CommunicationsTab = () => {
     }
   };
 
-  const currentUserId = auth.user?.id ?? '';
-  const currentUserName = auth.user
-    ? `${auth.user.firstName} ${auth.user.lastName}`.trim()
-    : '';
+  const emitTypingStart = () => {
+    if (!socketRef.current) return;
+    if (!isEmittingTypingRef.current) {
+      isEmittingTypingRef.current = true;
+      socketRef.current.emit('typing', { userId: currentUserId, userName: currentUserName });
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      isEmittingTypingRef.current = false;
+      socketRef.current?.emit('stop_typing', { userId: currentUserId, userName: currentUserName });
+      typingTimerRef.current = null;
+    }, TYPING_DEBOUNCE_MS);
+  };
+
+  const emitTypingStop = () => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    if (isEmittingTypingRef.current) {
+      isEmittingTypingRef.current = false;
+      socketRef.current?.emit('stop_typing', { userId: currentUserId, userName: currentUserName });
+    }
+  };
 
   const handleSendMessage = () => {
     const content = chatInput.trim();
     if (!content) return;
+
+    emitTypingStop();
 
     const tempId = `optimistic-${Date.now()}`;
     const optimisticMsg: TeamMessage = {
@@ -135,14 +216,11 @@ const CommunicationsTab = () => {
     setChatInput('');
     setOptimisticMessages((prev) => [...prev, optimisticMsg]);
 
-    const businessId = auth.user?.businessId ?? '';
-
     sendMessage.mutate(
       { content },
       {
         onSettled: (data) => {
           setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
-          // If the socket hasn't delivered the real message yet, add it manually
           if (data && !seenMessageIds.current.has(data.id)) {
             seenMessageIds.current.add(data.id);
             queryClient.setQueryData<InfiniteData<MessagePage>>(
@@ -204,7 +282,6 @@ const CommunicationsTab = () => {
             onScroll={handleChatScroll}
             className='flex-1 space-y-3 overflow-y-auto pr-1'
           >
-            {/* Older-messages loader at top */}
             {isFetchingNextPage && (
               <div className='flex justify-center py-2'>
                 <Loader2 size={14} className='animate-spin text-muted-foreground' />
@@ -275,10 +352,34 @@ const CommunicationsTab = () => {
               })
             )}
           </div>
-          <div className='mt-3 flex gap-2'>
+
+          {/* Typing indicator */}
+          <AnimatePresence>
+            {typingLabel && (
+              <motion.div
+                key='typing-indicator'
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.15 }}
+                className='overflow-hidden'
+              >
+                <div className='flex items-center gap-1.5 px-1 pb-1 pt-1.5 text-[11px] text-muted-foreground'>
+                  <span>{typingLabel}</span>
+                  <TypingDots />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className='mt-2 flex gap-2'>
             <Input
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
+              onChange={(e) => {
+                setChatInput(e.target.value);
+                if (e.target.value.trim()) emitTypingStart();
+                else emitTypingStop();
+              }}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               placeholder='Type a message...'
               className='h-9 text-sm'
