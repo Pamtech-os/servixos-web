@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Plus, Megaphone } from 'lucide-react';
+import { Send, Plus, Megaphone, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,20 +14,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  mockTeamMessages,
-  mockAnnouncements,
-  TeamMessage,
-  Announcement,
-} from '@/lib/team-mock-data';
+import { mockTeamMessages, TeamMessage } from '@/lib/team-mock-data';
 import { toast } from '@/components/ui/sonner';
+import { useAnnouncements } from '@/hooks/queries/use-announcements';
+import { useCreateAnnouncement } from '@/hooks/mutations/use-announcements';
+import { getApiErrorMessage } from '@/common/network/http-client';
 
 const CommunicationsTab = () => {
   const [messages, setMessages] = useState<TeamMessage[]>(mockTeamMessages);
-  const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
   const [chatInput, setChatInput] = useState('');
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [annForm, setAnnForm] = useState({ title: '', description: '' });
+
+  const { data: announcementsData, isLoading: announcementsLoading } = useAnnouncements();
+  const createAnnouncement = useCreateAnnouncement();
 
   const sendChat = () => {
     if (!chatInput.trim()) return;
@@ -42,23 +42,31 @@ const CommunicationsTab = () => {
     setChatInput('');
   };
 
-  const createAnnouncement = () => {
-    if (!annForm.title) {
+  const handleCreateAnnouncement = () => {
+    if (!annForm.title.trim()) {
       toast.error('Title is required.');
       return;
     }
-    const ann: Announcement = {
-      id: `a${Date.now()}`,
-      title: annForm.title,
-      description: annForm.description,
-      author: 'Business Owner',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setAnnouncements((prev) => [ann, ...prev]);
-    setAnnForm({ title: '', description: '' });
-    setShowAnnouncement(false);
-    toast.success('Announcement posted!');
+    if (!annForm.description.trim()) {
+      toast.error('Description is required.');
+      return;
+    }
+    createAnnouncement.mutate(
+      { title: annForm.title.trim(), description: annForm.description.trim() },
+      {
+        onSuccess: () => {
+          setAnnForm({ title: '', description: '' });
+          setShowAnnouncement(false);
+          toast.success('Announcement posted!');
+        },
+        onError: (err) => {
+          toast.error(getApiErrorMessage(err));
+        },
+      }
+    );
   };
+
+  const announcementList = announcementsData?.data ?? [];
 
   return (
     <div className='mt-4 grid gap-6 lg:grid-cols-2'>
@@ -133,32 +141,44 @@ const CommunicationsTab = () => {
           </Button>
         </div>
         <div className='space-y-3'>
-          {announcements.map((ann, i) => (
-            <motion.div
-              key={ann.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-            >
-              <Card>
-                <CardContent className='p-4'>
-                  <div className='flex items-start gap-3'>
-                    <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10'>
-                      <Megaphone size={14} className='text-primary' />
-                    </div>
-                    <div className='flex-1'>
-                      <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
-                        <p className='text-sm font-semibold'>{ann.title}</p>
-                        <span className='text-[10px] text-muted-foreground'>{ann.createdAt}</span>
+          {announcementsLoading ? (
+            <div className='flex items-center justify-center py-8'>
+              <Loader2 size={20} className='animate-spin text-muted-foreground' />
+            </div>
+          ) : announcementList.length === 0 ? (
+            <p className='py-8 text-center text-sm text-muted-foreground'>No announcements yet.</p>
+          ) : (
+            announcementList.map((ann, i) => (
+              <motion.div
+                key={ann._id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <Card>
+                  <CardContent className='p-4'>
+                    <div className='flex items-start gap-3'>
+                      <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10'>
+                        <Megaphone size={14} className='text-primary' />
                       </div>
-                      <p className='mt-1 text-sm text-muted-foreground'>{ann.description}</p>
-                      <p className='mt-2 text-[10px] text-muted-foreground'>— {ann.author}</p>
+                      <div className='flex-1'>
+                        <div className='flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between'>
+                          <p className='text-sm font-semibold'>{ann.title}</p>
+                          <span className='text-[10px] text-muted-foreground'>
+                            {new Date(ann.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className='mt-1 text-sm text-muted-foreground'>{ann.description}</p>
+                        <p className='mt-2 text-[10px] text-muted-foreground'>
+                          — {ann.authorName}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+          )}
         </div>
       </div>
 
@@ -175,23 +195,32 @@ const CommunicationsTab = () => {
                 value={annForm.title}
                 onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
                 placeholder='Announcement title'
+                maxLength={200}
               />
             </div>
             <div>
-              <Label>Description</Label>
+              <Label>Description *</Label>
               <Textarea
                 value={annForm.description}
                 onChange={(e) => setAnnForm({ ...annForm, description: e.target.value })}
                 placeholder='Details...'
                 rows={4}
+                maxLength={5000}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant='outline' onClick={() => setShowAnnouncement(false)}>
+            <Button
+              variant='outline'
+              onClick={() => setShowAnnouncement(false)}
+              disabled={createAnnouncement.isPending}
+            >
               Cancel
             </Button>
-            <Button onClick={createAnnouncement}>Post Announcement</Button>
+            <Button onClick={handleCreateAnnouncement} disabled={createAnnouncement.isPending}>
+              {createAnnouncement.isPending && <Loader2 size={14} className='mr-1.5 animate-spin' />}
+              Post Announcement
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
