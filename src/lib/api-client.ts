@@ -663,13 +663,13 @@ export const employees = {
     if (query.limit != null) params.set('limit', String(query.limit));
 
     const qs = params.toString();
-    const path = `/employees${qs ? `?${qs}` : ''}`;
+    const path = `/staff${qs ? `?${qs}` : ''}`;
     const envelope = await protectedGet<Employee[]>(path, businessId);
     return { data: envelope.data, meta: envelope.meta! };
   },
 
   online: async (businessId: string): Promise<OnlineEmployee[]> => {
-    const envelope = await protectedGet<unknown>('/employees/online', businessId);
+    const envelope = await protectedGet<unknown>('/staff/online', businessId);
     const payload = envelope.data as unknown;
 
     if (Array.isArray(payload)) {
@@ -688,18 +688,18 @@ export const employees = {
   },
 
   get: async (businessId: string, id: string): Promise<Employee> => {
-    const envelope = await protectedGet<Employee>(`/employees/${id}`, businessId);
+    const envelope = await protectedGet<Employee>(`/staff/${id}`, businessId);
     return envelope.data;
   },
 
   create: (businessId: string, input: CreateEmployeeInput): Promise<Employee> =>
-    protectedRequest<Employee>('POST', '/employees', businessId, input),
+    protectedRequest<Employee>('POST', '/staff', businessId, input),
 
   update: (businessId: string, id: string, input: UpdateEmployeeInput): Promise<Employee> =>
-    protectedRequest<Employee>('PATCH', `/employees/${id}`, businessId, input),
+    protectedRequest<Employee>('PATCH', `/staff/${id}`, businessId, input),
 
   delete: (businessId: string, id: string): Promise<null> =>
-    protectedRequest<null>('DELETE', `/employees/${id}`, businessId),
+    protectedRequest<null>('DELETE', `/staff/${id}`, businessId),
 
   getClockHistory: async (
     businessId: string,
@@ -713,7 +713,7 @@ export const employees = {
     if (query.limit != null) params.set('limit', String(query.limit));
 
     const qs = params.toString();
-    const path = `/employees/${id}/clock-history${qs ? `?${qs}` : ''}`;
+    const path = `/staff/${id}/clock-history${qs ? `?${qs}` : ''}`;
     const envelope = await protectedGet<ClockRecord[]>(path, businessId);
     return { data: envelope.data, meta: envelope.meta! };
   },
@@ -1576,6 +1576,68 @@ export const tasks = {
       completed,
     }),
 };
+
+// ─── Team Messages types ─────────────────────────────────────────────────────
+
+export interface TeamMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface TeamMessagesQuery {
+  page?: number;
+  limit?: number;
+}
+
+export interface SendTeamMessageInput {
+  content: string;
+}
+
+// ─── Team Messages API ────────────────────────────────────────────────────────
+
+export const teamMessages = {
+  list: async (
+    businessId: string,
+    query: TeamMessagesQuery = {}
+  ): Promise<{ data: TeamMessage[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/team/messages${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<TeamMessage[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+
+  send: (businessId: string, input: SendTeamMessageInput): Promise<TeamMessage> =>
+    protectedRequest<TeamMessage>('POST', '/team/messages', businessId, input),
+};
+
+// ─── Socket auth headers ──────────────────────────────────────────────────────
+
+export const SOCKET_BASE_URL = BASE_URL.replace(/\/api$/, '');
+
+export async function getSocketAuthHeaders(
+  accessToken: string,
+  businessId: string
+): Promise<Record<string, string>> {
+  const { token: clientToken } = await getClientToken();
+  const timestamp = Date.now().toString();
+  const canonical = buildCanonicalString('GET', '/chat', timestamp, '');
+  const signature = await hmacSha256Hex(canonical, clientToken);
+
+  return {
+    'x-business-id': businessId,
+    'x-client-token': clientToken,
+    'x-timestamp': timestamp,
+    'x-signature': signature,
+    Authorization: `Bearer ${accessToken}`,
+  };
+}
 
 // ─── Announcements types ─────────────────────────────────────────────────────
 

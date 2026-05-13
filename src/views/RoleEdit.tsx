@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { splitPermission } from '@/common/auth/permissions';
 import { useRole, usePermissions } from '@/hooks/queries/use-roles';
 import { useCreateRole, useUpdateRole } from '@/hooks/mutations/use-roles';
 
@@ -31,6 +32,7 @@ const permissionGroupDescriptions: Record<string, string> = {
   analytics: 'Business analytics and reports',
   settings: 'Business configuration options',
   schedule: 'Schedule management and calendar',
+  schedules: 'Schedule management and calendar',
   time: 'Time tracking and clock management',
   files: 'File storage and document management',
 };
@@ -41,12 +43,12 @@ const toTitleCase = (value: string) =>
   value.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const formatAction = (perm: string) => {
-  const [, action = perm] = perm.split(':');
-  return toTitleCase(action);
+  const { action } = splitPermission(perm);
+  return toTitleCase(action || perm);
 };
 
 const formatLabel = (perm: string) => {
-  const [group = '', action = ''] = perm.split(':');
+  const { module: group, action } = splitPermission(perm);
   return `${toTitleCase(action)} ${toTitleCase(group)}`.trim();
 };
 
@@ -118,11 +120,11 @@ const RoleEdit = () => {
     }
   }, [existingRole]);
 
-  // Group API permissions by the segment before ':'
+  // Group API permissions by module segment (supports both "module:action" and "module.action")
   const permissionGroups = useMemo(() => {
     const groups: Record<string, string[]> = {};
     apiPermissions.forEach((p) => {
-      const [group] = p.split(':');
+      const { module: group } = splitPermission(p);
       if (group) {
         if (!groups[group]) groups[group] = [];
         groups[group].push(p);
@@ -137,7 +139,7 @@ const RoleEdit = () => {
       .map(([group, perms]) => {
         const filtered = perms.filter((perm) => {
           if (!q) return true;
-          const [, action = ''] = perm.split(':');
+          const { action = '' } = splitPermission(perm);
           return `${group} ${action} ${toTitleCase(group)} ${toTitleCase(action)}`
             .toLowerCase()
             .includes(q);

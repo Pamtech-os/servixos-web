@@ -36,7 +36,7 @@ export function usePermissions() {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
   return useQuery({
-    queryKey: ['permissions'],
+    queryKey: ['permissions', businessId],
     queryFn: () => permissions.list(businessId),
     staleTime: Infinity,
     enabled: !!businessId && auth.isPinVerified,
