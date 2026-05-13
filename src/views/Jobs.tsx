@@ -69,9 +69,12 @@ import {
   useBulkDeleteJobs,
   useStartJob,
   useCompleteJob,
-  useGenerateJobContract,
-  useSendJobContract,
 } from '@/hooks/mutations/use-jobs';
+import {
+  useCreateContract,
+  useSendContract,
+  useGetContractPdf,
+} from '@/hooks/mutations/use-contracts';
 import type { Job, JobStatus, Contract } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 8;
@@ -142,8 +145,9 @@ const Jobs = () => {
   const bulkDeleteJobs = useBulkDeleteJobs();
   const startJob = useStartJob();
   const completeJob = useCompleteJob();
-  const generateContract = useGenerateJobContract();
-  const sendContract = useSendJobContract();
+  const createContract = useCreateContract();
+  const sendContract = useSendContract();
+  const getPdf = useGetContractPdf();
 
   const jobList = jobsQuery.data?.data ?? [];
   const paginationMeta = jobsQuery.data?.meta;
@@ -151,6 +155,11 @@ const Jobs = () => {
 
   const clientMap = useMemo(
     () => Object.fromEntries(clientList.map((c) => [c._id, c.name])),
+    [clientList],
+  );
+
+  const clientEmailMap = useMemo(
+    () => Object.fromEntries(clientList.map((c) => [c._id, c.email])),
     [clientList],
   );
 
@@ -270,31 +279,55 @@ const Jobs = () => {
 
   const handleGenerateContract = () => {
     if (!viewJob) return;
-    generateContract.mutate(viewJob._id, {
-      onSuccess: (contract) => {
-        setContractsByJobId((prev) => ({ ...prev, [viewJob._id]: contract }));
-        setContractReviewOpen(true);
+    createContract.mutate(
+      {
+        clientId: viewJob.clientId,
+        jobId: viewJob._id,
+        name: viewJob.title,
+        amount: viewJob.price ?? 0,
+      },
+      {
+        onSuccess: (contract) => {
+          setContractsByJobId((prev) => ({ ...prev, [viewJob._id]: contract }));
+          setContractReviewOpen(true);
+        },
+        onError: (err) => {
+          toast.error('Failed to create contract', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
+
+  const handleGetPdf = () => {
+    if (!currentContract) return;
+    getPdf.mutate(currentContract._id, {
+      onSuccess: ({ url }) => {
+        window.open(url, '_blank', 'noreferrer');
       },
       onError: (err) => {
-        toast.error('Failed to generate contract', { description: getApiErrorMessage(err) });
+        toast.error('Failed to generate PDF', { description: getApiErrorMessage(err) });
       },
     });
   };
 
   const handleSendContract = () => {
-    if (!viewJob) return;
-    sendContract.mutate(viewJob._id, {
-      onSuccess: () => {
-        setSentJobIds((prev) => new Set([...prev, viewJob._id]));
-        setContractReviewOpen(false);
-        toast.success('Contract sent', {
-          description: 'Contract has been sent to the client for review.',
-        });
+    if (!viewJob || !currentContract) return;
+    const clientEmail = clientEmailMap[viewJob.clientId] ?? '';
+    sendContract.mutate(
+      { id: currentContract._id, clientEmail },
+      {
+        onSuccess: () => {
+          setSentJobIds((prev) => new Set([...prev, viewJob._id]));
+          setContractReviewOpen(false);
+          toast.success('Contract sent', {
+            description: 'Contract has been sent to the client for review.',
+          });
+        },
+        onError: (err) => {
+          toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
+        },
       },
-      onError: (err) => {
-        toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
-      },
-    });
+    );
   };
 
   const currentContract = viewJob ? contractsByJobId[viewJob._id] : null;
@@ -672,11 +705,11 @@ const Jobs = () => {
                     }
                     variant='outline'
                     className='gap-2'
-                    disabled={generateContract.isPending}
+                    disabled={createContract.isPending}
                   >
-                    {generateContract.isPending ? (
+                    {createContract.isPending ? (
                       <>
-                        <Loader2 size={14} className='animate-spin' /> Generating...
+                        <Loader2 size={14} className='animate-spin' /> Creating...
                       </>
                     ) : currentContract ? (
                       <>
@@ -725,14 +758,31 @@ const Jobs = () => {
           {currentContract && (
             <div className='space-y-3 py-2'>
               <p className='text-sm font-medium'>{currentContract.title}</p>
-              <a
-                href={currentContract.pdfUrl}
-                target='_blank'
-                rel='noreferrer'
-                className='flex items-center gap-2 text-sm text-primary hover:underline'
-              >
-                <ExternalLink size={14} /> Open PDF
-              </a>
+              {currentContract.pdfUrl ? (
+                <a
+                  href={currentContract.pdfUrl}
+                  target='_blank'
+                  rel='noreferrer'
+                  className='flex items-center gap-2 text-sm text-primary hover:underline'
+                >
+                  <ExternalLink size={14} /> Open PDF
+                </a>
+              ) : (
+                <Button
+                  variant='outline'
+                  size='sm'
+                  className='gap-2'
+                  onClick={handleGetPdf}
+                  disabled={getPdf.isPending}
+                >
+                  {getPdf.isPending ? (
+                    <Loader2 size={14} className='animate-spin' />
+                  ) : (
+                    <ExternalLink size={14} />
+                  )}{' '}
+                  Get PDF
+                </Button>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -745,7 +795,7 @@ const Jobs = () => {
             <Button
               onClick={handleSendContract}
               className='gap-2'
-              disabled={sendContract.isPending}
+              disabled={sendContract.isPending || !currentContract}
             >
               {sendContract.isPending ? (
                 <Loader2 size={14} className='animate-spin' />
