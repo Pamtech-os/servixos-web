@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export const TEAM_MESSAGES_LIMIT = 50;
 
-export function useTeamMessages() {
+export function useTeamMessages(options?: { enabled?: boolean }) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
 
@@ -20,6 +20,6 @@ export function useTeamMessages() {
       if (!meta) return undefined;
       return meta.page < meta.totalPages ? meta.page + 1 : undefined;
     },
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: !!businessId && auth.isPinVerified && (options?.enabled ?? true),
   });
 }
