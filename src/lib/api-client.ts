@@ -670,18 +670,28 @@ export const employees = {
 
   online: async (businessId: string): Promise<OnlineEmployee[]> => {
     const envelope = await protectedGet<unknown>('/staff/online', businessId);
-    const payload = envelope.data as unknown;
 
-    if (Array.isArray(payload)) {
-      return payload as OnlineEmployee[];
-    }
+    // The server may use different top-level keys. Walk the most common ones.
+    const raw = envelope as unknown as Record<string, unknown>;
+    const candidates = [
+      raw.data,
+      raw.online,
+      raw.members,
+      raw.staff,
+      raw.onlineStaff,
+    ];
 
-    if (
-      payload &&
-      typeof payload === 'object' &&
-      Array.isArray((payload as { data?: unknown }).data)
-    ) {
-      return (payload as { data: OnlineEmployee[] }).data;
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate as OnlineEmployee[];
+      }
+      if (candidate && typeof candidate === 'object') {
+        const nested = candidate as Record<string, unknown>;
+        const inner = nested.data ?? nested.online ?? nested.members ?? nested.staff;
+        if (Array.isArray(inner)) {
+          return inner as OnlineEmployee[];
+        }
+      }
     }
 
     return [];
