@@ -150,7 +150,7 @@ const CommunicationsTab = () => {
           ) : (
             announcementList.map((ann, i) => (
               <motion.div
-                key={ann._id}
+                key={ann._id ?? `ann-${i}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04 }}
