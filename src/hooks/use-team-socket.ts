@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react';
 import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 import {
-  getSocketAuthHeaders,
+  createSocketAuthHeaders,
+  getSocketAuthPayload,
   SOCKET_BASE_URL,
   type TeamMessage,
 } from '@/lib/api-client';
@@ -46,17 +47,23 @@ export function useTeamSocket(seenMessageIds: React.RefObject<Set<string>>) {
     let isInitialConnect = true;
 
     async function connect() {
-      const headers = await getSocketAuthHeaders(accessToken, businessId);
+      const authPayload = await getSocketAuthPayload(accessToken, businessId);
+      const headers = createSocketAuthHeaders(authPayload);
 
       if (!active) return;
 
-      // Do NOT restrict to websocket-only: browsers cannot send custom headers
-      // in a raw WebSocket handshake, so extraHeaders only work during the
-      // initial HTTP polling phase. Letting socket.io use its default
-      // (polling → websocket upgrade) ensures auth headers are delivered.
+      // Keep polling enabled so auth headers can be sent during handshake.
+      // Also mirror auth in `auth` for server middleware that reads from
+      // handshake.auth instead of handshake headers.
       const socket = io(`${SOCKET_BASE_URL}/chat`, {
-        auth: { token: accessToken },
+        auth: authPayload,
         extraHeaders: headers,
+        transportOptions: {
+          polling: {
+            extraHeaders: headers,
+          },
+        },
+        withCredentials: true,
       });
 
       socketRef.current = socket;

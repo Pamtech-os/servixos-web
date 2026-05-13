@@ -1621,22 +1621,48 @@ export const teamMessages = {
 
 export const SOCKET_BASE_URL = BASE_URL.replace(/\/api$/, '');
 
-export async function getSocketAuthHeaders(
+export interface SocketAuthPayload {
+  token: string;
+  businessId: string;
+  clientToken: string;
+  timestamp: string;
+  signature: string;
+}
+
+export function createSocketAuthHeaders(payload: SocketAuthPayload): Record<string, string> {
+  return {
+    'x-business-id': payload.businessId,
+    'x-client-token': payload.clientToken,
+    'x-timestamp': payload.timestamp,
+    'x-signature': payload.signature,
+    Authorization: `Bearer ${payload.token}`,
+  };
+}
+
+export async function getSocketAuthPayload(
   accessToken: string,
   businessId: string
-): Promise<Record<string, string>> {
+): Promise<SocketAuthPayload> {
   const { token: clientToken } = await getClientToken();
   const timestamp = Date.now().toString();
   const canonical = buildCanonicalString('GET', '/chat', timestamp, '');
   const signature = await hmacSha256Hex(canonical, clientToken);
 
   return {
-    'x-business-id': businessId,
-    'x-client-token': clientToken,
-    'x-timestamp': timestamp,
-    'x-signature': signature,
-    Authorization: `Bearer ${accessToken}`,
+    token: accessToken,
+    businessId,
+    clientToken,
+    timestamp,
+    signature,
   };
+}
+
+export async function getSocketAuthHeaders(
+  accessToken: string,
+  businessId: string
+): Promise<Record<string, string>> {
+  const payload = await getSocketAuthPayload(accessToken, businessId);
+  return createSocketAuthHeaders(payload);
 }
 
 // ─── Announcements types ─────────────────────────────────────────────────────
