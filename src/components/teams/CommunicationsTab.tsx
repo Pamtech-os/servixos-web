@@ -25,6 +25,7 @@ import { useTeamMessages } from '@/hooks/queries/use-team-messages';
 import { useSendTeamMessage } from '@/hooks/mutations/use-team-messages';
 import { useTeamSocket, type TypingUser } from '@/hooks/use-team-socket';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEmployees } from '@/hooks/queries/use-employees';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useQueryClient, useQuery, type InfiniteData } from '@tanstack/react-query';
 import type { TeamMessage } from '@/lib/api-client';
@@ -75,6 +76,9 @@ const CommunicationsTab = () => {
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEmittingTypingRef = useRef(false);
 
+  const { data: staffData, isLoading: staffLoading } = useEmployees({ page: 1, limit: 1 });
+  const hasStaff = (staffData?.meta?.total ?? 0) > 0;
+
   const {
     data: messagesData,
     isLoading: messagesLoading,
@@ -82,12 +86,12 @@ const CommunicationsTab = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useTeamMessages();
+  } = useTeamMessages({ enabled: hasStaff && !staffLoading });
 
-  const { data: announcementsData, isLoading: announcementsLoading } = useAnnouncements({
-    page: annPage,
-    limit: ANN_LIMIT,
-  });
+  const { data: announcementsData, isLoading: announcementsLoading } = useAnnouncements(
+    { page: annPage, limit: ANN_LIMIT },
+    { enabled: hasStaff && !staffLoading }
+  );
   const sendMessage = useSendTeamMessage();
   const createAnnouncement = useCreateAnnouncement();
   const socketRef = useTeamSocket(seenMessageIds);
@@ -268,6 +272,54 @@ const CommunicationsTab = () => {
   };
 
   const annRange = announcementMeta ? getPaginationRange(announcementMeta) : null;
+
+  if (staffLoading) {
+    return (
+      <div className='mt-4 flex items-center justify-center py-16'>
+        <Loader2 size={24} className='animate-spin text-muted-foreground' />
+      </div>
+    );
+  }
+
+  if (!hasStaff) {
+    return (
+      <div className='mt-4 grid gap-6 lg:grid-cols-2'>
+        {/* Team Chat — disabled */}
+        <Card className='flex h-[420px] flex-col items-center justify-center sm:h-[500px]'>
+          <div className='flex flex-col items-center gap-3 px-6 text-center'>
+            <div className='flex h-12 w-12 items-center justify-center rounded-full bg-muted'>
+              <Send size={20} className='text-muted-foreground' />
+            </div>
+            <p className='text-sm font-medium'>Team Chat Unavailable</p>
+            <p className='text-sm text-muted-foreground'>
+              You need at least one staff member to use team chat.
+            </p>
+          </div>
+        </Card>
+
+        {/* Announcements — disabled */}
+        <div className='space-y-4'>
+          <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+            <h3 className='font-display text-base font-semibold'>Announcements</h3>
+            <Button size='sm' variant='outline' className='w-full gap-1.5 sm:w-auto' disabled>
+              <Plus size={14} /> New Announcement
+            </Button>
+          </div>
+          <Card className='flex h-[200px] flex-col items-center justify-center'>
+            <div className='flex flex-col items-center gap-3 px-6 text-center'>
+              <div className='flex h-12 w-12 items-center justify-center rounded-full bg-muted'>
+                <Megaphone size={20} className='text-muted-foreground' />
+              </div>
+              <p className='text-sm font-medium'>Announcements Unavailable</p>
+              <p className='text-sm text-muted-foreground'>
+                You need at least one staff member to post announcements.
+              </p>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='mt-4 grid gap-6 lg:grid-cols-2'>
