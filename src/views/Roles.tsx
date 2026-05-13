@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import ConfirmModal from '@/components/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { splitPermission } from '@/common/auth/permissions';
 import { useRoles } from '@/hooks/queries/use-roles';
 import { useDeleteRole } from '@/hooks/mutations/use-roles';
 import type { Role } from '@/lib/api-client';
@@ -19,12 +20,12 @@ const toTitleCase = (value: string) =>
   value.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const formatPermissionBadge = (perm: string) => {
-  const [group = '', action = ''] = perm.split(':');
+  const { module: group, action } = splitPermission(perm);
   return `${toTitleCase(group)}:${toTitleCase(action)}`;
 };
 
 const countModules = (permissions: string[]) =>
-  new Set(permissions.map((p) => p.split(':')[0])).size;
+  new Set(permissions.map((p) => splitPermission(p).module).filter(Boolean)).size;
 
 function RoleCard({ role, index, onDelete, isDeleting }: {
   role: Role;

@@ -25,6 +25,7 @@ import { toast } from '@/components/ui/sonner';
 import { useSchedules } from '@/hooks/queries/use-schedules';
 import { useCreateShift, useDeleteShift } from '@/hooks/mutations/use-schedules';
 import { useEmployees } from '@/hooks/queries/use-employees';
+import { useScheduleAccess } from '@/hooks/permissions/use-schedule-access';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import type { Shift } from '@/lib/api-client';
 
@@ -100,6 +101,13 @@ function formatWeekRange(mondayStr: string): string {
 }
 
 const SchedulingTab = () => {
+  const {
+    canViewSchedules,
+    canCreateSchedules,
+    canDeleteSchedules,
+    isResolvingPermissions,
+  } = useScheduleAccess();
+
   const [weekMonday, setWeekMonday] = useState(getWeekMonday);
   const [showAdd, setShowAdd] = useState(false);
   const [showDetail, setShowDetail] = useState<Shift | null>(null);
@@ -111,8 +119,14 @@ const SchedulingTab = () => {
     notes: '',
   });
 
-  const { data: scheduleData, isLoading } = useSchedules({ weekStartDate: weekMonday });
-  const { data: employeesData } = useEmployees({ limit: 50 });
+  const { data: scheduleData, isLoading } = useSchedules(
+    { weekStartDate: weekMonday },
+    { enabled: canViewSchedules }
+  );
+  const { data: employeesData } = useEmployees(
+    { limit: 50 },
+    { enabled: canCreateSchedules }
+  );
   const createShift = useCreateShift();
   const deleteShift = useDeleteShift();
 
@@ -139,6 +153,10 @@ const SchedulingTab = () => {
   }
 
   async function handleAdd() {
+    if (!canCreateSchedules) {
+      toast.error('You do not have permission to create schedules.');
+      return;
+    }
     if (!form.employeeId || form.dayOffset === '' || !form.startTime || !form.endTime) {
       toast.error('Please fill all required fields.');
       return;
@@ -161,6 +179,10 @@ const SchedulingTab = () => {
   }
 
   async function handleDelete(id: string) {
+    if (!canDeleteSchedules) {
+      toast.error('You do not have permission to delete schedules.');
+      return;
+    }
     try {
       await deleteShift.mutateAsync(id);
       setShowDetail(null);
@@ -173,6 +195,22 @@ const SchedulingTab = () => {
   const detailEmployee = showDetail
     ? employeeList.find((e) => e._id === resolveEmployeeId(showDetail))
     : null;
+
+  if (isResolvingPermissions) {
+    return (
+      <div className='mt-4 py-8 text-center text-sm text-muted-foreground'>
+        Checking schedule permissions...
+      </div>
+    );
+  }
+
+  if (!canViewSchedules) {
+    return (
+      <div className='mt-4 py-8 text-center text-sm text-muted-foreground'>
+        Your role does not include `schedules.view`.
+      </div>
+    );
+  }
 
   return (
     <div className='mt-4 space-y-4'>
@@ -198,9 +236,11 @@ const SchedulingTab = () => {
           >
             <ChevronRight size={16} />
           </Button>
-          <Button size='sm' className='ml-2 gap-1.5' onClick={() => setShowAdd(true)}>
-            <Plus size={14} /> Add Shift
-          </Button>
+          {canCreateSchedules && (
+            <Button size='sm' className='ml-2 gap-1.5' onClick={() => setShowAdd(true)}>
+              <Plus size={14} /> Add Shift
+            </Button>
+          )}
         </div>
       </div>
 
@@ -274,89 +314,91 @@ const SchedulingTab = () => {
       </Card>
 
       {/* Add Shift Dialog */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Add Shift</DialogTitle>
-          </DialogHeader>
-          <div className='space-y-4'>
-            <div>
-              <Label>Employee *</Label>
-              <Select
-                value={form.employeeId}
-                onValueChange={(v) => setForm({ ...form, employeeId: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder='Select employee' />
-                </SelectTrigger>
-                <SelectContent>
-                  {employeeList.map((e) => (
-                    <SelectItem key={e._id} value={e._id}>
-                      {e.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Day *</Label>
-              <Select
-                value={form.dayOffset}
-                onValueChange={(v) => setForm({ ...form, dayOffset: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder='Select day' />
-                </SelectTrigger>
-                <SelectContent>
-                  {DAY_NAMES.map((name, i) => {
-                    const d = new Date(weekDates[i] + 'T00:00:00');
-                    return (
-                      <SelectItem key={i} value={String(i)}>
-                        {name} — {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      {canCreateSchedules && (
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+          <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-md'>
+            <DialogHeader>
+              <DialogTitle>Add Shift</DialogTitle>
+            </DialogHeader>
+            <div className='space-y-4'>
+              <div>
+                <Label>Employee *</Label>
+                <Select
+                  value={form.employeeId}
+                  onValueChange={(v) => setForm({ ...form, employeeId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select employee' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employeeList.map((e) => (
+                      <SelectItem key={e._id} value={e._id}>
+                        {e.fullName}
                       </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-              <div>
-                <Label>Start Time *</Label>
-                <Input
-                  type='time'
-                  value={form.startTime}
-                  onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                />
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label>End Time *</Label>
-                <Input
-                  type='time'
-                  value={form.endTime}
-                  onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                <Label>Day *</Label>
+                <Select
+                  value={form.dayOffset}
+                  onValueChange={(v) => setForm({ ...form, dayOffset: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select day' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAY_NAMES.map((name, i) => {
+                      const d = new Date(weekDates[i] + 'T00:00:00');
+                      return (
+                        <SelectItem key={i} value={String(i)}>
+                          {name} — {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+                <div>
+                  <Label>Start Time *</Label>
+                  <Input
+                    type='time'
+                    value={form.startTime}
+                    onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>End Time *</Label>
+                  <Input
+                    type='time'
+                    value={form.endTime}
+                    onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Notes</Label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder='Shift notes&hellip;'
+                  rows={2}
                 />
               </div>
             </div>
-            <div>
-              <Label>Notes</Label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder='Shift notes&hellip;'
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setShowAdd(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAdd} disabled={createShift.isPending}>
-              {createShift.isPending ? 'Saving…' : 'Add Shift'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant='outline' onClick={() => setShowAdd(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAdd} disabled={createShift.isPending}>
+                {createShift.isPending ? 'Saving…' : 'Add Shift'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Shift Detail Dialog */}
       <Dialog open={!!showDetail} onOpenChange={(open) => !open && setShowDetail(null)}>
@@ -403,16 +445,18 @@ const SchedulingTab = () => {
                   </div>
                 )}
               </div>
-              <Button
-                variant='destructive'
-                size='sm'
-                className='w-full gap-2'
-                onClick={() => handleDelete(showDetail._id)}
-                disabled={deleteShift.isPending}
-              >
-                <Trash2 size={14} />
-                {deleteShift.isPending ? 'Deleting…' : 'Delete Shift'}
-              </Button>
+              {canDeleteSchedules && (
+                <Button
+                  variant='destructive'
+                  size='sm'
+                  className='w-full gap-2'
+                  onClick={() => handleDelete(showDetail._id)}
+                  disabled={deleteShift.isPending}
+                >
+                  <Trash2 size={14} />
+                  {deleteShift.isPending ? 'Deleting…' : 'Delete Shift'}
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

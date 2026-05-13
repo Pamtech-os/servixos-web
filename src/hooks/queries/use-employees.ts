@@ -52,14 +52,14 @@ async function scanEmployeePages(
   return null;
 }
 
-export function useEmployees(query: EmployeesQuery = {}) {
+export function useEmployees(query: EmployeesQuery = {}, options?: { enabled?: boolean }) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
 
   return useQuery({
     queryKey: ['employees', businessId, query],
     queryFn: () => employees.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: !!businessId && auth.isPinVerified && (options?.enabled ?? true),
   });
 }
 
@@ -74,7 +74,7 @@ export function useEmployee(id: string) {
   });
 }
 
-export function useCurrentEmployee() {
+export function useCurrentEmployee(options?: { enabled?: boolean }) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
   const userId = auth.user?.id ?? '';
@@ -113,7 +113,7 @@ export function useCurrentEmployee() {
         throw error;
       }
     },
-    enabled: !!businessId && auth.isPinVerified && !!email,
+    enabled: !!businessId && auth.isPinVerified && !!email && (options?.enabled ?? true),
   });
 }
 

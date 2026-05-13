@@ -29,22 +29,31 @@ import { useClock } from '@/contexts/ClockContext';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import ConfirmModal from '@/components/ConfirmModal';
 import servixLogo from '@/assets/servix-logo.png';
+import { useAccess } from '@/hooks/permissions/use-access';
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  /** key on the useAccess return value that gates this item; undefined = always visible */
+  accessKey?: keyof ReturnType<typeof useAccess>;
+};
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Clients', href: '/clients', icon: Users },
+  { label: 'Clients', href: '/clients', icon: Users, accessKey: 'canViewClients' },
   { label: 'Teams', href: '/teams', icon: UsersRound },
-  { label: 'Jobs', href: '/jobs', icon: Briefcase },
-  { label: 'Invoices', href: '/invoices', icon: FileText },
-  { label: 'Roles', href: '/roles', icon: ShieldCheck },
-  { label: 'Payments', href: '/payments', icon: CreditCard },
-  { label: 'Requests', href: '/requests', icon: Inbox },
-  { label: 'My Website', href: '/my-website', icon: Globe },
-  { label: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { label: 'AI Insights', href: '/ai-insights', icon: Sparkles },
-  { label: 'AI Advisor', href: '/ai-advisor', icon: Bot },
-  { label: 'Activity Logs', href: '/activity-logs', icon: Activity },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Jobs', href: '/jobs', icon: Briefcase, accessKey: 'canViewJobs' },
+  { label: 'Invoices', href: '/invoices', icon: FileText, accessKey: 'canViewInvoices' },
+  { label: 'Roles', href: '/roles', icon: ShieldCheck, accessKey: 'canViewRoles' },
+  { label: 'Payments', href: '/payments', icon: CreditCard, accessKey: 'canViewPayments' },
+  { label: 'Requests', href: '/requests', icon: Inbox, accessKey: 'canViewRequests' },
+  { label: 'My Website', href: '/my-website', icon: Globe, accessKey: 'canViewMyWebsite' },
+  { label: 'Analytics', href: '/analytics', icon: BarChart3, accessKey: 'canViewAnalytics' },
+  { label: 'AI Insights', href: '/ai-insights', icon: Sparkles, accessKey: 'canViewAiInsights' },
+  { label: 'AI Advisor', href: '/ai-advisor', icon: Bot, accessKey: 'canViewAiAdvisor' },
+  { label: 'Activity Logs', href: '/activity-logs', icon: Activity, accessKey: 'canViewActivityLogs' },
+  { label: 'Settings', href: '/settings', icon: Settings, accessKey: 'canViewSettings' },
 ];
 
 type SidebarLogoProps = {
@@ -77,6 +86,14 @@ const AppSidebar = () => {
   const { status } = useClock();
   const { isMobileSidebarOpen: mobileOpen } = useUiState();
   const { setMobileSidebarOpen, toggleMobileSidebar } = useUiActions();
+  const access = useAccess();
+
+  // While permissions are resolving show all items; once resolved hide gated ones.
+  const visibleNavItems = navItems.filter((item) => {
+    if (!item.accessKey) return true;
+    if (access.isResolving) return true;
+    return !!access[item.accessKey];
+  });
   const [dark, setDark] = useState(false);
   const [showClockWarning, setShowClockWarning] = useState(false);
 
@@ -116,7 +133,7 @@ const AppSidebar = () => {
         <div className='flex h-full flex-col'>
           <SidebarLogo />
           <nav className='flex-1 space-y-1 overflow-y-auto px-3 py-4'>
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive =
                 pathname === item.href || pathname.startsWith(item.href + '/');
               return (
@@ -186,7 +203,7 @@ const AppSidebar = () => {
               <div className='flex h-full flex-col'>
                 <SidebarLogo />
                 <nav className='flex-1 space-y-1 overflow-y-auto px-3 py-4'>
-                  {navItems.map((item) => {
+                  {visibleNavItems.map((item) => {
                     const isActive =
                       pathname === item.href || pathname.startsWith(item.href + '/');
                     return (

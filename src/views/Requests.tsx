@@ -55,6 +55,9 @@ const statusStyles: Record<RequestStatus, string> = {
   cancelled: 'bg-muted text-muted-foreground border-border',
 };
 
+const canShowRequestChat = (status: RequestStatus) =>
+  status !== 'accepted' && status !== 'rejected';
+
 const STATUS_TABS: Array<{ label: string; value: RequestStatus | undefined }> = [
   { label: 'All', value: undefined },
   { label: 'Pending', value: 'pending' },
@@ -289,6 +292,13 @@ const Requests = () => {
       {
         onSuccess: () => {
           toast.success(`Request ${statusMap[type]}`);
+          if (
+            (type === 'accept' || type === 'reject') &&
+            chatRequest?._id === request._id &&
+            chatOpen
+          ) {
+            setChatOpen(false);
+          }
           setConfirmAction(null);
           setDetailOpen(false);
         },
@@ -452,17 +462,19 @@ const Requests = () => {
                         >
                           <Eye size={14} /> View
                         </Button>
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='flex-1 gap-1.5 lg:flex-none'
-                          onClick={() => {
-                            setChatRequest(req);
-                            setChatOpen(true);
-                          }}
-                        >
-                          <MessageCircle size={14} /> Chat
-                        </Button>
+                        {canShowRequestChat(req.status) && (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            className='flex-1 gap-1.5 lg:flex-none'
+                            onClick={() => {
+                              setChatRequest(req);
+                              setChatOpen(true);
+                            }}
+                          >
+                            <MessageCircle size={14} /> Chat
+                          </Button>
+                        )}
                         {req.status === 'pending' && (
                           <>
                             <Button
@@ -660,17 +672,19 @@ const Requests = () => {
 
               {/* Actions */}
               <div className='flex flex-col gap-2 sm:flex-row'>
-                <Button
-                  variant='outline'
-                  className='w-full gap-1.5 sm:flex-1'
-                  onClick={() => {
-                    setDetailOpen(false);
-                    setChatRequest(selectedRequest);
-                    setChatOpen(true);
-                  }}
-                >
-                  <MessageCircle size={14} /> Chat with Client
-                </Button>
+                {canShowRequestChat(selectedRequest.status) && (
+                  <Button
+                    variant='outline'
+                    className='w-full gap-1.5 sm:flex-1'
+                    onClick={() => {
+                      setDetailOpen(false);
+                      setChatRequest(selectedRequest);
+                      setChatOpen(true);
+                    }}
+                  >
+                    <MessageCircle size={14} /> Chat with Client
+                  </Button>
+                )}
                 {selectedRequest.status === 'pending' && (
                   <>
                     <Button
