@@ -14,6 +14,8 @@ import {
   Send,
   Loader2,
   ExternalLink,
+  Trash2,
+  Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,8 +24,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useClient } from '@/hooks/queries/use-clients';
 import { useJobs } from '@/hooks/queries/use-jobs';
+import { useClientFiles } from '@/hooks/queries/use-client-files';
+import { useContracts } from '@/hooks/queries/use-contracts';
 import { useExportClient } from '@/hooks/mutations/use-clients';
-import { mockInvoices, mockFiles, mockContracts, mockMessages } from '@/lib/mock-data';
+import { useUploadClientFile, useDeleteClientFile } from '@/hooks/mutations/use-files';
+import { mockInvoices, mockMessages } from '@/lib/mock-data';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import ChatUI, { type ChatMessage } from '@/components/ChatUI';
@@ -59,7 +64,12 @@ const ClientDetail = () => {
 
   const { data: client, isLoading: clientLoading } = useClient(id);
   const { data: jobsData, isLoading: jobsLoading } = useJobs({ clientId: id, limit: 50 });
+  const { data: clientFiles = [], isLoading: filesLoading } = useClientFiles(id);
+  const { data: contractsData, isLoading: contractsLoading } = useContracts({ clientId: id });
+  const contractList = contractsData?.data ?? [];
   const exportClient = useExportClient();
+  const uploadFile = useUploadClientFile(id);
+  const deleteFile = useDeleteClientFile(id);
 
   const jobList = jobsData?.data ?? [];
 
@@ -78,8 +88,30 @@ const ClientDetail = () => {
   });
 
   const invoices = mockInvoices.filter((inv) => inv.clientId === id);
-  const files = mockFiles.filter((f) => f.clientId === id);
-  const contracts = mockContracts.filter((c) => c.clientId === id);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    uploadFile.mutate(file, {
+      onSuccess: () => toast.success('File uploaded successfully'),
+      onError: (err) => toast.error('Upload failed', { description: getApiErrorMessage(err) }),
+    });
+  };
+
+  const handleDeleteFile = (fileId: string) => {
+    deleteFile.mutate(fileId, {
+      onSuccess: () => toast.success('File deleted'),
+      onError: (err) => toast.error('Delete failed', { description: getApiErrorMessage(err) }),
+    });
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const handleSendMessage = (content: string) => {
     const text = content.trim();
@@ -137,7 +169,7 @@ const ClientDetail = () => {
     },
     {
       title: 'Contracts',
-      value: String(contracts.length),
+      value: contractsLoading ? '...' : String(contractsData?.meta.total ?? contractList.length),
       icon: ScrollText,
       iconGradient: 'linear-gradient(135deg, rgb(245 158 11), rgb(217 119 6))',
     },
@@ -352,33 +384,79 @@ const ClientDetail = () => {
           {/* Files */}
           <TabsContent value='files'>
             <Card>
-              <CardHeader>
+              <CardHeader className='flex flex-row items-center justify-between'>
                 <CardTitle className='text-base'>Files</CardTitle>
+                <label>
+                  <input
+                    type='file'
+                    className='sr-only'
+                    accept='.pdf,.doc,.docx,.png,.jpg,.jpeg'
+                    onChange={handleFileUpload}
+                    disabled={uploadFile.isPending}
+                  />
+                  <Button
+                    size='sm'
+                    variant='outline'
+                    className='gap-1.5'
+                    asChild
+                    disabled={uploadFile.isPending}
+                  >
+                    <span>
+                      {uploadFile.isPending ? (
+                        <Loader2 size={14} className='animate-spin' />
+                      ) : (
+                        <Upload size={14} />
+                      )}{' '}
+                      Upload File
+                    </span>
+                  </Button>
+                </label>
               </CardHeader>
               <CardContent>
-                {files.length === 0 ? (
+                {filesLoading ? (
+                  <div className='space-y-3'>
+                    {[...Array(2)].map((_, i) => (
+                      <Skeleton key={i} className='h-14 w-full' />
+                    ))}
+                  </div>
+                ) : clientFiles.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>No files found.</p>
                 ) : (
                   <div className='space-y-3'>
-                    {files.map((file) => (
+                    {clientFiles.map((file) => (
                       <div
-                        key={file.id}
+                        key={file._id}
                         className='flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between'
                       >
                         <div>
-                          <p className='font-medium'>
-                            {file.filename}.{file.format}
-                          </p>
+                          <p className='font-medium'>{file.filename}</p>
                           <p className='text-sm text-muted-foreground'>
-                            {file.filesize} · {file.dateSent}
+                            {formatFileSize(file.filesizeBytes)} ·{' '}
+                            {format(new Date(file.createdAt), 'PP')}
                           </p>
                         </div>
                         <div className='flex items-center gap-2'>
                           <Badge variant='outline' className='uppercase'>
                             {file.format}
                           </Badge>
-                          <button className='rounded-lg p-2 text-primary transition-colors hover:bg-primary/10'>
+                          <a
+                            href={file.url}
+                            target='_blank'
+                            rel='noreferrer'
+                            className='rounded-lg p-2 text-primary transition-colors hover:bg-primary/10'
+                          >
                             <Download size={16} />
+                          </a>
+                          <button
+                            className='rounded-lg p-2 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50'
+                            onClick={() => handleDeleteFile(file._id)}
+                            disabled={deleteFile.isPending}
+                          >
+                            {deleteFile.isPending && deleteFile.variables === file._id ? (
+                              <Loader2 size={16} className='animate-spin' />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -396,20 +474,28 @@ const ClientDetail = () => {
                 <CardTitle className='text-base'>Contracts</CardTitle>
               </CardHeader>
               <CardContent>
-                {contracts.length === 0 ? (
+                {contractsLoading ? (
+                  <div className='space-y-3'>
+                    {[...Array(2)].map((_, i) => (
+                      <Skeleton key={i} className='h-14 w-full' />
+                    ))}
+                  </div>
+                ) : contractList.length === 0 ? (
                   <p className='py-4 text-center text-sm text-muted-foreground'>
                     No contracts found.
                   </p>
                 ) : (
                   <div className='space-y-3'>
-                    {contracts.map((contract) => (
+                    {contractList.map((contract) => (
                       <div
-                        key={contract.id}
+                        key={contract._id}
                         className='flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between'
                       >
                         <div>
-                          <p className='font-medium'>{contract.name}</p>
-                          <p className='text-sm text-muted-foreground'>{contract.date}</p>
+                          <p className='font-medium'>{contract.title}</p>
+                          <p className='text-sm text-muted-foreground'>
+                            {format(new Date(contract.createdAt), 'PP')}
+                          </p>
                         </div>
                         <div className='flex items-center gap-3'>
                           <span className='font-display font-semibold'>
@@ -420,6 +506,16 @@ const ClientDetail = () => {
                           >
                             {formatStatus(contract.status)}
                           </span>
+                          {contract.pdfUrl && (
+                            <a
+                              href={contract.pdfUrl}
+                              target='_blank'
+                              rel='noreferrer'
+                              className='rounded-lg p-1.5 text-primary transition-colors hover:bg-primary/10'
+                            >
+                              <Download size={15} />
+                            </a>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -1,4 +1,4 @@
-import { fetchJson, HttpError } from '@/common/network/http-client';
+import { fetchJson, HttpError, RequestTimeoutError } from '@/common/network/http-client';
 import { tokenStore } from './token-store';
 import type { PaginationMeta } from './pagination';
 
@@ -974,11 +974,39 @@ export interface Contract {
   jobId: string;
   clientId: string;
   title: string;
-  pdfUrl: string;
+  html?: string;
+  pdfUrl?: string;
+  amount: number;
+  expiresAt?: string;
   status: ContractStatus;
   sentAt?: string;
   signedAt?: string;
+  signingUrl?: string;
+  clientAppDeliveredAt?: string;
   timezone: string;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContractsQuery {
+  clientId?: string;
+  status?: ContractStatus;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateContractInput {
+  clientId: string;
+  jobId: string;
+  name: string;
+  amount: number;
+  expiresAt?: string;
+}
+
+export interface UpdateContractInput {
+  status?: ContractStatus;
+  signedAt?: string;
 }
 
 export interface JobsQuery {
@@ -1054,12 +1082,50 @@ export const jobs = {
 
   bulkDelete: (businessId: string, ids: string[]): Promise<BulkDeleteResult> =>
     protectedRequest<BulkDeleteResult>('DELETE', '/jobs', businessId, { ids }),
+};
 
-  generateContract: async (businessId: string, id: string): Promise<Contract> =>
-    protectedRequest<Contract>('POST', `/jobs/${id}/contract/generate`, businessId),
+// ─── Contracts API ────────────────────────────────────────────────────────────
 
-  sendContract: async (businessId: string, id: string): Promise<Contract> =>
-    protectedRequest<Contract>('POST', `/jobs/${id}/contract/send`, businessId),
+export const contracts = {
+  list: async (
+    businessId: string,
+    query: ContractsQuery = {}
+  ): Promise<{ data: Contract[]; meta: PaginationMeta }> => {
+    const params = new URLSearchParams();
+    if (query.clientId) params.set('clientId', query.clientId);
+    if (query.status) params.set('status', query.status);
+    if (query.page != null) params.set('page', String(query.page));
+    if (query.limit != null) params.set('limit', String(query.limit));
+
+    const qs = params.toString();
+    const path = `/contracts${qs ? `?${qs}` : ''}`;
+    const envelope = await protectedGet<Contract[]>(path, businessId);
+    return { data: envelope.data, meta: envelope.meta! };
+  },
+
+  get: async (businessId: string, id: string): Promise<Contract> => {
+    const envelope = await protectedGet<Contract>(`/contracts/${id}`, businessId);
+    return envelope.data;
+  },
+
+  create: (businessId: string, input: CreateContractInput): Promise<Contract> =>
+    protectedRequest<Contract>('POST', '/contracts', businessId, input),
+
+  update: (businessId: string, id: string, input: UpdateContractInput): Promise<Contract> =>
+    protectedRequest<Contract>('PATCH', `/contracts/${id}`, businessId, input),
+
+  delete: (businessId: string, id: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/contracts/${id}`, businessId),
+
+  getPdf: async (businessId: string, id: string): Promise<{ url: string }> => {
+    const envelope = await protectedGet<{ url: string }>(`/contracts/${id}/pdf`, businessId);
+    return envelope.data;
+  },
+
+  send: (businessId: string, id: string, clientEmail: string): Promise<{ queued: boolean }> =>
+    protectedRequest<{ queued: boolean }>('POST', `/contracts/${id}/send`, businessId, {
+      clientEmail,
+    }),
 };
 
 // ─── Invoices types ───────────────────────────────────────────────────────────
@@ -1553,6 +1619,122 @@ export const announcements = {
 
   create: (businessId: string, input: CreateAnnouncementInput): Promise<Announcement> =>
     protectedRequest<Announcement>('POST', '/team/announcements', businessId, input),
+};
+
+// ─── Files types ─────────────────────────────────────────────────────────────
+
+export type ClientFileFormat = 'pdf' | 'doc' | 'docx' | 'png' | 'jpg';
+
+export interface ClientFile {
+  _id: string;
+  businessId: string;
+  clientId: string;
+  filename: string;
+  url: string;
+  format: ClientFileFormat;
+  filesizeBytes: number;
+  uploadedBy?: string;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UploadedFileResult {
+  url: string;
+  publicId: string;
+  filename: string;
+  mimeType: string;
+  filesizeBytes: number;
+}
+
+export interface AttachClientFileInput {
+  url: string;
+  publicId: string;
+  filename: string;
+  mimeType: string;
+  filesizeBytes: number;
+}
+
+// ─── Files helpers ────────────────────────────────────────────────────────────
+
+async function protectedMultipartUpload<T>(
+  path: string,
+  businessId: string,
+  formData: FormData
+): Promise<T> {
+  const token = await resolveToken();
+  const url = `${BASE_URL}${path}`;
+
+  const { token: clientToken } = await getClientToken();
+  const timestamp = Date.now().toString();
+  const canonical = buildCanonicalString('POST', buildPathWithQuery(url), timestamp, '');
+  const signature = await hmacSha256Hex(canonical, clientToken);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-business-id': businessId,
+        'x-client-token': clientToken,
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+      },
+    });
+
+    if (!response.ok) {
+      let apiMessage: string | undefined;
+      try {
+        const body = (await response.json()) as Record<string, unknown>;
+        const msg = body.message;
+        if (typeof msg === 'string' && msg.trim()) apiMessage = msg;
+      } catch {}
+      throw new HttpError(response.status, response.statusText, apiMessage);
+    }
+
+    const envelope = (await response.json()) as { data: T };
+    return envelope.data;
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw new RequestTimeoutError();
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─── Files API ────────────────────────────────────────────────────────────────
+
+export const files = {
+  upload: (businessId: string, file: File): Promise<UploadedFileResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    return protectedMultipartUpload<UploadedFileResult>('/files/upload', businessId, form);
+  },
+
+  listByClient: async (businessId: string, clientId: string): Promise<ClientFile[]> => {
+    const envelope = await protectedGet<ClientFile[]>(`/clients/${clientId}/files`, businessId);
+    return envelope.data;
+  },
+
+  attachToClient: (
+    businessId: string,
+    clientId: string,
+    input: AttachClientFileInput
+  ): Promise<ClientFile> =>
+    protectedRequest<ClientFile>('POST', `/clients/${clientId}/files`, businessId, input),
+
+  get: async (businessId: string, fileId: string): Promise<{ url: string }> => {
+    const envelope = await protectedGet<{ url: string }>(`/files/${fileId}`, businessId);
+    return envelope.data;
+  },
+
+  delete: (businessId: string, fileId: string): Promise<null> =>
+    protectedRequest<null>('DELETE', `/files/${fileId}`, businessId),
 };
 
 // ─── Activity Logs API ────────────────────────────────────────────────────────

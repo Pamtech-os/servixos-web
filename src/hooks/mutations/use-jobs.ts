@@ -107,20 +107,3 @@ export function useBulkDeleteJobs() {
   });
 }
 
-export function useGenerateJobContract() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
-
-  return useMutation({
-    mutationFn: (id: string) => jobs.generateContract(businessId, id),
-  });
-}
-
-export function useSendJobContract() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
-
-  return useMutation({
-    mutationFn: (id: string) => jobs.sendContract(businessId, id),
-  });
-}
