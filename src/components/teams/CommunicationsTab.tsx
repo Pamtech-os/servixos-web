@@ -24,13 +24,19 @@ import { useSendTeamMessage } from '@/hooks/mutations/use-team-messages';
 import { useTeamSocket } from '@/hooks/use-team-socket';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import type { TeamMessage } from '@/lib/api-client';
+import type { PaginationMeta } from '@/lib/pagination';
+
+type MessagePage = { data: TeamMessage[]; meta: PaginationMeta };
 
 const ANN_LIMIT = 4;
 
 const CommunicationsTab = () => {
   const { auth } = useAuth();
+  const queryClient = useQueryClient();
   const [chatInput, setChatInput] = useState('');
+  const [optimisticMessages, setOptimisticMessages] = useState<TeamMessage[]>([]);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [annForm, setAnnForm] = useState({ title: '', description: '' });
   const [annPage, setAnnPage] = useState(1);
@@ -67,6 +73,11 @@ const CommunicationsTab = () => {
     );
   }, [messagesData]);
 
+  const displayMessages = useMemo(
+    () => [...messageList, ...optimisticMessages],
+    [messageList, optimisticMessages]
+  );
+
   const announcementList = announcementsData?.data ?? [];
   const announcementMeta = announcementsData?.meta;
 
@@ -84,13 +95,13 @@ const CommunicationsTab = () => {
       // Preserve position after prepending older messages
       el.scrollTop = el.scrollHeight - prevScrollHeightRef.current;
       prevScrollHeightRef.current = 0;
-    } else if (isInitialLoadRef.current && messageList.length > 0) {
+    } else if (isInitialLoadRef.current && displayMessages.length > 0) {
       el.scrollTop = el.scrollHeight;
       isInitialLoadRef.current = false;
     } else if (isNearBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messageList.length, messagesLoading]);
+  }, [displayMessages.length, messagesLoading]);
 
   const handleChatScroll = () => {
     const el = chatScrollRef.current;
@@ -110,12 +121,49 @@ const CommunicationsTab = () => {
   const handleSendMessage = () => {
     const content = chatInput.trim();
     if (!content) return;
+
+    const tempId = `optimistic-${Date.now()}`;
+    const optimisticMsg: TeamMessage = {
+      id: tempId,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
     isNearBottomRef.current = true;
+    setChatInput('');
+    setOptimisticMessages((prev) => [...prev, optimisticMsg]);
+
+    const businessId = auth.user?.businessId ?? '';
+
     sendMessage.mutate(
       { content },
-      { onError: (err) => toast.error(getApiErrorMessage(err)) }
+      {
+        onSettled: (data) => {
+          setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
+          // If the socket hasn't delivered the real message yet, add it manually
+          if (data && !seenMessageIds.current.has(data.id)) {
+            seenMessageIds.current.add(data.id);
+            queryClient.setQueryData<InfiniteData<MessagePage>>(
+              ['team-messages', businessId],
+              (prev) => {
+                if (!prev?.pages?.length) return prev;
+                const pages = [...prev.pages];
+                const lastIdx = pages.length - 1;
+                const lastPage = pages[lastIdx];
+                pages[lastIdx] = { ...lastPage, data: [...lastPage.data, data] };
+                return { ...prev, pages };
+              }
+            );
+          }
+        },
+        onError: (err) => {
+          setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
+          toast.error(getApiErrorMessage(err));
+        },
+      }
     );
-    setChatInput('');
   };
 
   const handleCreateAnnouncement = () => {
@@ -171,15 +219,16 @@ const CommunicationsTab = () => {
               <p className='py-8 text-center text-sm text-muted-foreground'>
                 Failed to load messages.
               </p>
-            ) : messageList.length === 0 ? (
+            ) : displayMessages.length === 0 ? (
               <p className='py-8 text-center text-sm text-muted-foreground'>
                 No messages yet. Say hello!
               </p>
             ) : (
-              messageList.map((msg) => {
+              displayMessages.map((msg) => {
                 const isOwn =
                   msg.senderId === currentUserId ||
                   (!!currentUserName && msg.senderName === currentUserName);
+                const isOptimistic = msg.id.startsWith('optimistic-');
                 const initials = msg.senderName
                   .split(' ')
                   .map((n) => n[0])
@@ -190,7 +239,7 @@ const CommunicationsTab = () => {
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={{ opacity: isOptimistic ? 0.7 : 1, y: 0 }}
                     className={`flex items-start gap-2 ${isOwn ? 'flex-row-reverse' : ''}`}
                   >
                     <Avatar className='h-7 w-7 shrink-0'>
@@ -199,7 +248,7 @@ const CommunicationsTab = () => {
                       </AvatarFallback>
                     </Avatar>
                     <div
-                      className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${
+                      className={`max-w-[75%] rounded-xl px-3 py-1.5 text-sm ${
                         isOwn ? 'bg-primary text-primary-foreground' : 'bg-muted'
                       }`}
                     >
@@ -210,13 +259,14 @@ const CommunicationsTab = () => {
                       )}
                       <p>{msg.content}</p>
                       <p
-                        className={`mt-1 text-[9px] ${
+                        className={`mt-0.5 text-[9px] ${
                           isOwn ? 'text-primary-foreground/75' : 'text-muted-foreground'
                         }`}
                       >
-                        {new Date(msg.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
+                        {new Date(msg.createdAt).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
                           minute: '2-digit',
+                          hour12: true,
                         })}
                       </p>
                     </div>
@@ -233,19 +283,14 @@ const CommunicationsTab = () => {
               placeholder='Type a message...'
               className='h-9 text-sm'
               maxLength={5000}
-              disabled={sendMessage.isPending}
             />
             <Button
               size='sm'
               className='h-9 shrink-0 gap-1'
               onClick={handleSendMessage}
-              disabled={sendMessage.isPending || !chatInput.trim()}
+              disabled={!chatInput.trim()}
             >
-              {sendMessage.isPending ? (
-                <Loader2 size={14} className='animate-spin' />
-              ) : (
-                <Send size={14} />
-              )}
+              <Send size={14} />
             </Button>
           </div>
         </CardContent>
