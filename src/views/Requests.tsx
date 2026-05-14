@@ -19,6 +19,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PriceInput } from '@/components/ui/price-input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -186,7 +187,7 @@ const Requests = () => {
 
   const [adjustedDate, setAdjustedDate] = useState<Date | undefined>();
   const [adjustedEndDate, setAdjustedEndDate] = useState<Date | undefined>();
-  const [pricingValue, setPricingValue] = useState('');
+  const [pricingValue, setPricingValue] = useState(0);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -235,7 +236,7 @@ const Requests = () => {
     setSelectedRequest(req);
     setAdjustedDate(startDate);
     setAdjustedEndDate(endDate);
-    setPricingValue(req.quotedPrice != null ? String(req.quotedPrice) : '');
+    setPricingValue(req.quotedPrice ?? 0);
     setDetailOpen(true);
   };
 
@@ -266,8 +267,7 @@ const Requests = () => {
     }
 
     if (type === 'accept') {
-      const price = Number(pricingValue);
-      if (!price || price <= 0) {
+      if (!pricingValue || pricingValue <= 0) {
         toast.error('Pricing required', {
           description: 'Please set a valid price greater than 0 before accepting.',
         });
@@ -281,7 +281,7 @@ const Requests = () => {
       type === 'accept'
         ? {
             status: 'accepted' as const,
-            quotedPrice: Number(pricingValue),
+            quotedPrice: pricingValue,
             startDate: adjustedDate?.toISOString(),
             endDate: adjustedEndDate?.toISOString(),
           }
@@ -482,9 +482,7 @@ const Requests = () => {
                               className='flex-1 gap-1.5 bg-emerald-600 text-primary-foreground hover:bg-emerald-700 lg:flex-none'
                               onClick={() => {
                                 setSelectedRequest(req);
-                                setPricingValue(
-                                  req.quotedPrice != null ? String(req.quotedPrice) : ''
-                                );
+                                setPricingValue(req.quotedPrice ?? 0);
                                 setConfirmAction({ type: 'accept', request: req });
                               }}
                             >
@@ -638,17 +636,15 @@ const Requests = () => {
                     <AiPriceButton
                       requestId={selectedRequest._id}
                       hasEstimate={selectedRequest.hasAiPriceEstimate}
-                      onEstimate={(price) => setPricingValue(String(price))}
+                      onEstimate={(price) => setPricingValue(price)}
                     />
                   )}
                 </div>
                 <div className='flex items-center gap-2'>
-                  <Input
-                    type='number'
-                    min={1}
-                    placeholder='Enter price'
+                  <PriceInput
                     value={pricingValue}
-                    onChange={(e) => setPricingValue(e.target.value)}
+                    onChange={setPricingValue}
+                    placeholder='Enter price'
                     disabled={selectedRequest.status !== 'pending'}
                     className='h-8 text-sm'
                   />

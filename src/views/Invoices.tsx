@@ -47,6 +47,7 @@ import { format, parse } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import PaginationControls from '@/components/ui/pagination-controls';
+import { PriceInput } from '@/components/ui/price-input';
 import { cn } from '@/lib/utils';
 import { useInvoices } from '@/hooks/queries/use-invoices';
 import { useClients } from '@/hooks/queries/use-clients';
@@ -544,11 +545,10 @@ const Invoices = () => {
                     </div>
                     <div className='space-y-1.5'>
                       {idx === 0 && <Label>Unit Price</Label>}
-                      <Input
-                        type='number'
-                        min={0}
+                      <PriceInput
                         value={li.unitPrice}
-                        onChange={(e) => updateLineItem(idx, 'unitPrice', Number(e.target.value))}
+                        onChange={(val) => updateLineItem(idx, 'unitPrice', val)}
+                        placeholder='0'
                       />
                     </div>
                     <Button
@@ -583,12 +583,10 @@ const Invoices = () => {
               <div className='flex items-center justify-between text-sm'>
                 <div className='flex items-center gap-2'>
                   <span className='text-muted-foreground'>Tax (%)</span>
-                  <Input
-                    type='number'
-                    min={0}
-                    max={100}
+                  <PriceInput
                     value={taxRate}
-                    onChange={(e) => setTaxRate(Number(e.target.value))}
+                    onChange={setTaxRate}
+                    placeholder='0'
                     className='h-8 w-20'
                   />
                 </div>

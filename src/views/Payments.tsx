@@ -19,6 +19,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PriceInput } from '@/components/ui/price-input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -114,13 +115,13 @@ const Payments = () => {
   const [formInvoiceId, setFormInvoiceId] = useState('');
   const [formDate, setFormDate] = useState<Date | undefined>(undefined);
   const [formMode, setFormMode] = useState<PaymentMode>('bank_transfer');
-  const [formAmount, setFormAmount] = useState('');
+  const [formAmount, setFormAmount] = useState(0);
   const [formStatus, setFormStatus] = useState<PaymentStatus>('completed');
   const [formNotes, setFormNotes] = useState('');
 
   // Edit form state
   const [editFormMode, setEditFormMode] = useState<PaymentMode>('bank_transfer');
-  const [editFormAmount, setEditFormAmount] = useState('');
+  const [editFormAmount, setEditFormAmount] = useState(0);
   const [editFormStatus, setEditFormStatus] = useState<PaymentStatus>('completed');
   const [editFormDate, setEditFormDate] = useState<Date | undefined>(undefined);
   const [editFormNotes, setEditFormNotes] = useState('');
@@ -130,7 +131,7 @@ const Payments = () => {
     setFormInvoiceId('');
     setFormDate(undefined);
     setFormMode('bank_transfer');
-    setFormAmount('');
+    setFormAmount(0);
     setFormStatus('completed');
     setFormNotes('');
   };
@@ -138,7 +139,7 @@ const Payments = () => {
   const openEditDialog = (payment: Payment) => {
     setEditPayment(payment);
     setEditFormMode(payment.paymentMode);
-    setEditFormAmount(String(payment.amount));
+    setEditFormAmount(payment.amount);
     setEditFormStatus(payment.status);
     setEditFormDate(new Date(payment.paymentDate));
     setEditFormNotes(payment.notes ?? '');
@@ -150,8 +151,8 @@ const Payments = () => {
       toast.error('Missing fields', { description: 'Please fill in date and amount.' });
       return;
     }
-    const amount = parseFloat(formAmount);
-    if (isNaN(amount) || amount < 0.01) {
+    const amount = formAmount;
+    if (amount < 0.01) {
       toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
       return;
     }
@@ -183,8 +184,8 @@ const Payments = () => {
 
   const handleEditSave = () => {
     if (!editPayment || !editFormAmount) return;
-    const amount = parseFloat(editFormAmount);
-    if (isNaN(amount) || amount < 0.01) {
+    const amount = editFormAmount;
+    if (amount < 0.01) {
       toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
       return;
     }
@@ -538,14 +539,11 @@ const Payments = () => {
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='pay-amount'>Amount ($)</Label>
-                <Input
+                <PriceInput
                   id='pay-amount'
-                  type='number'
-                  min='0'
-                  step='0.01'
-                  placeholder='0.00'
                   value={formAmount}
-                  onChange={(e) => setFormAmount(e.target.value)}
+                  onChange={setFormAmount}
+                  placeholder='0.00'
                 />
               </div>
             </div>
@@ -669,12 +667,10 @@ const Payments = () => {
               </div>
               <div className='space-y-2'>
                 <Label>Amount ($)</Label>
-                <Input
-                  type='number'
-                  min='0'
-                  step='0.01'
+                <PriceInput
                   value={editFormAmount}
-                  onChange={(e) => setEditFormAmount(e.target.value)}
+                  onChange={setEditFormAmount}
+                  placeholder='0.00'
                 />
               </div>
             </div>
