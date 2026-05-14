@@ -28,6 +28,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PriceInput } from '@/components/ui/price-input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -126,7 +127,7 @@ const Jobs = () => {
   const [formDescription, setFormDescription] = useState('');
   const [formClientId, setFormClientId] = useState('');
   const [formDate, setFormDate] = useState<Date>(new Date());
-  const [formPrice, setFormPrice] = useState('');
+  const [formPrice, setFormPrice] = useState(0);
   const [formLocation, setFormLocation] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -220,7 +221,7 @@ const Jobs = () => {
     setFormDescription('');
     setFormClientId('');
     setFormDate(new Date());
-    setFormPrice('');
+    setFormPrice(0);
     setFormLocation('');
     setFormNotes('');
   };
@@ -237,7 +238,7 @@ const Jobs = () => {
         description: formDescription || undefined,
         scheduledDate: formDate.toISOString(),
         location: formLocation || undefined,
-        price: formPrice ? Number(formPrice) : undefined,
+        price: formPrice || undefined,
         notes: formNotes || undefined,
       },
       {
@@ -882,12 +883,10 @@ const Jobs = () => {
               </div>
               <div className='space-y-1.5'>
                 <Label>Price ($)</Label>
-                <Input
-                  type='number'
-                  min={0}
-                  placeholder='0'
+                <PriceInput
                   value={formPrice}
-                  onChange={(e) => setFormPrice(e.target.value)}
+                  onChange={setFormPrice}
+                  placeholder='0'
                 />
               </div>
             </div>
