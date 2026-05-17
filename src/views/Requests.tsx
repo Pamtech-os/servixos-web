@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Inbox,
@@ -16,6 +16,7 @@ import {
   Loader2,
   Ban,
 } from 'lucide-react';
+import { io, type Socket } from 'socket.io-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,16 +31,24 @@ import PaginationControls from '@/components/ui/pagination-controls';
 import { format, isValid } from 'date-fns';
 import { toast } from '@/components/ui/sonner';
 import ConfirmModal from '@/components/ConfirmModal';
-import ChatUI, { type ChatMessage } from '@/components/ChatUI';
+import ChatUI, { type ChatMessage, type ChatSendPayload } from '@/components/ChatUI';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import {
   useServiceRequests,
   useRequestPriceEstimate,
   useRequestConversation,
+  isClientProvisioningPendingError,
 } from '@/hooks/queries/use-requests';
 import { useUpdateRequest, useDeleteRequest } from '@/hooks/mutations/use-requests';
+import { useAuth } from '@/contexts/AuthContext';
 import { buildPaginationMeta } from '@/lib/pagination';
-import type { ServiceRequest, RequestStatus } from '@/lib/api-client';
+import {
+  requestMessages,
+  SOCKET_BASE_URL,
+  type RequestMessagePayload,
+  type ServiceRequest,
+  type RequestStatus,
+} from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -67,6 +76,116 @@ const STATUS_TABS: Array<{ label: string; value: RequestStatus | undefined }> = 
   { label: 'Cancelled', value: 'cancelled' },
 ];
 
+const REQUEST_TYPING_STOP_MS = 2000;
+const OPTIMISTIC_ID_PREFIX = 'optimistic-';
+
+interface RoomJoinedPayload {
+  room: string;
+  history?: RequestMessagePayload[];
+}
+
+interface MessageReceivedEvent {
+  message: RequestMessagePayload;
+}
+
+interface MessageDeliveredEvent {
+  messageId: string;
+  deliveredAt?: string;
+}
+
+interface MessageReadEvent {
+  upToMessageId: string;
+  readAt?: string;
+  readBy?: string;
+}
+
+interface UserTypingEvent {
+  userId?: string;
+  senderName?: string;
+}
+
+interface SocketErrorEvent {
+  code?: string;
+  message: string;
+}
+
+const mergeRequestMessages = (
+  current: RequestMessagePayload[],
+  incoming: RequestMessagePayload[]
+): RequestMessagePayload[] => {
+  if (!incoming.length) return current;
+
+  const merged = [...current];
+
+  const findOptimisticMatchIndex = (msg: RequestMessagePayload) => {
+    if (msg.sender !== 'business') return -1;
+    const targetContent = (msg.content ?? '').trim();
+    const targetFileName = msg.fileName ?? '';
+    const targetTime = new Date(msg.createdAt).getTime();
+
+    return merged.findIndex((existing) => {
+      if (!existing.id.startsWith(OPTIMISTIC_ID_PREFIX)) return false;
+      if (existing.sender !== 'business') return false;
+      const existingContent = (existing.content ?? '').trim();
+      const existingFileName = existing.fileName ?? '';
+      const sameContent = existingContent === targetContent;
+      const sameFile = existingFileName === targetFileName;
+      if (targetContent) {
+        if (!sameContent) return false;
+      } else if (!targetFileName || !sameFile) {
+        return false;
+      }
+
+      const existingTime = new Date(existing.createdAt).getTime();
+      if (!Number.isFinite(existingTime) || !Number.isFinite(targetTime)) return true;
+      return Math.abs(existingTime - targetTime) < 3 * 60 * 1000;
+    });
+  };
+
+  incoming.forEach((msg) => {
+    const indexById = merged.findIndex((existing) => existing.id === msg.id);
+    if (indexById >= 0) {
+      merged[indexById] = { ...merged[indexById], ...msg };
+      return;
+    }
+
+    const optimisticIndex = findOptimisticMatchIndex(msg);
+    if (optimisticIndex >= 0) {
+      merged[optimisticIndex] = { ...merged[optimisticIndex], ...msg };
+      return;
+    }
+
+    merged.push(msg);
+  });
+
+  return merged.sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    return aTime - bTime;
+  });
+};
+
+const mapRequestMessageToChatMessage = (message: RequestMessagePayload): ChatMessage => ({
+  id: message.id,
+  sender: message.sender,
+  senderName: message.senderName,
+  content: message.content,
+  status: message.status,
+  timestamp: new Date(message.createdAt).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }),
+  attachment: message.attachmentUrl || message.fileName
+    ? {
+        name: message.fileName ?? 'Attachment',
+        type: message.mimeType,
+        size: message.fileSize,
+        url: message.attachmentUrl,
+      }
+    : undefined,
+});
+
 // ─── Conversation chat wrapper ────────────────────────────────────────────────
 
 function RequestChatSheet({
@@ -78,25 +197,371 @@ function RequestChatSheet({
   open: boolean;
   onClose: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { auth } = useAuth();
+  const businessId = auth.user?.businessId ?? '';
+  const accessToken = auth.accessToken ?? '';
+  const businessUserId = auth.user?.id ?? '';
 
-  const { isLoading: isLoadingConversation } = useRequestConversation(
+  const socketRef = useRef<Socket | null>(null);
+  const hasJoinedRoomRef = useRef(false);
+  const lastMarkedReadIdRef = useRef('');
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const incomingTypingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOutboundRef = useRef<
+    Array<{ localId: string; content: string; attachment?: File }>
+  >([]);
+  const isFlushingOutboundRef = useRef(false);
+  const isTypingRef = useRef(false);
+
+  const [messages, setMessages] = useState<RequestMessagePayload[]>([]);
+  const [typingLabel, setTypingLabel] = useState('');
+
+  const conversationQuery = useRequestConversation(
     request?._id ?? '',
-    open && !!request
+    open && !!request,
+    { retryOnClientProvisioning: true }
+  );
+  const requestId = request?._id ?? '';
+  const requestClientName = request?.clientName ?? 'Client';
+  const conversation = conversationQuery.data;
+  const clientId = conversation?.clientId ?? '';
+  const isClientProvisioningPending = isClientProvisioningPendingError(conversationQuery.error);
+
+  const emitTypingStop = useCallback(() => {
+    if (typingStopTimerRef.current) {
+      clearTimeout(typingStopTimerRef.current);
+      typingStopTimerRef.current = null;
+    }
+    if (!isTypingRef.current) return;
+    if (socketRef.current && clientId) {
+      socketRef.current.emit('typing_stop', { clientId });
+    }
+    isTypingRef.current = false;
+  }, [clientId]);
+
+  const emitTypingStart = useCallback(() => {
+    if (!socketRef.current || !clientId || !socketRef.current.connected) return;
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
+      socketRef.current.emit('typing_start', { clientId });
+    }
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    typingStopTimerRef.current = setTimeout(() => emitTypingStop(), REQUEST_TYPING_STOP_MS);
+  }, [clientId, emitTypingStop]);
+
+  const clearIncomingTypingLabel = useCallback(() => {
+    if (incomingTypingClearTimerRef.current) {
+      clearTimeout(incomingTypingClearTimerRef.current);
+      incomingTypingClearTimerRef.current = null;
+    }
+    setTypingLabel('');
+  }, []);
+
+  const businessSenderName = useMemo(() => {
+    const first = auth.user?.firstName?.trim() ?? '';
+    const last = auth.user?.lastName?.trim() ?? '';
+    return `${first} ${last}`.trim() || 'You';
+  }, [auth.user?.firstName, auth.user?.lastName]);
+
+  const flushOutboundQueue = useCallback(() => {
+    if (isFlushingOutboundRef.current) return;
+    const socket = socketRef.current;
+    if (!socket || !socket.connected || !hasJoinedRoomRef.current || !clientId) return;
+
+    isFlushingOutboundRef.current = true;
+
+    const process = async () => {
+      while (pendingOutboundRef.current.length > 0) {
+        if (!socket.connected || !hasJoinedRoomRef.current) break;
+        const next = pendingOutboundRef.current[0];
+        if (!next) break;
+
+        let attachmentPayload:
+          | {
+              attachmentUrl: string;
+              publicId: string;
+              mimeType: string;
+              fileName: string;
+              fileSize: number;
+            }
+          | undefined;
+
+        if (next.attachment) {
+          try {
+            const uploaded = await requestMessages.uploadAttachment(businessId, next.attachment);
+            attachmentPayload = {
+              attachmentUrl: uploaded.attachmentUrl,
+              publicId: uploaded.publicId,
+              mimeType: uploaded.mimeType,
+              fileName: uploaded.fileName,
+              fileSize: uploaded.fileSize,
+            };
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === next.localId ? { ...msg, ...attachmentPayload } : msg
+              )
+            );
+          } catch {
+            if (!next.content.trim()) {
+              setMessages((prev) => prev.filter((msg) => msg.id !== next.localId));
+              pendingOutboundRef.current.shift();
+              continue;
+            }
+
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === next.localId
+                  ? {
+                      ...msg,
+                      attachmentUrl: undefined,
+                      publicId: undefined,
+                      mimeType: undefined,
+                      fileName: undefined,
+                      fileSize: undefined,
+                    }
+                  : msg
+              )
+            );
+          }
+        }
+
+        socket.emit('send_message', {
+          clientId,
+          ...(next.content.trim() ? { content: next.content.trim() } : {}),
+          ...(attachmentPayload ?? {}),
+        });
+
+        pendingOutboundRef.current.shift();
+      }
+    };
+
+    void process().finally(() => {
+      isFlushingOutboundRef.current = false;
+      if (pendingOutboundRef.current.length > 0) {
+        setTimeout(() => {
+          flushOutboundQueue();
+        }, 300);
+      }
+    });
+  }, [businessId, clientId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setMessages([]);
+    setTypingLabel('');
+    lastMarkedReadIdRef.current = '';
+    hasJoinedRoomRef.current = false;
+    pendingOutboundRef.current = [];
+    isFlushingOutboundRef.current = false;
+    isTypingRef.current = false;
+  }, [open, requestId]);
+
+  useEffect(() => {
+    if (!open || !conversation?.messages?.length) return;
+    setMessages((prev) => mergeRequestMessages(prev, conversation.messages));
+  }, [open, conversation?.messages]);
+
+  useEffect(() => {
+    if (!open || !requestId || !clientId || !businessId || !accessToken) return;
+
+    const socket = io(`${SOCKET_BASE_URL}/chat`, {
+      auth: {
+        token: accessToken,
+        businessId,
+      },
+      transports: ['websocket', 'polling'],
+    });
+    socketRef.current = socket;
+
+    const handleConnected = () => {
+      socket.emit('join_room', { clientId });
+    };
+
+    const handleServerConnected = () => {
+      hasJoinedRoomRef.current = false;
+    };
+
+    const handleRoomJoined = ({ history }: RoomJoinedPayload) => {
+      hasJoinedRoomRef.current = true;
+      if (Array.isArray(history)) {
+        setMessages((prev) => mergeRequestMessages(prev, history));
+      }
+      flushOutboundQueue();
+    };
+
+    const handleMessageReceived = ({ message }: MessageReceivedEvent) => {
+      if (!message || message.clientId !== clientId) return;
+      setMessages((prev) => mergeRequestMessages(prev, [message]));
+    };
+
+    const handleMessageDelivered = ({ messageId, deliveredAt }: MessageDeliveredEvent) => {
+      if (!messageId) return;
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                status: msg.status === 'read' ? 'read' : 'delivered',
+                deliveredAt: deliveredAt ?? msg.deliveredAt,
+              }
+            : msg
+        )
+      );
+    };
+
+    const handleMessageRead = ({ upToMessageId, readAt }: MessageReadEvent) => {
+      if (!upToMessageId) return;
+      setMessages((prev) => {
+        const upToIndex = prev.findIndex((msg) => msg.id === upToMessageId);
+        if (upToIndex === -1) return prev;
+        return prev.map((msg, idx) =>
+          idx <= upToIndex && msg.sender === 'business'
+            ? { ...msg, status: 'read', readAt: readAt ?? msg.readAt }
+            : msg
+        );
+      });
+    };
+
+    const handleUserTyping = ({ userId, senderName }: UserTypingEvent) => {
+      if (userId && userId === businessUserId) return;
+      const name = senderName?.trim() || requestClientName;
+      setTypingLabel(`${name} is typing`);
+      if (incomingTypingClearTimerRef.current) {
+        clearTimeout(incomingTypingClearTimerRef.current);
+      }
+      incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
+    };
+
+    const handleUserStoppedTyping = ({ userId }: UserTypingEvent) => {
+      if (userId && userId === businessUserId) return;
+      clearIncomingTypingLabel();
+    };
+
+    const handleSocketError = ({ message }: SocketErrorEvent) => {
+      toast.error('Chat error', { description: message || 'Unable to complete chat action.' });
+    };
+
+    const handleConnectionError = ({ message }: SocketErrorEvent) => {
+      toast.error('Chat connection error', {
+        description: message || 'Chat disconnected. Please reconnect.',
+      });
+      socket.disconnect();
+    };
+
+    socket.on('connect', handleConnected);
+    socket.on('connected', handleServerConnected);
+    socket.on('room_joined', handleRoomJoined);
+    socket.on('message_received', handleMessageReceived);
+    socket.on('message_delivered', handleMessageDelivered);
+    socket.on('message_read', handleMessageRead);
+    socket.on('user_typing', handleUserTyping);
+    socket.on('user_stopped_typing', handleUserStoppedTyping);
+    socket.on('error', handleSocketError);
+    socket.on('connection_error', handleConnectionError);
+
+    socket.on('connect_error', (error: Error) => {
+      toast.error('Chat connection failed', {
+        description: error.message || 'Unable to connect to chat.',
+      });
+    });
+
+    return () => {
+      emitTypingStop();
+      clearIncomingTypingLabel();
+      hasJoinedRoomRef.current = false;
+      if (socket.connected) {
+        socket.emit('leave_room', { clientId });
+      }
+      socket.disconnect();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
+    };
+  }, [
+    open,
+    requestId,
+    requestClientName,
+    clientId,
+    businessId,
+    accessToken,
+    businessUserId,
+    clearIncomingTypingLabel,
+    emitTypingStop,
+    flushOutboundQueue,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      emitTypingStop();
+      clearIncomingTypingLabel();
+      pendingOutboundRef.current = [];
+      isFlushingOutboundRef.current = false;
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      if (incomingTypingClearTimerRef.current) clearTimeout(incomingTypingClearTimerRef.current);
+    };
+  }, [clearIncomingTypingLabel, emitTypingStop]);
+
+  const latestIncomingMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].sender === 'client') return messages[i].id;
+    }
+    return '';
+  }, [messages]);
+
+  useEffect(() => {
+    if (!open || !clientId || !latestIncomingMessageId || !socketRef.current) return;
+    if (!hasJoinedRoomRef.current || !socketRef.current.connected) return;
+    if (lastMarkedReadIdRef.current === latestIncomingMessageId) return;
+
+    socketRef.current.emit('mark_read', {
+      clientId,
+      upToMessageId: latestIncomingMessageId,
+    });
+    lastMarkedReadIdRef.current = latestIncomingMessageId;
+  }, [open, clientId, latestIncomingMessageId]);
+
+  const handleSend = ({ content, attachment }: ChatSendPayload) => {
+    if (!clientId) return;
+
+    const trimmedContent = content.trim();
+    if (!trimmedContent && !attachment) return;
+
+    const localId = `${OPTIMISTIC_ID_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage: RequestMessagePayload = {
+      id: localId,
+      conversationId: conversation?._id ?? `pending-${clientId}`,
+      businessId,
+      clientId,
+      sender: 'business',
+      senderName: businessSenderName,
+      content: trimmedContent || undefined,
+      status: 'sent',
+      fileName: attachment?.name,
+      mimeType: attachment?.type || undefined,
+      fileSize: attachment?.size,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => mergeRequestMessages(prev, [optimisticMessage]));
+    pendingOutboundRef.current.push({
+      localId,
+      content: trimmedContent,
+      attachment: attachment ?? undefined,
+    });
+
+    emitTypingStop();
+    flushOutboundQueue();
+  };
+
+  const chatMessages = useMemo(
+    () => messages.map(mapRequestMessageToChatMessage),
+    [messages]
   );
 
-  const handleSend = (content: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `msg-${Date.now()}`,
-        sender: 'business',
-        senderName: 'You',
-        content,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
-  };
+  const isLoadingConversation =
+    conversationQuery.isLoading || (conversationQuery.isFetching && !conversationQuery.data);
+  const hasBlockingConversationError =
+    !!conversationQuery.error && !isClientProvisioningPending && !conversationQuery.data;
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -112,13 +577,48 @@ function RequestChatSheet({
         <div className='flex-1 min-h-0 p-4 pt-2'>
           {isLoadingConversation ? (
             <div className='flex h-full items-center justify-center'>
-              <Loader2 className='h-5 w-5 animate-spin text-muted-foreground' />
+              <div className='flex flex-col items-center gap-2 text-center'>
+                <Loader2 className='h-5 w-5 animate-spin text-muted-foreground' />
+                <p className='text-xs text-muted-foreground'>Loading conversation...</p>
+              </div>
+            </div>
+          ) : isClientProvisioningPending ? (
+            <div className='flex h-full items-center justify-center px-4'>
+              <div className='max-w-[260px] text-center space-y-2'>
+                <Loader2 className='mx-auto h-5 w-5 animate-spin text-muted-foreground' />
+                <p className='text-sm font-medium'>Client chat is being provisioned</p>
+                <p className='text-xs text-muted-foreground'>
+                  We are retrying automatically. You can keep reviewing this request while setup
+                  completes.
+                </p>
+              </div>
+            </div>
+          ) : hasBlockingConversationError ? (
+            <div className='flex h-full items-center justify-center px-4'>
+              <div className='max-w-[280px] text-center space-y-3'>
+                <p className='text-sm font-medium'>Unable to load this conversation</p>
+                <p className='text-xs text-muted-foreground'>
+                  {getApiErrorMessage(conversationQuery.error)}
+                </p>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  onClick={() => {
+                    void conversationQuery.refetch();
+                  }}
+                >
+                  Retry
+                </Button>
+              </div>
             </div>
           ) : (
             <ChatUI
-              messages={messages}
+              messages={chatMessages}
               onSendMessage={handleSend}
               clientName={request?.clientName ?? ''}
+              onTypingStart={emitTypingStart}
+              onTypingStop={emitTypingStop}
+              typingIndicatorText={typingLabel}
               className='h-full'
             />
           )}

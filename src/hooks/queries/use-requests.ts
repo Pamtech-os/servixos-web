@@ -3,6 +3,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { serviceRequests, type ServiceRequestsQuery } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
+import { HttpError } from '@/common/network/http-client';
+
+const CLIENT_NOT_PROVISIONED_MESSAGE = 'client not provisioned';
+
+export function isClientProvisioningPendingError(error: unknown): boolean {
+  if (!(error instanceof HttpError) || error.status !== 404) return false;
+  return error.message.toLowerCase().includes(CLIENT_NOT_PROVISIONED_MESSAGE);
+}
 
 export function useServiceRequests(query: ServiceRequestsQuery = {}) {
   const { auth } = useAuth();
@@ -26,14 +34,24 @@ export function useServiceRequest(id: string) {
   });
 }
 
-export function useRequestConversation(id: string, enabled = false) {
+export function useRequestConversation(
+  id: string,
+  enabled = false,
+  options?: { retryOnClientProvisioning?: boolean }
+) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
+  const retryOnClientProvisioning = options?.retryOnClientProvisioning ?? false;
 
   return useQuery({
     queryKey: ['requests', businessId, id, 'conversation'],
     queryFn: () => serviceRequests.getConversation(businessId, id),
     enabled: !!businessId && auth.isPinVerified && !!id && enabled,
+    refetchInterval: (query) =>
+      retryOnClientProvisioning && isClientProvisioningPendingError(query.state.error)
+        ? 3000
+        : false,
+    refetchIntervalInBackground: true,
   });
 }
 
