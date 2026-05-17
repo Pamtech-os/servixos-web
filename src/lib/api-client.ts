@@ -812,13 +812,42 @@ export interface ServiceRequestsQuery {
 }
 
 export interface RequestConversation {
-  _id: string;
+  _id?: string;
+  businessId?: string;
+  clientId: string;
+  messages: RequestMessagePayload[];
+  lastMessageContent?: string;
+  lastMessageAt?: string | null;
+  businessUnreadCount?: number;
+  clientUnreadCount?: number;
+}
+
+export interface RequestMessagePayload {
+  id: string;
+  conversationId: string;
   businessId: string;
   clientId: string;
-  lastMessageContent: string;
-  lastMessageAt: string | null;
-  businessUnreadCount: number;
-  clientUnreadCount: number;
+  sender: 'business' | 'client';
+  senderName: string;
+  content?: string;
+  status: 'sent' | 'delivered' | 'read';
+  deliveredAt?: string;
+  readAt?: string;
+  editedAt?: string;
+  attachmentUrl?: string;
+  publicId?: string;
+  mimeType?: string;
+  fileName?: string;
+  fileSize?: number;
+  createdAt: string;
+}
+
+export interface UploadedMessageAttachment {
+  attachmentUrl: string;
+  publicId: string;
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
 }
 
 export interface UpdateRequestInput {
@@ -1833,6 +1862,18 @@ export const files = {
 
   delete: (businessId: string, fileId: string): Promise<null> =>
     protectedRequest<null>('DELETE', `/files/${fileId}`, businessId),
+};
+
+export const requestMessages = {
+  uploadAttachment: (businessId: string, file: File): Promise<UploadedMessageAttachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    return protectedMultipartUpload<UploadedMessageAttachment>(
+      '/messages/upload-attachment',
+      businessId,
+      form
+    );
+  },
 };
 
 // ─── Analytics types ──────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ import { useUploadClientFile, useDeleteClientFile } from '@/hooks/mutations/use-
 import { mockInvoices, mockMessages } from '@/lib/mock-data';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import ChatUI, { type ChatMessage } from '@/components/ChatUI';
+import ChatUI, { type ChatMessage, type ChatSendPayload } from '@/components/ChatUI';
 import { format } from 'date-fns';
 import type { JobStatus } from '@/lib/api-client';
 
@@ -113,7 +113,7 @@ const ClientDetail = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = ({ content }: ChatSendPayload) => {
     const text = content.trim();
     if (!text) return;
     setChatMessages((prev) => [
