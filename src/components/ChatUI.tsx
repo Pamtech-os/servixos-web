@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Smile, Paperclip, X, ImageIcon, FileIcon } from 'lucide-react';
+import { Send, Smile, Paperclip, X, ImageIcon, FileIcon, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -41,6 +41,7 @@ interface ChatUIProps {
   messages: ChatMessage[];
   onSendMessage: (payload: ChatSendPayload) => void | Promise<void>;
   clientName?: string;
+  isClientOnline?: boolean;
   className?: string;
   onTypingStart?: () => void;
   onTypingStop?: () => void;
@@ -82,10 +83,14 @@ const EMOJI_LIST = [
   '💡',
 ];
 
-const STATUS_LABEL: Record<ChatMessageStatus, string> = {
-  sent: 'Sent',
-  delivered: 'Delivered',
-  read: 'Read',
+const MessageStatusIcon = ({ status }: { status: ChatMessageStatus }) => {
+  if (status === 'sent') {
+    return <Check size={12} className='inline shrink-0 opacity-60' />;
+  }
+  if (status === 'delivered') {
+    return <CheckCheck size={12} className='inline shrink-0 opacity-60' />;
+  }
+  return <CheckCheck size={12} className='inline shrink-0 text-blue-400' />;
 };
 
 const formatFileSize = (bytes?: number) => {
@@ -111,6 +116,7 @@ const ChatUI = ({
   messages,
   onSendMessage,
   clientName = 'Client',
+  isClientOnline = false,
   className = '',
   onTypingStart,
   onTypingStop,
@@ -192,11 +198,17 @@ const ChatUI = ({
                 .join('')}
             </AvatarFallback>
           </Avatar>
-          <span className='absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card bg-emerald-500' />
+          <span
+            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-card transition-colors ${
+              isClientOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+            }`}
+          />
         </div>
         <div>
           <p className='text-sm font-semibold'>{clientName}</p>
-          <p className='text-xs text-muted-foreground'>Online</p>
+          <p className={`text-xs ${isClientOnline ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+            {isClientOnline ? 'Online' : 'Offline'}
+          </p>
         </div>
       </div>
 
@@ -267,14 +279,14 @@ const ChatUI = ({
                       </>
                     )}
                   </div>
-                  <p
-                    className={`mt-1 text-[10px] text-muted-foreground ${
-                      isBusiness ? 'text-right' : 'text-left'
+                  <div
+                    className={`mt-1 flex items-center gap-1 text-[10px] text-muted-foreground ${
+                      isBusiness ? 'justify-end' : 'justify-start'
                     }`}
                   >
-                    {msg.timestamp}
-                    {isBusiness && msg.status ? ` • ${STATUS_LABEL[msg.status]}` : ''}
-                  </p>
+                    <span>{msg.timestamp}</span>
+                    {isBusiness && msg.status && <MessageStatusIcon status={msg.status} />}
+                  </div>
                 </div>
               </motion.div>
             );

@@ -37,20 +37,23 @@ export function useServiceRequest(id: string) {
 export function useRequestConversation(
   id: string,
   enabled = false,
-  options?: { retryOnClientProvisioning?: boolean }
+  options?: { retryOnClientProvisioning?: boolean; pollingInterval?: number }
 ) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
   const retryOnClientProvisioning = options?.retryOnClientProvisioning ?? false;
+  const pollingInterval = options?.pollingInterval;
 
   return useQuery({
     queryKey: ['requests', businessId, id, 'conversation'],
     queryFn: () => serviceRequests.getConversation(businessId, id),
     enabled: !!businessId && auth.isPinVerified && !!id && enabled,
-    refetchInterval: (query) =>
-      retryOnClientProvisioning && isClientProvisioningPendingError(query.state.error)
-        ? 3000
-        : false,
+    refetchInterval: (query) => {
+      if (retryOnClientProvisioning && isClientProvisioningPendingError(query.state.error)) {
+        return 3000;
+      }
+      return pollingInterval ?? false;
+    },
     refetchIntervalInBackground: true,
   });
 }

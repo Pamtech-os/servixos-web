@@ -82,6 +82,14 @@ const OPTIMISTIC_ID_PREFIX = 'optimistic-';
 interface RoomJoinedPayload {
   room: string;
   history?: RequestMessagePayload[];
+  clientOnline?: boolean;
+}
+
+interface PresenceEvent {
+  userId?: string;
+  clientId?: string;
+  id?: string;
+  _id?: string;
 }
 
 interface MessageReceivedEvent {
@@ -102,6 +110,10 @@ interface MessageReadEvent {
 interface UserTypingEvent {
   userId?: string;
   senderName?: string;
+}
+
+interface ClientTypingEvent {
+  clientId: string;
 }
 
 interface SocketErrorEvent {
@@ -138,7 +150,9 @@ const mergeRequestMessages = (
 
       const existingTime = new Date(existing.createdAt).getTime();
       if (!Number.isFinite(existingTime) || !Number.isFinite(targetTime)) return true;
-      return Math.abs(existingTime - targetTime) < 3 * 60 * 1000;
+      // Use a 2-hour window: servers returning timestamps without a timezone suffix are parsed
+      // as local time by JS, which can introduce up to a 1-hour offset (e.g. UTC+1 regions).
+      return Math.abs(existingTime - targetTime) < 2 * 60 * 60 * 1000;
     });
   };
 
@@ -215,11 +229,12 @@ function RequestChatSheet({
 
   const [messages, setMessages] = useState<RequestMessagePayload[]>([]);
   const [typingLabel, setTypingLabel] = useState('');
+  const [isClientOnline, setIsClientOnline] = useState(false);
 
   const conversationQuery = useRequestConversation(
     request?._id ?? '',
     open && !!request,
-    { retryOnClientProvisioning: true }
+    { retryOnClientProvisioning: true, pollingInterval: 3000 }
   );
   const requestId = request?._id ?? '';
   const requestClientName = request?.clientName ?? 'Client';
@@ -349,6 +364,7 @@ function RequestChatSheet({
     if (!open) return;
     setMessages([]);
     setTypingLabel('');
+    setIsClientOnline(false);
     lastMarkedReadIdRef.current = '';
     hasJoinedRoomRef.current = false;
     pendingOutboundRef.current = [];
@@ -381,16 +397,29 @@ function RequestChatSheet({
       hasJoinedRoomRef.current = false;
     };
 
-    const handleRoomJoined = ({ history }: RoomJoinedPayload) => {
+    const handleRoomJoined = ({ history, clientOnline }: RoomJoinedPayload) => {
       hasJoinedRoomRef.current = true;
       if (Array.isArray(history)) {
         setMessages((prev) => mergeRequestMessages(prev, history));
       }
+      if (clientOnline !== undefined) setIsClientOnline(clientOnline);
       flushOutboundQueue();
     };
 
-    const handleMessageReceived = ({ message }: MessageReceivedEvent) => {
-      if (!message || message.clientId !== clientId) return;
+    const handleClientOnline = (data: PresenceEvent) => {
+      const id = data.clientId ?? data.userId ?? data._id ?? data.id;
+      if (!id || id === clientId) setIsClientOnline(true);
+    };
+
+    const handleClientOffline = (data: PresenceEvent) => {
+      const id = data.clientId ?? data.userId ?? data._id ?? data.id;
+      if (!id || id === clientId) setIsClientOnline(false);
+    };
+
+    const handleMessageReceived = (data: MessageReceivedEvent | RequestMessagePayload) => {
+      const message = (data as MessageReceivedEvent).message ?? (data as RequestMessagePayload);
+      if (!message?.id) return;
+      if (message.clientId && clientId && message.clientId !== clientId) return;
       setMessages((prev) => mergeRequestMessages(prev, [message]));
     };
 
@@ -437,6 +466,20 @@ function RequestChatSheet({
       clearIncomingTypingLabel();
     };
 
+    const handleClientTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
+      if (typingClientId !== clientId) return;
+      setTypingLabel(`${requestClientName} is typing`);
+      if (incomingTypingClearTimerRef.current) {
+        clearTimeout(incomingTypingClearTimerRef.current);
+      }
+      incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
+    };
+
+    const handleClientStoppedTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
+      if (typingClientId !== clientId) return;
+      clearIncomingTypingLabel();
+    };
+
     const handleSocketError = ({ message }: SocketErrorEvent) => {
       toast.error('Chat error', { description: message || 'Unable to complete chat action.' });
     };
@@ -452,10 +495,20 @@ function RequestChatSheet({
     socket.on('connected', handleServerConnected);
     socket.on('room_joined', handleRoomJoined);
     socket.on('message_received', handleMessageReceived);
+    socket.on('new_message', handleMessageReceived);
     socket.on('message_delivered', handleMessageDelivered);
     socket.on('message_read', handleMessageRead);
     socket.on('user_typing', handleUserTyping);
+    socket.on('typing', handleUserTyping);
+    socket.on('is_typing', handleUserTyping);
     socket.on('user_stopped_typing', handleUserStoppedTyping);
+    socket.on('typing_stop', handleUserStoppedTyping);
+    socket.on('client_typing', handleClientTyping);
+    socket.on('client_stopped_typing', handleClientStoppedTyping);
+    socket.on('user_online', handleClientOnline);
+    socket.on('client_online', handleClientOnline);
+    socket.on('user_offline', handleClientOffline);
+    socket.on('client_offline', handleClientOffline);
     socket.on('error', handleSocketError);
     socket.on('connection_error', handleConnectionError);
 
@@ -468,6 +521,7 @@ function RequestChatSheet({
     return () => {
       emitTypingStop();
       clearIncomingTypingLabel();
+      setIsClientOnline(false);
       hasJoinedRoomRef.current = false;
       if (socket.connected) {
         socket.emit('leave_room', { clientId });
@@ -616,6 +670,7 @@ function RequestChatSheet({
               messages={chatMessages}
               onSendMessage={handleSend}
               clientName={request?.clientName ?? ''}
+              isClientOnline={isClientOnline}
               onTypingStart={emitTypingStart}
               onTypingStop={emitTypingStop}
               typingIndicatorText={typingLabel}
