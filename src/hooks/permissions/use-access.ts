@@ -23,6 +23,7 @@ export function useAccess() {
     // Owner-only pages
     canViewRoles: isOwner,
     canViewMyWebsite: isOwner,
+    canViewReviews: isOwner,
     canViewAiInsights: isOwner,
     canViewAiAdvisor: isOwner,
     canViewActivityLogs: isOwner,
