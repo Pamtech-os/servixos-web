@@ -20,6 +20,7 @@ import {
   Send,
   Loader2,
   ExternalLink,
+  Receipt,
 } from 'lucide-react';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -76,6 +77,8 @@ import {
   useSendContract,
   useGetContractPdf,
 } from '@/hooks/mutations/use-contracts';
+import { useContractByJob } from '@/hooks/queries/use-contracts';
+import { useCreateInvoice } from '@/hooks/mutations/use-invoices';
 import type { Job, JobStatus, Contract } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 8;
@@ -117,10 +120,9 @@ const Jobs = () => {
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  // Contract state (tracked per session since there's no GET contract endpoint)
-  const [contractsByJobId, setContractsByJobId] = useState<Record<string, Contract>>({});
-  const [sentJobIds, setSentJobIds] = useState<Set<string>>(new Set());
+  // Contract workflow state
   const [contractReviewOpen, setContractReviewOpen] = useState(false);
+  const [activeContractForReview, setActiveContractForReview] = useState<Contract | null>(null);
 
   // Create form state
   const [formTitle, setFormTitle] = useState('');
@@ -149,6 +151,9 @@ const Jobs = () => {
   const createContract = useCreateContract();
   const sendContract = useSendContract();
   const getPdf = useGetContractPdf();
+  const jobContractQuery = useContractByJob(viewJob?._id, viewJob?.clientId);
+  const jobContract = jobContractQuery.data ?? null;
+  const createInvoice = useCreateInvoice();
 
   const jobList = jobsQuery.data?.data ?? [];
   const paginationMeta = jobsQuery.data?.meta;
@@ -163,6 +168,11 @@ const Jobs = () => {
     () => Object.fromEntries(clientList.map((c) => [c._id, c.email])),
     [clientList],
   );
+
+  const contractSigned = jobContract?.status === 'signed';
+  const contractSent = jobContract?.status === 'sent';
+  const contractIsDraft = jobContract?.status === 'draft';
+  const hasContract = !!jobContract;
 
   const selectedJobsCount = selectedJobIds.length;
   const allVisibleSelected =
@@ -289,7 +299,7 @@ const Jobs = () => {
       },
       {
         onSuccess: (contract) => {
-          setContractsByJobId((prev) => ({ ...prev, [viewJob._id]: contract }));
+          setActiveContractForReview(contract);
           setContractReviewOpen(true);
         },
         onError: (err) => {
@@ -300,8 +310,9 @@ const Jobs = () => {
   };
 
   const handleGetPdf = () => {
-    if (!currentContract) return;
-    getPdf.mutate(currentContract._id, {
+    const contract = activeContractForReview ?? jobContract;
+    if (!contract) return;
+    getPdf.mutate(contract._id, {
       onSuccess: ({ url }) => {
         window.open(url, '_blank', 'noreferrer');
       },
@@ -312,16 +323,19 @@ const Jobs = () => {
   };
 
   const handleSendContract = () => {
-    if (!viewJob || !currentContract) return;
+    if (!viewJob) return;
+    const contractToSend = activeContractForReview ?? jobContract;
+    if (!contractToSend) return;
     const clientEmail = clientEmailMap[viewJob.clientId] ?? '';
     sendContract.mutate(
-      { id: currentContract._id, clientEmail },
+      { id: contractToSend._id, clientEmail },
       {
         onSuccess: () => {
-          setSentJobIds((prev) => new Set([...prev, viewJob._id]));
           setContractReviewOpen(false);
+          setActiveContractForReview(null);
+          void jobContractQuery.refetch();
           toast.success('Contract sent', {
-            description: 'Contract has been sent to the client for review.',
+            description: 'Contract has been sent to the client for signing.',
           });
         },
         onError: (err) => {
@@ -331,8 +345,33 @@ const Jobs = () => {
     );
   };
 
-  const currentContract = viewJob ? contractsByJobId[viewJob._id] : null;
-  const contractSent = viewJob ? sentJobIds.has(viewJob._id) : false;
+  const handleCreateInvoice = () => {
+    if (!viewJob) return;
+    createInvoice.mutate(
+      {
+        clientId: viewJob.clientId,
+        jobId: viewJob._id,
+        invoiceDate: new Date().toISOString(),
+        lineItems: [
+          {
+            description: viewJob.title,
+            quantity: 1,
+            unitPrice: viewJob.price ?? 0,
+          },
+        ],
+      },
+      {
+        onSuccess: () => {
+          toast.success('Invoice created', {
+            description: `Invoice for "${viewJob.title}" created successfully.`,
+          });
+        },
+        onError: (err) => {
+          toast.error('Failed to create invoice', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
 
   return (
     <div className='space-y-4 sm:space-y-6'>
@@ -668,7 +707,58 @@ const Jobs = () => {
               )}
               <Separator />
               <div className='flex flex-wrap gap-2'>
-                {viewJob.status === 'pending' && (
+                {/* Step 1: Generate contract — the only initial action */}
+                {!hasContract && (
+                  <Button
+                    onClick={handleGenerateContract}
+                    className='gap-2'
+                    disabled={createContract.isPending}
+                  >
+                    {createContract.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
+                    ) : (
+                      <Sparkles size={14} />
+                    )}
+                    {createContract.isPending ? 'Generating…' : 'Generate Contract'}
+                  </Button>
+                )}
+
+                {/* Draft: review before sending */}
+                {contractIsDraft && (
+                  <Button
+                    variant='outline'
+                    className='gap-2'
+                    onClick={() => {
+                      setActiveContractForReview(jobContract);
+                      setContractReviewOpen(true);
+                    }}
+                  >
+                    <FileText size={14} /> Review &amp; Send Contract
+                  </Button>
+                )}
+
+                {/* Sent: awaiting client signature */}
+                {contractSent && (
+                  <Badge
+                    variant='outline'
+                    className='gap-1.5 border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-amber-600 dark:text-amber-400'
+                  >
+                    <Send size={14} /> Contract Sent – Awaiting Signature
+                  </Badge>
+                )}
+
+                {/* Signed: contract complete */}
+                {contractSigned && (
+                  <Badge
+                    variant='outline'
+                    className='gap-1.5 border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-emerald-600 dark:text-emerald-400'
+                  >
+                    <FileText size={14} /> Contract Signed
+                  </Badge>
+                )}
+
+                {/* Start / Complete — only unlocked after contract is signed */}
+                {contractSigned && viewJob.status === 'pending' && (
                   <Button
                     onClick={() => handleStartJob(viewJob)}
                     className='gap-2'
@@ -678,11 +768,11 @@ const Jobs = () => {
                       <Loader2 size={14} className='animate-spin' />
                     ) : (
                       <Play size={14} />
-                    )}{' '}
+                    )}
                     Start Job
                   </Button>
                 )}
-                {viewJob.status === 'in_progress' && (
+                {contractSigned && viewJob.status === 'in_progress' && (
                   <Button
                     onClick={() => handleCompleteJob(viewJob)}
                     className='gap-2'
@@ -692,43 +782,26 @@ const Jobs = () => {
                       <Loader2 size={14} className='animate-spin' />
                     ) : (
                       <Briefcase size={14} />
-                    )}{' '}
+                    )}
                     Mark Complete
                   </Button>
                 )}
-                {/* Contract button */}
-                {!contractSent ? (
+
+                {/* Invoice — only unlocked after contract is signed */}
+                {contractSigned && (
                   <Button
-                    onClick={
-                      currentContract
-                        ? () => setContractReviewOpen(true)
-                        : handleGenerateContract
-                    }
                     variant='outline'
+                    onClick={handleCreateInvoice}
                     className='gap-2'
-                    disabled={createContract.isPending}
+                    disabled={createInvoice.isPending}
                   >
-                    {createContract.isPending ? (
-                      <>
-                        <Loader2 size={14} className='animate-spin' /> Creating...
-                      </>
-                    ) : currentContract ? (
-                      <>
-                        <Send size={14} /> Send Contract
-                      </>
+                    {createInvoice.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
                     ) : (
-                      <>
-                        <Sparkles size={14} /> Generate Contract
-                      </>
+                      <Receipt size={14} />
                     )}
+                    Create Invoice
                   </Button>
-                ) : (
-                  <Badge
-                    variant='outline'
-                    className='gap-1.5 border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-emerald-600'
-                  >
-                    <FileText size={14} /> Contract Sent
-                  </Badge>
                 )}
               </div>
             </div>
@@ -739,12 +812,15 @@ const Jobs = () => {
       {/* Contract Review Dialog */}
       <Dialog
         open={contractReviewOpen}
-        onOpenChange={() => {
-          /* non-closable via overlay */
+        onOpenChange={(open) => {
+          if (!open) {
+            setContractReviewOpen(false);
+            setActiveContractForReview(null);
+          }
         }}
       >
         <DialogContent
-          className='sm:max-w-lg'
+          className='flex max-h-[90dvh] flex-col sm:max-w-2xl'
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
@@ -753,15 +829,20 @@ const Jobs = () => {
               <FileText size={18} className='text-primary' /> Contract Ready
             </DialogTitle>
             <DialogDescription>
-              Review the generated contract before sending it to the client.
+              Review the contract before sending it to the client for signing.
             </DialogDescription>
           </DialogHeader>
-          {currentContract && (
-            <div className='space-y-3 py-2'>
-              <p className='text-sm font-medium'>{currentContract.title}</p>
-              {currentContract.pdfUrl ? (
+          {activeContractForReview && (
+            <div className='flex-1 space-y-3 overflow-y-auto py-2'>
+              <p className='text-sm font-medium'>{activeContractForReview.title}</p>
+              {activeContractForReview.html ? (
+                <div
+                  className='max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed'
+                  dangerouslySetInnerHTML={{ __html: activeContractForReview.html }}
+                />
+              ) : activeContractForReview.pdfUrl ? (
                 <a
-                  href={currentContract.pdfUrl}
+                  href={activeContractForReview.pdfUrl}
                   target='_blank'
                   rel='noreferrer'
                   className='flex items-center gap-2 text-sm text-primary hover:underline'
@@ -780,7 +861,7 @@ const Jobs = () => {
                     <Loader2 size={14} className='animate-spin' />
                   ) : (
                     <ExternalLink size={14} />
-                  )}{' '}
+                  )}
                   Get PDF
                 </Button>
               )}
@@ -789,20 +870,23 @@ const Jobs = () => {
           <DialogFooter>
             <Button
               variant='outline'
-              onClick={() => setContractReviewOpen(false)}
+              onClick={() => {
+                setContractReviewOpen(false);
+                setActiveContractForReview(null);
+              }}
             >
               Close
             </Button>
             <Button
               onClick={handleSendContract}
               className='gap-2'
-              disabled={sendContract.isPending || !currentContract}
+              disabled={sendContract.isPending || !activeContractForReview}
             >
               {sendContract.isPending ? (
                 <Loader2 size={14} className='animate-spin' />
               ) : (
                 <Send size={14} />
-              )}{' '}
+              )}
               Send to Client
             </Button>
           </DialogFooter>
