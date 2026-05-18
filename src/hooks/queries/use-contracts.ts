@@ -25,3 +25,20 @@ export function useContract(id: string) {
     enabled: !!businessId && auth.isPinVerified && !!id,
   });
 }
+
+export function useContractByJob(jobId: string | undefined, clientId: string | undefined) {
+  const { auth } = useAuth();
+  const businessId = auth.user?.businessId ?? '';
+
+  return useQuery({
+    queryKey: ['contracts', businessId, 'byJob', jobId],
+    queryFn: async () => {
+      const result = await contracts.list(businessId, { clientId: clientId! });
+      return result.data.find((c) => c.jobId === jobId) ?? null;
+    },
+    enabled: !!businessId && auth.isPinVerified && !!jobId && !!clientId,
+    staleTime: 30_000,
+    // Poll every 30s while awaiting client signature
+    refetchInterval: (query) => (query.state.data?.status === 'sent' ? 30_000 : false),
+  });
+}
