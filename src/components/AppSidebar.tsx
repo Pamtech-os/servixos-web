@@ -23,6 +23,7 @@ import {
   Bot,
   UsersRound,
   Globe,
+  Star,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClock } from '@/contexts/ClockContext';
@@ -49,6 +50,7 @@ const navItems: NavItem[] = [
   { label: 'Payments', href: '/payments', icon: CreditCard, accessKey: 'canViewPayments' },
   { label: 'Requests', href: '/requests', icon: Inbox, accessKey: 'canViewRequests' },
   { label: 'My Website', href: '/my-website', icon: Globe, accessKey: 'canViewMyWebsite' },
+  { label: 'Reviews', href: '/reviews', icon: Star, accessKey: 'canViewReviews' },
   { label: 'Analytics', href: '/analytics', icon: BarChart3, accessKey: 'canViewAnalytics' },
   { label: 'AI Insights', href: '/ai-insights', icon: Sparkles, accessKey: 'canViewAiInsights' },
   { label: 'AI Advisor', href: '/ai-advisor', icon: Bot, accessKey: 'canViewAiAdvisor' },
