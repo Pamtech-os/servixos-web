@@ -24,6 +24,7 @@ import {
   UsersRound,
   Globe,
   Star,
+  LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClock } from '@/contexts/ClockContext';
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
   { label: 'AI Insights', href: '/ai-insights', icon: Sparkles, accessKey: 'canViewAiInsights' },
   { label: 'AI Advisor', href: '/ai-advisor', icon: Bot, accessKey: 'canViewAiAdvisor' },
   { label: 'Activity Logs', href: '/activity-logs', icon: Activity, accessKey: 'canViewActivityLogs' },
+  { label: 'Support', href: '/support', icon: LifeBuoy },
   { label: 'Settings', href: '/settings', icon: Settings, accessKey: 'canViewSettings' },
 ];
 
