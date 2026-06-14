@@ -79,7 +79,8 @@ import {
 } from '@/hooks/mutations/use-contracts';
 import { useContractByJob } from '@/hooks/queries/use-contracts';
 import { useCreateInvoice } from '@/hooks/mutations/use-invoices';
-import type { Job, JobStatus, Contract } from '@/lib/api-client';
+import { useCreatePayment } from '@/hooks/mutations/use-payments';
+import type { Job, JobStatus, Contract, PaymentMode } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -124,6 +125,13 @@ const Jobs = () => {
   const [contractReviewOpen, setContractReviewOpen] = useState(false);
   const [activeContractForReview, setActiveContractForReview] = useState<Contract | null>(null);
 
+  // Deposit payment dialog state
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState(0);
+  const [depositMode, setDepositMode] = useState<PaymentMode>('bank_transfer');
+  const [depositDate, setDepositDate] = useState<Date>(new Date());
+  const [depositNotes, setDepositNotes] = useState('');
+
   // Create form state
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -154,6 +162,7 @@ const Jobs = () => {
   const jobContractQuery = useContractByJob(viewJob?._id, viewJob?.clientId);
   const jobContract = jobContractQuery.data ?? null;
   const createInvoice = useCreateInvoice();
+  const createPayment = useCreatePayment();
 
   const jobList = jobsQuery.data?.data ?? [];
   const paginationMeta = jobsQuery.data?.meta;
@@ -340,6 +349,39 @@ const Jobs = () => {
         },
         onError: (err) => {
           toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
+
+  const handleRecordDeposit = () => {
+    if (!viewJob) return;
+    if (depositAmount < 0.01) {
+      toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
+      return;
+    }
+    createPayment.mutate(
+      {
+        jobId: viewJob._id,
+        clientId: viewJob.clientId,
+        paymentDate: format(depositDate, 'yyyy-MM-dd'),
+        paymentMode: depositMode,
+        amount: depositAmount,
+        notes: depositNotes.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Deposit recorded', {
+            description: `$${depositAmount.toLocaleString()} deposit recorded for "${viewJob.title}".`,
+          });
+          setDepositDialogOpen(false);
+          setDepositAmount(0);
+          setDepositMode('bank_transfer');
+          setDepositDate(new Date());
+          setDepositNotes('');
+        },
+        onError: (err) => {
+          toast.error('Failed to record deposit', { description: getApiErrorMessage(err) });
         },
       },
     );
@@ -803,6 +845,18 @@ const Jobs = () => {
                     Create Invoice
                   </Button>
                 )}
+
+                {/* Record deposit without invoice */}
+                {contractSigned && (
+                  <Button
+                    variant='outline'
+                    onClick={() => setDepositDialogOpen(true)}
+                    className='gap-2'
+                  >
+                    <DollarSign size={14} />
+                    Record Deposit
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -888,6 +942,88 @@ const Jobs = () => {
                 <Send size={14} />
               )}
               Send to Client
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Deposit Dialog */}
+      <Dialog
+        open={depositDialogOpen}
+        onOpenChange={(open) => {
+          setDepositDialogOpen(open);
+          if (!open) {
+            setDepositAmount(0);
+            setDepositMode('bank_transfer');
+            setDepositDate(new Date());
+            setDepositNotes('');
+          }
+        }}
+      >
+        <DialogContent className='sm:max-w-sm'>
+          <DialogHeader>
+            <DialogTitle>Record Deposit</DialogTitle>
+            <DialogDescription>
+              Record a deposit payment for &quot;{viewJob?.title}&quot;. This will count toward the
+              50% minimum required to start the job.
+            </DialogDescription>
+          </DialogHeader>
+          <div className='space-y-4 py-2'>
+            <div className='space-y-1.5'>
+              <Label>Amount ($)</Label>
+              <PriceInput value={depositAmount} onChange={setDepositAmount} placeholder='0' />
+            </div>
+            <div className='space-y-1.5'>
+              <Label>Payment Method</Label>
+              <Select value={depositMode} onValueChange={(v) => setDepositMode(v as PaymentMode)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='bank_transfer'>Bank Transfer</SelectItem>
+                  <SelectItem value='cash'>Cash</SelectItem>
+                  <SelectItem value='credit_card'>Credit Card</SelectItem>
+                  <SelectItem value='cheque'>Cheque</SelectItem>
+                  <SelectItem value='mobile_money'>Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='space-y-1.5'>
+              <Label>Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant='outline' className='w-full justify-start gap-2 font-normal'>
+                    <CalendarIcon size={14} />
+                    {format(depositDate, 'PPP')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className='w-auto p-0' align='start'>
+                  <Calendar
+                    mode='single'
+                    selected={depositDate}
+                    onSelect={(d) => d && setDepositDate(d)}
+                    initialFocus
+                    className={cn('p-3 pointer-events-auto')}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className='space-y-1.5'>
+              <Label>Notes</Label>
+              <Textarea
+                placeholder='Optional notes'
+                value={depositNotes}
+                onChange={(e) => setDepositNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant='outline' onClick={() => setDepositDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRecordDeposit} disabled={createPayment.isPending}>
+              {createPayment.isPending && <Loader2 size={14} className='mr-2 animate-spin' />}
+              Record Deposit
             </Button>
           </DialogFooter>
         </DialogContent>
