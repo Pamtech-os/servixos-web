@@ -2,11 +2,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { roles, type CreateRoleInput, type UpdateRoleInput } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useCreateRole() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -18,8 +17,7 @@ export function useCreateRole() {
 }
 
 export function useUpdateRole() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -32,8 +30,7 @@ export function useUpdateRole() {
 }
 
 export function useDeleteRole() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

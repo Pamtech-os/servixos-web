@@ -66,19 +66,12 @@ const PinEntry = () => {
       setError('Please enter all 4 digits');
       return;
     }
-    if (!auth.accessToken) {
-      router.replace('/login');
-      return;
-    }
 
     try {
-      const verifiedToken = await verifyPinMutation.mutateAsync({
-        pin: code,
-        token: auth.accessToken,
-      });
+      await verifyPinMutation.mutateAsync({ pin: code });
       setIsRedirecting(true);
       setPin([]); // clear before navigation so the auto-submit effect cannot re-fire
-      completeVerification(verifiedToken);
+      completeVerification();
       router.replace('/dashboard');
     } catch (err) {
       setIsRedirecting(false);
@@ -94,7 +87,7 @@ const PinEntry = () => {
         }
       }
     }
-  }, [pin, auth.accessToken, completeVerification, router, verifyPinMutation]);
+  }, [pin, completeVerification, router, verifyPinMutation]);
 
   useEffect(() => {
     if (!isHydrated) return;

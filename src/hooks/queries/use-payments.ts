@@ -1,27 +1,26 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { payments, type PaymentsQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function usePayments(query: PaymentsQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['payments', businessId, query],
     queryFn: () => payments.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function usePayment(id: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['payments', businessId, id],
     queryFn: () => payments.get(businessId, id),
-    enabled: !!businessId && auth.isPinVerified && !!id,
+    enabled: isReady && !!id,
   });
 }

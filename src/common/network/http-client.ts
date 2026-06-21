@@ -98,8 +98,10 @@ export async function fetchJson<T>(
     const response = await fetch(input, {
       ...init,
       signal: controller.signal,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        'x-channel': 'web',
         ...(init.headers ?? {}),
       },
     });

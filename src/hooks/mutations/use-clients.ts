@@ -2,11 +2,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { clients, type CreateClientInput, type UpdateClientInput } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useCreateClient() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -18,8 +17,7 @@ export function useCreateClient() {
 }
 
 export function useUpdateClient() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -32,8 +30,7 @@ export function useUpdateClient() {
 }
 
 export function useDeleteClient() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -45,8 +42,7 @@ export function useDeleteClient() {
 }
 
 export function useExportClient() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
 
   return useMutation({
     mutationFn: (id: string) => clients.export(businessId, id),

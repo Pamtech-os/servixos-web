@@ -1,16 +1,16 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { schedules, type SchedulesQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useSchedules(query: SchedulesQuery = {}, options?: { enabled?: boolean }) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['schedules', businessId, query],
     queryFn: () => schedules.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified && (options?.enabled ?? true),
+    enabled: isReady && (options?.enabled ?? true),
+    placeholderData: keepPreviousData,
   });
 }

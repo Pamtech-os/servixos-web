@@ -7,15 +7,14 @@ import {
   type CreateEmployeeInput,
   type UpdateEmployeeInput,
 } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 function invalidateEmployeeQueries(queryClient: ReturnType<typeof useQueryClient>, businessId: string) {
   void queryClient.invalidateQueries({ queryKey: ['employees', businessId] });
 }
 
 export function useCreateEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -27,8 +26,7 @@ export function useCreateEmployee() {
 }
 
 export function useUpdateEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -44,8 +42,7 @@ export function useUpdateEmployee() {
 }
 
 export function useDeleteEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -63,8 +60,7 @@ export function useDeleteEmployee() {
 }
 
 export function useClockInEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -82,8 +78,7 @@ export function useClockInEmployee() {
 }
 
 export function useClockOutEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -101,8 +96,7 @@ export function useClockOutEmployee() {
 }
 
 export function useStartBreakEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -122,8 +116,7 @@ export function useStartBreakEmployee() {
 }
 
 export function useEndBreakEmployee() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

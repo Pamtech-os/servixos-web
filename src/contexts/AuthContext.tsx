@@ -1,16 +1,22 @@
+'use client';
+
 import {
   createContext,
   useContext,
+  useLayoutEffect,
   useMemo,
   useState,
   ReactNode,
   useCallback,
   useEffect,
 } from 'react';
+
+// On the server useLayoutEffect doesn't exist; fall back to useEffect so SSR doesn't warn.
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   auth as authApi,
   decodeJwt,
-  isTokenExpired,
   type SessionData,
   type SessionUser,
 } from '@/lib/api-client';
@@ -22,7 +28,7 @@ interface AuthState {
   isLoggedIn: boolean;
   isPinVerified: boolean;
   userEmail: string;
-  accessToken: string | null;
+  userRole: 'owner' | 'employee' | 'client' | null;
   user: SessionUser | null;
 }
 
@@ -30,8 +36,8 @@ interface AuthContextType {
   auth: AuthState;
   isHydrated: boolean;
   setSession: (data: SessionData) => void;
-  completeVerification: (accessToken: string) => void;
-  completeSetup: (accessToken: string) => void;
+  completeVerification: () => void;
+  completeSetup: () => void;
   logout: () => void;
 }
 
@@ -39,14 +45,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Both keys live in sessionStorage — cleared automatically when the tab closes.
 const AUTH_STORAGE_KEY = 'servixos-auth-state';
 
 const EMPTY_AUTH_STATE: AuthState = {
   isLoggedIn: false,
   isPinVerified: false,
   userEmail: '',
-  accessToken: null,
+  userRole: null,
   user: null,
 };
 
@@ -56,64 +61,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [auth, setAuth] = useState<AuthState>(EMPTY_AUTH_STATE);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  useEffect(() => {
-    async function hydrate() {
-      const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
-      if (!raw) return;
+  // Synchronous fast path: reads sessionStorage before the first paint so logged-in
+  // users never see the skeleton flash. Falls back to useEffect on the server.
+  useIsomorphicLayoutEffect(() => {
+    const raw = sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) { setIsHydrated(true); return; }
 
-      let persisted: Partial<AuthState> | null = null;
-      try { persisted = JSON.parse(raw) as Partial<AuthState>; } catch {
-        sessionStorage.removeItem(AUTH_STORAGE_KEY);
-        return;
-      }
-
-      if (!persisted?.isLoggedIn) return;
-
-      const accessToken = persisted.accessToken ?? null;
-
-      if (!accessToken) {
-        sessionStorage.removeItem(AUTH_STORAGE_KEY);
-        return;
-      }
-
-      // Token expired — keep the session alive but require PIN re-verification.
-      // The expired token is preserved so the /pin page can still send it.
-      if (isTokenExpired(accessToken)) {
-        setAuth({
-          isLoggedIn: true,
-          isPinVerified: false,
-          userEmail: persisted.userEmail ?? '',
-          accessToken,
-          user: persisted.user ?? null,
-        });
-        return;
-      }
-
-      tokenStore.setAccessToken(accessToken);
-      setAuth({
-        isLoggedIn: true,
-        isPinVerified: decodeJwt(accessToken).pinVerified,
-        userEmail: persisted.userEmail ?? '',
-        accessToken,
-        user: persisted.user ?? null,
-      });
+    let persisted: Partial<AuthState> | null = null;
+    try { persisted = JSON.parse(raw) as Partial<AuthState>; } catch {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      setIsHydrated(true);
+      return;
     }
 
-    void hydrate().finally(() => setIsHydrated(true));
+    if (!persisted?.isLoggedIn) { setIsHydrated(true); return; }
 
-    const unsubRefresh = tokenStore.onAccessTokenRefreshed((token) => {
-      setAuth((prev) => ({ ...prev, accessToken: token }));
+    setAuth({
+      isLoggedIn: true,
+      isPinVerified: persisted.isPinVerified ?? false,
+      userEmail: persisted.userEmail ?? '',
+      userRole: persisted.userRole ?? null,
+      user: persisted.user ?? null,
     });
+    setIsHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Wire the session-expired listener. When a 401 survives a refresh attempt,
+  // the 401 interceptor in core.ts calls tokenStore.notifyExpired() which triggers this.
+  useEffect(() => {
     const unsubExpired = tokenStore.onSessionExpired(() => {
-      setAuth((prev) => ({ ...prev, isPinVerified: false }));
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      setAuth(EMPTY_AUTH_STATE);
+      authApi.logout();
     });
 
-    return () => {
-      unsubRefresh();
-      unsubExpired();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => unsubExpired();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist auth state to sessionStorage on every change.
@@ -123,51 +107,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [auth, isHydrated]);
 
   const setSession = useCallback((data: SessionData) => {
-    const pinVerified = (() => {
-      try { return decodeJwt(data.accessToken).pinVerified; } catch { return false; }
+    // Decode metadata from the body token (still returned by server for mobile compatibility).
+    // We read pinVerified and userRole from it but never store the token itself.
+    const { pinVerified, userRole } = (() => {
+      try {
+        const decoded = decodeJwt(data.accessToken);
+        return { pinVerified: decoded.pinVerified, userRole: decoded.userRole };
+      } catch {
+        return { pinVerified: false, userRole: 'owner' as const };
+      }
     })();
-
-    tokenStore.setAccessToken(data.accessToken);
-    tokenStore.setRefreshToken(data.refreshToken);
 
     setAuth({
       isLoggedIn: true,
       isPinVerified: pinVerified,
       userEmail: data.user.email,
-      accessToken: data.accessToken,
+      userRole,
       user: data.user,
     });
   }, []);
 
-  const completeVerification = useCallback((accessToken: string) => {
-    tokenStore.setAccessToken(accessToken);
-    setAuth((prev) => ({ ...prev, accessToken, isPinVerified: true }));
+  // Called after a successful verify-pin — cookie is replaced by server automatically.
+  const completeVerification = useCallback(() => {
+    setAuth((prev) => ({ ...prev, isPinVerified: true }));
   }, []);
 
-  const completeSetup = useCallback((accessToken: string) => {
-    const pinVerified = (() => {
-      try {
-        return decodeJwt(accessToken).pinVerified;
-      } catch {
-        return false;
-      }
-    })();
-
-    tokenStore.setAccessToken(accessToken);
+  // Called after a successful complete-setup — cookie is replaced by server automatically.
+  const completeSetup = useCallback(() => {
     setAuth((prev) => ({
       ...prev,
-      accessToken,
-      isPinVerified: pinVerified,
+      isPinVerified: true,
       user: prev.user ? { ...prev.user, mustChangePassword: false } : prev.user,
     }));
   }, []);
 
   const logout = useCallback(() => {
-    const refreshToken = tokenStore.getRefreshToken();
-    tokenStore.clear();
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
     setAuth(EMPTY_AUTH_STATE);
-    if (refreshToken) authApi.logout(refreshToken);
+    authApi.logout(); // server clears access_token and refresh_token cookies
   }, []);
 
   const value = useMemo(

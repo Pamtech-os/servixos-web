@@ -11,7 +11,7 @@ import {
   type UpdateTaskInput,
 } from '@/lib/api-client';
 import type { PaginationMeta } from '@/lib/pagination';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 type TaskListCache = { data: Task[]; meta: PaginationMeta };
 type ActivityListCache = { data: TaskActivity[]; meta: PaginationMeta };
@@ -28,8 +28,7 @@ function invalidateTaskQueries(
 }
 
 export function useCreateTask() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -41,8 +40,7 @@ export function useCreateTask() {
 }
 
 export function useUpdateTask() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -80,8 +78,7 @@ export function useUpdateTask() {
 }
 
 export function useDeleteTask() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -93,8 +90,7 @@ export function useDeleteTask() {
 }
 
 export function useAddComment() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { auth, businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -178,8 +174,7 @@ export function useAddComment() {
 }
 
 export function useAddSubtask() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -225,8 +220,7 @@ export function useAddSubtask() {
 }
 
 export function useToggleSubtask() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

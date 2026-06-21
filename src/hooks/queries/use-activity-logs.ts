@@ -2,16 +2,15 @@
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { activityLogs, type ActivityLogsQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useActivityLogs(query: ActivityLogsQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['activity-logs', businessId, query],
     queryFn: () => activityLogs.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
     placeholderData: keepPreviousData,
   });
 }

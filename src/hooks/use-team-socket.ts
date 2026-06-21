@@ -11,7 +11,7 @@ import {
   type OnlineEmployee,
 } from '@/lib/api-client';
 import type { PaginationMeta } from '@/lib/pagination';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { toast } from '@/components/ui/sonner';
 
 export interface TypingUser {
@@ -62,22 +62,19 @@ interface TypingEvent {
 }
 
 export function useTeamSocket(seenMessageIds: React.RefObject<Set<string>>) {
-  const { auth } = useAuth();
+  const { businessId, isReady } = useBusinessAuth();
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
 
-  const businessId = auth.user?.businessId ?? '';
-  const accessToken = auth.accessToken ?? '';
-
   useEffect(() => {
-    if (!businessId || !accessToken || !auth.isPinVerified) return;
+    if (!isReady) return;
 
     let active = true;
     let isInitialConnect = true;
     const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     async function connect() {
-      const authPayload = await getSocketAuthPayload(accessToken, businessId);
+      const authPayload = await getSocketAuthPayload(businessId);
       const headers = createSocketAuthHeaders(authPayload);
 
       if (!active) return;
@@ -227,7 +224,7 @@ export function useTeamSocket(seenMessageIds: React.RefObject<Set<string>>) {
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
-  }, [businessId, accessToken, auth.isPinVerified, queryClient, seenMessageIds]);
+  }, [businessId, isReady, queryClient, seenMessageIds]);
 
   return socketRef;
 }

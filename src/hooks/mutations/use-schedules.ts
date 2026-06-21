@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { schedules, type CreateShiftInput, type UpdateShiftInput } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 function invalidateScheduleQueries(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -12,8 +12,7 @@ function invalidateScheduleQueries(
 }
 
 export function useCreateShift() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -25,8 +24,7 @@ export function useCreateShift() {
 }
 
 export function useUpdateShift() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -39,8 +37,7 @@ export function useUpdateShift() {
 }
 
 export function useDeleteShift() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

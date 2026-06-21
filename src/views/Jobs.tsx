@@ -19,17 +19,11 @@ import {
   Sparkles,
   Send,
   Loader2,
-  ExternalLink,
   Receipt,
 } from 'lucide-react';
-import { CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PriceInput } from '@/components/ui/price-input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -45,11 +39,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -66,21 +57,18 @@ import { getApiErrorMessage } from '@/common/network/http-client';
 import { useJobs } from '@/hooks/queries/use-jobs';
 import { useClients } from '@/hooks/queries/use-clients';
 import {
-  useCreateJob,
   useDeleteJob,
   useBulkDeleteJobs,
   useStartJob,
   useCompleteJob,
 } from '@/hooks/mutations/use-jobs';
-import {
-  useCreateContract,
-  useSendContract,
-  useGetContractPdf,
-} from '@/hooks/mutations/use-contracts';
+import { useCreateContract } from '@/hooks/mutations/use-contracts';
 import { useContractByJob } from '@/hooks/queries/use-contracts';
 import { useCreateInvoice } from '@/hooks/mutations/use-invoices';
-import { useCreatePayment } from '@/hooks/mutations/use-payments';
-import type { Job, JobStatus, Contract, PaymentMode } from '@/lib/api-client';
+import CreateJobDialog from '@/components/jobs/CreateJobDialog';
+import DepositDialog from '@/components/jobs/DepositDialog';
+import ContractReviewDialog from '@/components/jobs/ContractReviewDialog';
+import type { Job, JobStatus, Contract } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -120,26 +108,9 @@ const Jobs = () => {
   const [viewJob, setViewJob] = useState<Job | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-
-  // Contract workflow state
   const [contractReviewOpen, setContractReviewOpen] = useState(false);
   const [activeContractForReview, setActiveContractForReview] = useState<Contract | null>(null);
-
-  // Deposit payment dialog state
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
-  const [depositAmount, setDepositAmount] = useState(0);
-  const [depositMode, setDepositMode] = useState<PaymentMode>('bank_transfer');
-  const [depositDate, setDepositDate] = useState<Date>(new Date());
-  const [depositNotes, setDepositNotes] = useState('');
-
-  // Create form state
-  const [formTitle, setFormTitle] = useState('');
-  const [formDescription, setFormDescription] = useState('');
-  const [formClientId, setFormClientId] = useState('');
-  const [formDate, setFormDate] = useState<Date>(new Date());
-  const [formPrice, setFormPrice] = useState(0);
-  const [formLocation, setFormLocation] = useState('');
-  const [formNotes, setFormNotes] = useState('');
 
   const jobsQuery = useJobs({
     search: search || undefined,
@@ -151,18 +122,14 @@ const Jobs = () => {
 
   const clientsQuery = useClients({ limit: 50 });
 
-  const createJob = useCreateJob();
   const deleteJob = useDeleteJob();
   const bulkDeleteJobs = useBulkDeleteJobs();
   const startJob = useStartJob();
   const completeJob = useCompleteJob();
   const createContract = useCreateContract();
-  const sendContract = useSendContract();
-  const getPdf = useGetContractPdf();
   const jobContractQuery = useContractByJob(viewJob?._id, viewJob?.clientId);
   const jobContract = jobContractQuery.data ?? null;
   const createInvoice = useCreateInvoice();
-  const createPayment = useCreatePayment();
 
   const jobList = jobsQuery.data?.data ?? [];
   const paginationMeta = jobsQuery.data?.meta;
@@ -235,44 +202,6 @@ const Jobs = () => {
     });
   };
 
-  const resetForm = () => {
-    setFormTitle('');
-    setFormDescription('');
-    setFormClientId('');
-    setFormDate(new Date());
-    setFormPrice(0);
-    setFormLocation('');
-    setFormNotes('');
-  };
-
-  const handleCreate = () => {
-    if (!formTitle.trim() || !formClientId) {
-      toast.error('Validation Error', { description: 'Title and client are required.' });
-      return;
-    }
-    createJob.mutate(
-      {
-        clientId: formClientId,
-        title: formTitle,
-        description: formDescription || undefined,
-        scheduledDate: formDate.toISOString(),
-        location: formLocation || undefined,
-        price: formPrice || undefined,
-        notes: formNotes || undefined,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Job created', { description: `"${formTitle}" added successfully.` });
-          setCreateOpen(false);
-          resetForm();
-        },
-        onError: (err) => {
-          toast.error('Failed to create job', { description: getApiErrorMessage(err) });
-        },
-      },
-    );
-  };
-
   const handleStartJob = (job: Job) => {
     startJob.mutate(job._id, {
       onSuccess: (updated) => {
@@ -313,75 +242,6 @@ const Jobs = () => {
         },
         onError: (err) => {
           toast.error('Failed to create contract', { description: getApiErrorMessage(err) });
-        },
-      },
-    );
-  };
-
-  const handleGetPdf = () => {
-    const contract = activeContractForReview ?? jobContract;
-    if (!contract) return;
-    getPdf.mutate(contract._id, {
-      onSuccess: ({ url }) => {
-        window.open(url, '_blank', 'noreferrer');
-      },
-      onError: (err) => {
-        toast.error('Failed to generate PDF', { description: getApiErrorMessage(err) });
-      },
-    });
-  };
-
-  const handleSendContract = () => {
-    if (!viewJob) return;
-    const contractToSend = activeContractForReview ?? jobContract;
-    if (!contractToSend) return;
-    const clientEmail = clientEmailMap[viewJob.clientId] ?? '';
-    sendContract.mutate(
-      { id: contractToSend._id, clientEmail },
-      {
-        onSuccess: () => {
-          setContractReviewOpen(false);
-          setActiveContractForReview(null);
-          void jobContractQuery.refetch();
-          toast.success('Contract sent', {
-            description: 'Contract has been sent to the client for signing.',
-          });
-        },
-        onError: (err) => {
-          toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
-        },
-      },
-    );
-  };
-
-  const handleRecordDeposit = () => {
-    if (!viewJob) return;
-    if (depositAmount < 0.01) {
-      toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
-      return;
-    }
-    createPayment.mutate(
-      {
-        jobId: viewJob._id,
-        clientId: viewJob.clientId,
-        paymentDate: format(depositDate, 'yyyy-MM-dd'),
-        paymentMode: depositMode,
-        amount: depositAmount,
-        notes: depositNotes.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          toast.success('Deposit recorded', {
-            description: `$${depositAmount.toLocaleString()} deposit recorded for "${viewJob.title}".`,
-          });
-          setDepositDialogOpen(false);
-          setDepositAmount(0);
-          setDepositMode('bank_transfer');
-          setDepositDate(new Date());
-          setDepositNotes('');
-        },
-        onError: (err) => {
-          toast.error('Failed to record deposit', { description: getApiErrorMessage(err) });
         },
       },
     );
@@ -749,7 +609,6 @@ const Jobs = () => {
               )}
               <Separator />
               <div className='flex flex-wrap gap-2'>
-                {/* Step 1: Generate contract — the only initial action */}
                 {!hasContract && (
                   <Button
                     onClick={handleGenerateContract}
@@ -765,7 +624,6 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {/* Draft: review before sending */}
                 {contractIsDraft && (
                   <Button
                     variant='outline'
@@ -779,7 +637,6 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {/* Sent: awaiting client signature */}
                 {contractSent && (
                   <Badge
                     variant='outline'
@@ -789,7 +646,6 @@ const Jobs = () => {
                   </Badge>
                 )}
 
-                {/* Signed: contract complete */}
                 {contractSigned && (
                   <Badge
                     variant='outline'
@@ -799,7 +655,6 @@ const Jobs = () => {
                   </Badge>
                 )}
 
-                {/* Start / Complete — only unlocked after contract is signed */}
                 {contractSigned && viewJob.status === 'pending' && (
                   <Button
                     onClick={() => handleStartJob(viewJob)}
@@ -829,7 +684,6 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {/* Invoice — only unlocked after contract is signed */}
                 {contractSigned && (
                   <Button
                     variant='outline'
@@ -846,7 +700,6 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {/* Record deposit without invoice */}
                 {contractSigned && (
                   <Button
                     variant='outline'
@@ -863,287 +716,31 @@ const Jobs = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Contract Review Dialog */}
-      <Dialog
+      <ContractReviewDialog
         open={contractReviewOpen}
         onOpenChange={(open) => {
-          if (!open) {
-            setContractReviewOpen(false);
-            setActiveContractForReview(null);
-          }
+          setContractReviewOpen(open);
+          if (!open) setActiveContractForReview(null);
         }}
-      >
-        <DialogContent
-          className='flex max-h-[90dvh] flex-col sm:max-w-2xl'
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle className='flex items-center gap-2'>
-              <FileText size={18} className='text-primary' /> Contract Ready
-            </DialogTitle>
-            <DialogDescription>
-              Review the contract before sending it to the client for signing.
-            </DialogDescription>
-          </DialogHeader>
-          {activeContractForReview && (
-            <div className='flex-1 space-y-3 overflow-y-auto py-2'>
-              <p className='text-sm font-medium'>{activeContractForReview.title}</p>
-              {activeContractForReview.html ? (
-                <div
-                  className='max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed'
-                  dangerouslySetInnerHTML={{ __html: activeContractForReview.html }}
-                />
-              ) : activeContractForReview.pdfUrl ? (
-                <a
-                  href={activeContractForReview.pdfUrl}
-                  target='_blank'
-                  rel='noreferrer'
-                  className='flex items-center gap-2 text-sm text-primary hover:underline'
-                >
-                  <ExternalLink size={14} /> Open PDF
-                </a>
-              ) : (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  className='gap-2'
-                  onClick={handleGetPdf}
-                  disabled={getPdf.isPending}
-                >
-                  {getPdf.isPending ? (
-                    <Loader2 size={14} className='animate-spin' />
-                  ) : (
-                    <ExternalLink size={14} />
-                  )}
-                  Get PDF
-                </Button>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => {
-                setContractReviewOpen(false);
-                setActiveContractForReview(null);
-              }}
-            >
-              Close
-            </Button>
-            <Button
-              onClick={handleSendContract}
-              className='gap-2'
-              disabled={sendContract.isPending || !activeContractForReview}
-            >
-              {sendContract.isPending ? (
-                <Loader2 size={14} className='animate-spin' />
-              ) : (
-                <Send size={14} />
-              )}
-              Send to Client
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        contract={activeContractForReview}
+        clientEmail={viewJob ? (clientEmailMap[viewJob.clientId] ?? '') : ''}
+        onSent={() => {
+          setActiveContractForReview(null);
+          void jobContractQuery.refetch();
+        }}
+      />
 
-      {/* Record Deposit Dialog */}
-      <Dialog
+      <DepositDialog
         open={depositDialogOpen}
-        onOpenChange={(open) => {
-          setDepositDialogOpen(open);
-          if (!open) {
-            setDepositAmount(0);
-            setDepositMode('bank_transfer');
-            setDepositDate(new Date());
-            setDepositNotes('');
-          }
-        }}
-      >
-        <DialogContent className='sm:max-w-sm'>
-          <DialogHeader>
-            <DialogTitle>Record Deposit</DialogTitle>
-            <DialogDescription>
-              Record a deposit payment for &quot;{viewJob?.title}&quot;. This will count toward the
-              50% minimum required to start the job.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='space-y-4 py-2'>
-            <div className='space-y-1.5'>
-              <Label>Amount ($)</Label>
-              <PriceInput value={depositAmount} onChange={setDepositAmount} placeholder='0' />
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Payment Method</Label>
-              <Select value={depositMode} onValueChange={(v) => setDepositMode(v as PaymentMode)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='bank_transfer'>Bank Transfer</SelectItem>
-                  <SelectItem value='cash'>Cash</SelectItem>
-                  <SelectItem value='credit_card'>Credit Card</SelectItem>
-                  <SelectItem value='cheque'>Cheque</SelectItem>
-                  <SelectItem value='mobile_money'>Mobile Money</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant='outline' className='w-full justify-start gap-2 font-normal'>
-                    <CalendarIcon size={14} />
-                    {format(depositDate, 'PPP')}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className='w-auto p-0' align='start'>
-                  <Calendar
-                    mode='single'
-                    selected={depositDate}
-                    onSelect={(d) => d && setDepositDate(d)}
-                    initialFocus
-                    className={cn('p-3 pointer-events-auto')}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Notes</Label>
-              <Textarea
-                placeholder='Optional notes'
-                value={depositNotes}
-                onChange={(e) => setDepositNotes(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDepositDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleRecordDeposit} disabled={createPayment.isPending}>
-              {createPayment.isPending && <Loader2 size={14} className='mr-2 animate-spin' />}
-              Record Deposit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setDepositDialogOpen}
+        job={viewJob}
+      />
 
-      {/* Create Job Dialog */}
-      <Dialog
+      <CreateJobDialog
         open={createOpen}
-        onOpenChange={(open) => {
-          setCreateOpen(open);
-          if (!open) resetForm();
-        }}
-      >
-        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
-          <DialogHeader>
-            <DialogTitle>Create New Job</DialogTitle>
-            <DialogDescription>Fill in the details to create a new job</DialogDescription>
-          </DialogHeader>
-          <div className='space-y-4 py-2'>
-            <div className='space-y-1.5'>
-              <Label>Title</Label>
-              <Input
-                placeholder='Job title'
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-              />
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Client</Label>
-              <Select value={formClientId} onValueChange={setFormClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Select a client' />
-                </SelectTrigger>
-                <SelectContent>
-                  {clientList.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Description</Label>
-              <Textarea
-                placeholder='Job description (optional)'
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-              />
-            </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
-              <div className='space-y-1.5'>
-                <Label>Scheduled Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant='outline'
-                      className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !formDate && 'text-muted-foreground',
-                      )}
-                    >
-                      <CalendarIcon className='mr-2 h-4 w-4' />
-                      {formDate ? format(formDate, 'PPP') : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-auto p-0' align='start'>
-                    <Calendar
-                      mode='single'
-                      selected={formDate}
-                      onSelect={(d) => d && setFormDate(d)}
-                      initialFocus
-                      className={cn('p-3 pointer-events-auto')}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className='space-y-1.5'>
-                <Label>Price ($)</Label>
-                <PriceInput
-                  value={formPrice}
-                  onChange={setFormPrice}
-                  placeholder='0'
-                />
-              </div>
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Location</Label>
-              <Input
-                placeholder='Job location (optional)'
-                value={formLocation}
-                onChange={(e) => setFormLocation(e.target.value)}
-              />
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Notes</Label>
-              <Textarea
-                placeholder='Additional notes (optional)'
-                value={formNotes}
-                onChange={(e) => setFormNotes(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => {
-                setCreateOpen(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={createJob.isPending}>
-              {createJob.isPending && <Loader2 size={14} className='mr-2 animate-spin' />}
-              Create Job
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setCreateOpen}
+        clientList={clientList}
+      />
     </div>
   );
 };

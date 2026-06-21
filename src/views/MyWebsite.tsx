@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Globe,
@@ -19,6 +19,7 @@ import {
   Phone,
   Wrench,
   ClipboardList,
+  Loader2,
 } from 'lucide-react';
 import {
   Card,
@@ -36,154 +37,228 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { useWebsiteConfig } from '@/hooks/queries/use-website';
+import {
+  useSaveBookingFormMutation,
+  useSaveDesignMutation,
+  useSaveContentMutation,
+  usePublishWebsiteMutation,
+} from '@/hooks/mutations/use-website';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import type { WebsiteBookingFieldKey, WebsiteAiContent } from '@/lib/api-client';
+import type { LucideIcon } from 'lucide-react';
 
-const websiteSections = [
-  {
-    id: 'hero',
-    label: 'Hero Section',
-    icon: Layout,
-    content:
-      'Welcome to Servix Solutions – Professional field services you can trust.',
-  },
-  {
-    id: 'services',
-    label: 'Services',
-    icon: FileText,
-    content:
-      'House Cleaning, Plumbing Repair, Electrical Work, HVAC Services, Painting, Landscaping',
-  },
-  {
-    id: 'about',
-    label: 'About Us',
-    icon: Edit3,
-    content:
-      'We are a team of dedicated professionals providing top-quality field services since 2020.',
-  },
-  {
-    id: 'contact',
-    label: 'Contact',
-    icon: Globe,
-    content:
-      'Email: info@servix.com | Phone: +1 (555) 123-4567 | Address: 123 Business Ave, NY',
-  },
-];
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface BookingField {
-  id: string;
+  id: WebsiteBookingFieldKey;
   label: string;
   type: 'text' | 'email' | 'tel' | 'textarea' | 'date' | 'select';
   placeholder: string;
   required: boolean;
   options?: string[];
-  icon: typeof User;
+  icon: LucideIcon;
 }
 
+interface SectionContents {
+  hero: { headline: string; subheadline: string; ctaText: string };
+  services: string; // comma-separated names
+  about: { title: string; body: string };
+  contact: string; // callToAction text
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'servixos.com';
+
+const FIELD_META: Record<WebsiteBookingFieldKey, { type: BookingField['type']; icon: LucideIcon }> = {
+  clientName: { type: 'text', icon: User },
+  clientEmail: { type: 'email', icon: Mail },
+  clientPhone: { type: 'tel', icon: Phone },
+  service: { type: 'select', icon: Wrench },
+  requestedDate: { type: 'date', icon: CalendarIcon },
+  requestedEndDate: { type: 'date', icon: CalendarIcon },
+  message: { type: 'textarea', icon: ClipboardList },
+};
+
+const DEFAULT_BOOKING_FIELDS: BookingField[] = [
+  { id: 'clientName', label: 'Full Name', type: 'text', placeholder: 'John Doe', required: true, icon: User },
+  { id: 'clientEmail', label: 'Email Address', type: 'email', placeholder: 'john@example.com', required: true, icon: Mail },
+  { id: 'clientPhone', label: 'Phone Number', type: 'tel', placeholder: '+1 (555) 000-0000', required: false, icon: Phone },
+  { id: 'service', label: 'Service Required', type: 'select', placeholder: 'Select a service', required: true, options: [], icon: Wrench },
+  { id: 'requestedDate', label: 'Start Date', type: 'date', placeholder: 'Select start date', required: true, icon: CalendarIcon },
+  { id: 'requestedEndDate', label: 'End Date', type: 'date', placeholder: 'Select end date', required: false, icon: CalendarIcon },
+  { id: 'message', label: 'Job Details', type: 'textarea', placeholder: 'Describe what you need done...', required: false, icon: ClipboardList },
+];
+
+const websiteSections: Array<{ id: keyof SectionContents; label: string; icon: LucideIcon }> = [
+  { id: 'hero', label: 'Hero Section', icon: Layout },
+  { id: 'services', label: 'Services', icon: FileText },
+  { id: 'about', label: 'About Us', icon: Edit3 },
+  { id: 'contact', label: 'Contact', icon: Globe },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildSectionContents(aiContent?: WebsiteAiContent): SectionContents {
+  return {
+    hero: {
+      headline: aiContent?.hero.headline ?? '',
+      subheadline: aiContent?.hero.subheadline ?? '',
+      ctaText: aiContent?.hero.ctaText ?? 'Book a Service',
+    },
+    services: aiContent?.services?.map((s) => s.name).join(', ') ?? '',
+    about: {
+      title: aiContent?.about.title ?? '',
+      body: aiContent?.about.body ?? '',
+    },
+    contact: aiContent?.contact.callToAction ?? '',
+  };
+}
+
+function getSectionDisplayText(id: keyof SectionContents, contents: SectionContents): string {
+  switch (id) {
+    case 'hero':
+      return contents.hero.headline
+        ? `${contents.hero.headline} — ${contents.hero.subheadline}`
+        : 'Hero content will appear here after generation.';
+    case 'services':
+      return contents.services || 'Services will appear here after generation.';
+    case 'about':
+      return contents.about.body || 'About section will appear here after generation.';
+    case 'contact':
+      return contents.contact || 'Contact information will appear here after generation.';
+  }
+}
+
+function buildBookingFields(
+  apiFields?: Array<{ key: WebsiteBookingFieldKey; label: string; placeholder?: string; required: boolean }>,
+): BookingField[] {
+  if (!apiFields?.length) return DEFAULT_BOOKING_FIELDS;
+  return apiFields.map((f) => ({
+    id: f.key,
+    label: f.label,
+    type: FIELD_META[f.key].type,
+    placeholder: f.placeholder ?? '',
+    required: f.required,
+    options: f.key === 'service' ? [] : undefined,
+    icon: FIELD_META[f.key].icon,
+  }));
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 const MyWebsite = () => {
-  const [websiteUrl] = useState('servixsolutions.servixos.com');
-  const [isPublished] = useState(true);
-  const [editingSection, setEditingSection] = useState<string | null>(null);
-  const [sectionContents, setSectionContents] = useState<
-    Record<string, string>
-  >(Object.fromEntries(websiteSections.map((s) => [s.id, s.content])));
+  const { auth } = useAuth();
+  const { data: websiteData, isLoading, isError } = useWebsiteConfig();
+  const saveBookingForm = useSaveBookingFormMutation();
+  const saveDesign = useSaveDesignMutation();
+  const saveContent = useSaveContentMutation();
+  const publishWebsite = usePublishWebsiteMutation();
+
+  const websiteUrl = websiteData?.subdomain
+    ? `${websiteData.subdomain}.${ROOT_DOMAIN}`
+    : auth.user?.subdomain
+      ? `${auth.user.subdomain}.${ROOT_DOMAIN}`
+      : null;
+
+  const [initialized, setInitialized] = useState(false);
+  const [editingSection, setEditingSection] = useState<keyof SectionContents | null>(null);
+  const [sectionContents, setSectionContents] = useState<SectionContents>(buildSectionContents());
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
   const [secondaryColor, setSecondaryColor] = useState('#8B5CF6');
   const [fontFamily, setFontFamily] = useState('Inter');
-  const [siteName, setSiteName] = useState('Servix Solutions');
 
-  // Booking form config
-  const [bookingFields, setBookingFields] = useState<BookingField[]>([
-    {
-      id: 'name',
-      label: 'Full Name',
-      type: 'text',
-      placeholder: 'John Doe',
-      required: true,
-      icon: User,
-    },
-    {
-      id: 'email',
-      label: 'Email Address',
-      type: 'email',
-      placeholder: 'john@example.com',
-      required: true,
-      icon: Mail,
-    },
-    {
-      id: 'phone',
-      label: 'Phone Number',
-      type: 'tel',
-      placeholder: '+1 (555) 000-0000',
-      required: true,
-      icon: Phone,
-    },
-    {
-      id: 'service',
-      label: 'Service Required',
-      type: 'select',
-      placeholder: 'Select a service',
-      required: true,
-      options: [
-        'House Cleaning',
-        'Plumbing Repair',
-        'Electrical Work',
-        'HVAC Services',
-        'Painting',
-        'Landscaping',
-      ],
-      icon: Wrench,
-    },
-    {
-      id: 'startDate',
-      label: 'Start Date',
-      type: 'date',
-      placeholder: 'Select start date',
-      required: true,
-      icon: CalendarIcon,
-    },
-    {
-      id: 'endDate',
-      label: 'End Date',
-      type: 'date',
-      placeholder: 'Select end date',
-      required: false,
-      icon: CalendarIcon,
-    },
-    {
-      id: 'details',
-      label: 'Job Details',
-      type: 'textarea',
-      placeholder: 'Describe what you need done...',
-      required: true,
-      icon: ClipboardList,
-    },
-  ]);
+  const [bookingFields, setBookingFields] = useState<BookingField[]>(DEFAULT_BOOKING_FIELDS);
   const [bookingTitle, setBookingTitle] = useState('Book a Service');
   const [bookingDescription, setBookingDescription] = useState(
     "Fill out the form below to request a service. We'll get back to you within 24 hours.",
   );
-  const [requireEndDate, setRequireEndDate] = useState(false);
 
-  const handleSaveSection = (sectionId: string) => {
-    setEditingSection(null);
-    toast.success('Section updated', {
-      description: `${sectionId} section has been saved.`,
-    });
+  useEffect(() => {
+    if (!websiteData || initialized) return;
+    setPrimaryColor(websiteData.colorPrimary);
+    setSecondaryColor(websiteData.colorSecondary);
+    setFontFamily(websiteData.font);
+    setSectionContents(buildSectionContents(websiteData.aiContent));
+    if (websiteData.bookingForm) {
+      setBookingTitle(websiteData.bookingForm.title);
+      setBookingDescription(websiteData.bookingForm.description ?? '');
+    }
+    setBookingFields(buildBookingFields(websiteData.bookingForm?.fields));
+    setInitialized(true);
+  }, [websiteData, initialized]);
+
+  const handleSaveSection = async (sectionId: keyof SectionContents) => {
+    try {
+      switch (sectionId) {
+        case 'hero':
+          await saveContent.mutateAsync({ hero: sectionContents.hero });
+          break;
+        case 'services':
+          await saveContent.mutateAsync({
+            services: sectionContents.services
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .map((name) => ({ name, description: '' })),
+          });
+          break;
+        case 'about':
+          await saveContent.mutateAsync({ about: sectionContents.about });
+          break;
+        case 'contact':
+          await saveContent.mutateAsync({ contact: { callToAction: sectionContents.contact } });
+          break;
+      }
+      setEditingSection(null);
+      toast.success('Section saved');
+    } catch (err) {
+      toast.error('Save failed', { description: getApiErrorMessage(err) });
+    }
   };
 
-  const handlePublish = () => {
-    toast.success('Website published!', {
-      description: `Changes are live at ${websiteUrl}`,
-    });
+  const handlePublish = async () => {
+    try {
+      const result = await publishWebsite.mutateAsync();
+      toast.success('Website published!', { description: `Live at ${result.url}` });
+    } catch (err) {
+      toast.error('Publish failed', { description: getApiErrorMessage(err) });
+    }
   };
 
-  const handleSaveBookingForm = () => {
-    const updated = bookingFields.map((f) =>
-      f.id === 'endDate' ? { ...f, required: requireEndDate } : f,
-    );
-    setBookingFields(updated);
-    toast.success('Booking form saved!', {
-      description: 'Changes will be reflected on your website.',
-    });
+  const handleSaveBookingForm = async () => {
+    try {
+      await saveBookingForm.mutateAsync({
+        title: bookingTitle,
+        description: bookingDescription || undefined,
+        fields: bookingFields.map((f) => ({
+          key: f.id,
+          label: f.label,
+          placeholder: f.placeholder || undefined,
+          required: f.required,
+        })),
+      });
+      toast.success('Booking form saved!', {
+        description: 'Changes will be reflected on your website.',
+      });
+    } catch (err) {
+      toast.error('Save failed', { description: getApiErrorMessage(err) });
+    }
+  };
+
+  const handleSaveDesign = async () => {
+    try {
+      await saveDesign.mutateAsync({
+        colorPrimary: primaryColor,
+        colorSecondary: secondaryColor,
+        font: fontFamily,
+      });
+      toast.success('Design saved!');
+    } catch (err) {
+      toast.error('Save failed', { description: getApiErrorMessage(err) });
+    }
   };
 
   const handleUpdateFieldLabel = (fieldId: string, newLabel: string) => {
@@ -192,22 +267,13 @@ const MyWebsite = () => {
     );
   };
 
-  const handleUpdateFieldPlaceholder = (
-    fieldId: string,
-    newPlaceholder: string,
-  ) => {
+  const handleUpdateFieldPlaceholder = (fieldId: string, newPlaceholder: string) => {
     setBookingFields((prev) =>
-      prev.map((f) =>
-        f.id === fieldId ? { ...f, placeholder: newPlaceholder } : f,
-      ),
+      prev.map((f) => (f.id === fieldId ? { ...f, placeholder: newPlaceholder } : f)),
     );
   };
 
   const handleToggleRequired = (fieldId: string) => {
-    if (fieldId === 'endDate') {
-      setRequireEndDate(!requireEndDate);
-      return;
-    }
     setBookingFields((prev) =>
       prev.map((f) => (f.id === fieldId ? { ...f, required: !f.required } : f)),
     );
@@ -219,66 +285,84 @@ const MyWebsite = () => {
         f.id === 'service'
           ? {
               ...f,
-              options: newOptions
-                .split(',')
-                .map((o) => o.trim())
-                .filter(Boolean),
+              options: newOptions.split(',').map((o) => o.trim()).filter(Boolean),
             }
           : f,
       ),
     );
   };
 
+  const isPublished = websiteData?.isPublished ?? false;
+
   return (
     <div className='space-y-6'>
       <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='font-display text-2xl font-bold md:text-3xl'>
-            My Website
-          </h1>
+          <h1 className='font-display text-2xl font-bold md:text-3xl'>My Website</h1>
           <p className='text-sm text-muted-foreground'>
             Manage your AI-generated business website.
           </p>
         </div>
         <div className='flex items-center gap-2'>
-          <Badge
-            variant={isPublished ? 'default' : 'secondary'}
-            className={
-              isPublished
-                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                : ''
-            }
-          >
-            {isPublished ? 'Published' : 'Draft'}
-          </Badge>
+          {isLoading ? (
+            <Loader2 size={16} className='animate-spin text-muted-foreground' />
+          ) : (
+            <Badge
+              variant={isPublished ? 'default' : 'secondary'}
+              className={
+                isPublished ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600' : ''
+              }
+            >
+              {isPublished ? 'Published' : isError ? 'Not Generated' : 'Draft'}
+            </Badge>
+          )}
           <Button
             variant='outline'
             size='sm'
             className='gap-1.5'
-            onClick={() => toast.info('Opening preview...')}
+            disabled={!websiteUrl}
+            onClick={() => {
+              if (websiteUrl) window.open(`https://${websiteUrl}`, '_blank');
+              else toast.error('No website URL found. Complete onboarding first.');
+            }}
           >
             <Eye size={14} /> Preview
           </Button>
           <Button
             size='sm'
-            className='gap-1.5 gradient-bg text-primary-foreground'
+            className='gradient-bg gap-1.5 text-primary-foreground'
+            disabled={publishWebsite.isPending}
             onClick={handlePublish}
           >
-            <ExternalLink size={14} /> Publish
+            {publishWebsite.isPending ? (
+              <Loader2 size={14} className='animate-spin' />
+            ) : (
+              <ExternalLink size={14} />
+            )}{' '}
+            Publish
           </Button>
         </div>
       </div>
 
-      {/* Website URL Card */}
+      {/* Website URL */}
       <Card>
         <CardContent className='flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between'>
           <div>
-            <p className='text-xs font-medium text-muted-foreground'>
-              Website URL
-            </p>
-            <p className='font-mono text-sm font-bold text-primary'>
-              {websiteUrl}
-            </p>
+            <p className='text-xs font-medium text-muted-foreground'>Website URL</p>
+            {isLoading ? (
+              <div className='mt-1 h-4 w-48 animate-pulse rounded bg-muted' />
+            ) : websiteUrl ? (
+              <a
+                href={`https://${websiteUrl}`}
+                target='_blank'
+                rel='noreferrer'
+                className='font-mono text-sm font-bold text-primary hover:underline'
+              >
+                {websiteUrl}
+              </a>
+            ) : (
+              <p className='text-sm text-muted-foreground'>No website generated yet</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -313,37 +397,37 @@ const MyWebsite = () => {
                   <Button
                     variant='ghost'
                     size='sm'
-                    className='gap-1 h-7 text-xs'
+                    className='h-7 gap-1 text-xs'
                     onClick={() =>
-                      setEditingSection(
-                        editingSection === section.id ? null : section.id,
-                      )
+                      setEditingSection(editingSection === section.id ? null : section.id)
                     }
                   >
-                    <Edit3 size={12} />{' '}
-                    {editingSection === section.id ? 'Cancel' : 'Edit'}
+                    <Edit3 size={12} /> {editingSection === section.id ? 'Cancel' : 'Edit'}
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  {editingSection === section.id ? (
+                  {isLoading ? (
+                    <div className='h-4 w-3/4 animate-pulse rounded bg-muted' />
+                  ) : editingSection === section.id ? (
                     <div className='space-y-3'>
-                      <Textarea
-                        value={sectionContents[section.id]}
-                        onChange={(e) =>
-                          setSectionContents((p) => ({
-                            ...p,
-                            [section.id]: e.target.value,
-                          }))
-                        }
-                        rows={3}
+                      <SectionEditor
+                        sectionId={section.id}
+                        contents={sectionContents}
+                        onChange={setSectionContents}
                       />
                       <div className='flex gap-2'>
                         <Button
                           size='sm'
                           className='gap-1.5'
+                          disabled={saveContent.isPending}
                           onClick={() => handleSaveSection(section.id)}
                         >
-                          <Save size={12} /> Save
+                          {saveContent.isPending ? (
+                            <Loader2 size={12} className='animate-spin' />
+                          ) : (
+                            <Save size={12} />
+                          )}{' '}
+                          Save
                         </Button>
                         <Button
                           size='sm'
@@ -357,7 +441,7 @@ const MyWebsite = () => {
                     </div>
                   ) : (
                     <p className='text-sm text-muted-foreground'>
-                      {sectionContents[section.id]}
+                      {getSectionDisplayText(section.id, sectionContents)}
                     </p>
                   )}
                 </CardContent>
@@ -370,24 +454,19 @@ const MyWebsite = () => {
         <TabsContent value='bookings' className='space-y-4'>
           <Card>
             <CardHeader>
-              <CardTitle className='text-base flex items-center gap-2'>
-                <ClipboardList size={18} className='text-primary' /> Booking
-                Form Setup
+              <CardTitle className='flex items-center gap-2 text-base'>
+                <ClipboardList size={18} className='text-primary' /> Booking Form Setup
               </CardTitle>
               <CardDescription>
-                Configure the booking form that clients see on your website.
-                Submissions appear in your Requests page.
+                Configure the booking form that clients see on your website. Submissions appear in
+                your Requests page.
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-5'>
-              {/* Form Title & Description */}
               <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                 <div className='space-y-1.5'>
                   <Label className='text-xs'>Form Title</Label>
-                  <Input
-                    value={bookingTitle}
-                    onChange={(e) => setBookingTitle(e.target.value)}
-                  />
+                  <Input value={bookingTitle} onChange={(e) => setBookingTitle(e.target.value)} />
                 </div>
                 <div className='space-y-1.5'>
                   <Label className='text-xs'>Form Description</Label>
@@ -400,9 +479,8 @@ const MyWebsite = () => {
 
               <Separator />
 
-              {/* Form Fields */}
               <div className='space-y-3'>
-                <p className='text-xs font-semibold text-muted-foreground uppercase tracking-wider'>
+                <p className='text-xs font-semibold uppercase tracking-wider text-muted-foreground'>
                   Form Fields
                 </p>
                 {bookingFields.map((field) => (
@@ -410,28 +488,20 @@ const MyWebsite = () => {
                     key={field.id}
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className='rounded-lg border border-border p-3 space-y-2'
+                    className='space-y-2 rounded-lg border border-border p-3'
                   >
                     <div className='flex items-center justify-between'>
                       <div className='flex items-center gap-2'>
                         <field.icon size={14} className='text-primary' />
-                        <span className='text-xs font-semibold'>
-                          {field.label}
-                        </span>
-                        <Badge variant='outline' className='text-[9px] px-1.5'>
+                        <span className='text-xs font-semibold'>{field.label}</span>
+                        <Badge variant='outline' className='px-1.5 text-[9px]'>
                           {field.type}
                         </Badge>
                       </div>
                       <div className='flex items-center gap-2'>
-                        <Label className='text-[10px] text-muted-foreground'>
-                          Required
-                        </Label>
+                        <Label className='text-[10px] text-muted-foreground'>Required</Label>
                         <Switch
-                          checked={
-                            field.id === 'endDate'
-                              ? requireEndDate
-                              : field.required
-                          }
+                          checked={field.required}
                           onCheckedChange={() => handleToggleRequired(field.id)}
                           className='scale-75'
                         />
@@ -439,43 +509,32 @@ const MyWebsite = () => {
                     </div>
                     <div className='grid grid-cols-2 gap-2'>
                       <div className='space-y-1'>
-                        <Label className='text-[10px] text-muted-foreground'>
-                          Label
-                        </Label>
+                        <Label className='text-[10px] text-muted-foreground'>Label</Label>
                         <Input
                           value={field.label}
-                          onChange={(e) =>
-                            handleUpdateFieldLabel(field.id, e.target.value)
-                          }
+                          onChange={(e) => handleUpdateFieldLabel(field.id, e.target.value)}
                           className='h-7 text-xs'
                         />
                       </div>
                       <div className='space-y-1'>
-                        <Label className='text-[10px] text-muted-foreground'>
-                          Placeholder
-                        </Label>
+                        <Label className='text-[10px] text-muted-foreground'>Placeholder</Label>
                         <Input
                           value={field.placeholder}
                           onChange={(e) =>
-                            handleUpdateFieldPlaceholder(
-                              field.id,
-                              e.target.value,
-                            )
+                            handleUpdateFieldPlaceholder(field.id, e.target.value)
                           }
                           className='h-7 text-xs'
                         />
                       </div>
                     </div>
-                    {field.type === 'select' && field.options && (
+                    {field.type === 'select' && field.options !== undefined && (
                       <div className='space-y-1'>
                         <Label className='text-[10px] text-muted-foreground'>
                           Options (comma-separated)
                         </Label>
                         <Input
                           value={field.options.join(', ')}
-                          onChange={(e) =>
-                            handleUpdateServiceOptions(e.target.value)
-                          }
+                          onChange={(e) => handleUpdateServiceOptions(e.target.value)}
                           className='h-7 text-xs'
                         />
                       </div>
@@ -486,19 +545,17 @@ const MyWebsite = () => {
 
               <div className='flex justify-end gap-2'>
                 <Button
-                  variant='outline'
                   size='sm'
                   className='gap-1.5'
-                  onClick={() => toast.info('AI optimizing booking form...')}
-                >
-                  <Sparkles size={12} /> AI Optimize
-                </Button>
-                <Button
-                  size='sm'
-                  className='gap-1.5'
+                  disabled={saveBookingForm.isPending}
                   onClick={handleSaveBookingForm}
                 >
-                  <Save size={14} /> Save Booking Form
+                  {saveBookingForm.isPending ? (
+                    <Loader2 size={12} className='animate-spin' />
+                  ) : (
+                    <Save size={14} />
+                  )}{' '}
+                  Save Booking Form
                 </Button>
               </div>
             </CardContent>
@@ -513,24 +570,18 @@ const MyWebsite = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className='rounded-xl border border-border bg-muted/20 p-5 space-y-4'>
-                <div className='text-center space-y-1'>
-                  <h3 className='text-lg font-bold font-display'>
-                    {bookingTitle}
-                  </h3>
-                  <p className='text-xs text-muted-foreground'>
-                    {bookingDescription}
-                  </p>
+              <div className='space-y-4 rounded-xl border border-border bg-muted/20 p-5'>
+                <div className='space-y-1 text-center'>
+                  <h3 className='font-display text-lg font-bold'>{bookingTitle}</h3>
+                  <p className='text-xs text-muted-foreground'>{bookingDescription}</p>
                 </div>
                 <div className='space-y-3'>
                   {bookingFields.map((field) => (
                     <div key={field.id} className='space-y-1'>
-                      <Label className='text-xs flex items-center gap-1.5'>
+                      <Label className='flex items-center gap-1.5 text-xs'>
                         <field.icon size={10} />
                         {field.label}{' '}
-                        {field.required && (
-                          <span className='text-destructive'>*</span>
-                        )}
+                        {field.required && <span className='text-destructive'>*</span>}
                       </Label>
                       {field.type === 'textarea' ? (
                         <Textarea
@@ -545,9 +596,7 @@ const MyWebsite = () => {
                           disabled
                         >
                           <option>{field.placeholder}</option>
-                          {field.options?.map((o) => (
-                            <option key={o}>{o}</option>
-                          ))}
+                          {field.options?.map((o) => <option key={o}>{o}</option>)}
                         </select>
                       ) : (
                         <Input
@@ -560,10 +609,7 @@ const MyWebsite = () => {
                     </div>
                   ))}
                 </div>
-                <Button
-                  className='w-full gradient-bg text-primary-foreground'
-                  disabled
-                >
+                <Button className='gradient-bg w-full text-primary-foreground' disabled>
                   Submit Booking
                 </Button>
               </div>
@@ -576,24 +622,13 @@ const MyWebsite = () => {
           <Card>
             <CardHeader>
               <CardTitle className='text-base'>Brand Identity</CardTitle>
-              <CardDescription>
-                Customize your website look and feel.
-              </CardDescription>
+              <CardDescription>Customize your website look and feel.</CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
-              <div className='space-y-2'>
-                <Label className='text-xs'>Site Name</Label>
-                <Input
-                  value={siteName}
-                  onChange={(e) => setSiteName(e.target.value)}
-                />
-              </div>
-
               <Separator />
-
               <div className='grid grid-cols-2 gap-4'>
                 <div className='space-y-2'>
-                  <Label className='text-xs flex items-center gap-1.5'>
+                  <Label className='flex items-center gap-1.5 text-xs'>
                     <Palette size={12} /> Primary Color
                   </Label>
                   <div className='flex items-center gap-2'>
@@ -601,7 +636,7 @@ const MyWebsite = () => {
                       type='color'
                       value={primaryColor}
                       onChange={(e) => setPrimaryColor(e.target.value)}
-                      className='h-8 w-8 rounded border border-border cursor-pointer'
+                      className='h-8 w-8 cursor-pointer rounded border border-border'
                     />
                     <Input
                       value={primaryColor}
@@ -611,7 +646,7 @@ const MyWebsite = () => {
                   </div>
                 </div>
                 <div className='space-y-2'>
-                  <Label className='text-xs flex items-center gap-1.5'>
+                  <Label className='flex items-center gap-1.5 text-xs'>
                     <Palette size={12} /> Secondary Color
                   </Label>
                   <div className='flex items-center gap-2'>
@@ -619,7 +654,7 @@ const MyWebsite = () => {
                       type='color'
                       value={secondaryColor}
                       onChange={(e) => setSecondaryColor(e.target.value)}
-                      className='h-8 w-8 rounded border border-border cursor-pointer'
+                      className='h-8 w-8 cursor-pointer rounded border border-border'
                     />
                     <Input
                       value={secondaryColor}
@@ -631,10 +666,10 @@ const MyWebsite = () => {
               </div>
 
               <div className='space-y-2'>
-                <Label className='text-xs flex items-center gap-1.5'>
+                <Label className='flex items-center gap-1.5 text-xs'>
                   <Type size={12} /> Font Family
                 </Label>
-                <div className='flex gap-2 flex-wrap'>
+                <div className='flex flex-wrap gap-2'>
                   {['Inter', 'Georgia', 'Nunito', 'Montserrat'].map((f) => (
                     <Button
                       key={f}
@@ -653,9 +688,15 @@ const MyWebsite = () => {
               <div className='flex justify-end'>
                 <Button
                   className='gap-1.5'
-                  onClick={() => toast.success('Design saved!')}
+                  disabled={saveDesign.isPending}
+                  onClick={handleSaveDesign}
                 >
-                  <Save size={14} /> Save Design
+                  {saveDesign.isPending ? (
+                    <Loader2 size={14} className='animate-spin' />
+                  ) : (
+                    <Save size={14} />
+                  )}{' '}
+                  Save Design
                 </Button>
               </div>
             </CardContent>
@@ -665,5 +706,83 @@ const MyWebsite = () => {
     </div>
   );
 };
+
+// ─── Section Editor ───────────────────────────────────────────────────────────
+
+function SectionEditor({
+  sectionId,
+  contents,
+  onChange,
+}: {
+  sectionId: keyof SectionContents;
+  contents: SectionContents;
+  onChange: React.Dispatch<React.SetStateAction<SectionContents>>;
+}) {
+  switch (sectionId) {
+    case 'hero':
+      return (
+        <div className='space-y-2'>
+          <Input
+            placeholder='Headline'
+            value={contents.hero.headline}
+            onChange={(e) =>
+              onChange((p) => ({ ...p, hero: { ...p.hero, headline: e.target.value } }))
+            }
+          />
+          <Input
+            placeholder='Subheadline'
+            value={contents.hero.subheadline}
+            onChange={(e) =>
+              onChange((p) => ({ ...p, hero: { ...p.hero, subheadline: e.target.value } }))
+            }
+          />
+          <Input
+            placeholder='CTA Button Text (e.g. Book Now)'
+            value={contents.hero.ctaText}
+            onChange={(e) =>
+              onChange((p) => ({ ...p, hero: { ...p.hero, ctaText: e.target.value } }))
+            }
+          />
+        </div>
+      );
+    case 'services':
+      return (
+        <Textarea
+          placeholder='House Cleaning, Plumbing Repair, Electrical Work…'
+          value={contents.services}
+          onChange={(e) => onChange((p) => ({ ...p, services: e.target.value }))}
+          rows={2}
+        />
+      );
+    case 'about':
+      return (
+        <div className='space-y-2'>
+          <Input
+            placeholder='Section title (e.g. About Us)'
+            value={contents.about.title}
+            onChange={(e) =>
+              onChange((p) => ({ ...p, about: { ...p.about, title: e.target.value } }))
+            }
+          />
+          <Textarea
+            placeholder='Tell customers about your business…'
+            value={contents.about.body}
+            onChange={(e) =>
+              onChange((p) => ({ ...p, about: { ...p.about, body: e.target.value } }))
+            }
+            rows={3}
+          />
+        </div>
+      );
+    case 'contact':
+      return (
+        <Input
+          placeholder='Call to action text (e.g. Ready to get started? Contact us today.)'
+          value={contents.contact}
+          onChange={(e) => onChange((p) => ({ ...p, contact: e.target.value }))}
+        />
+      );
+  }
+}
 
 export default MyWebsite;

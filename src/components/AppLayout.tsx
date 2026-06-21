@@ -1,3 +1,5 @@
+'use client';
+
 import type { PropsWithChildren } from 'react';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -5,13 +7,57 @@ import AppSidebar from '@/components/AppSidebar';
 import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
+import TrialingBanner from '@/components/TrialingBanner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useUiState } from '@/common/state/ui-context';
 import { cn } from '@/lib/utils';
+
+function AppLayoutSkeleton() {
+  return (
+    <div className='min-h-screen bg-background'>
+      {/* Sidebar placeholder */}
+      <div className='fixed inset-y-0 left-0 hidden w-60 border-r bg-card md:block'>
+        <div className='flex h-14 items-center border-b px-4'>
+          <Skeleton className='h-6 w-32' />
+        </div>
+        <div className='space-y-1 p-3'>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className='h-9 rounded-md' />
+          ))}
+        </div>
+      </div>
+      {/* Header placeholder */}
+      <div className='fixed left-0 right-0 top-0 z-40 flex h-14 items-center border-b bg-card px-4 md:left-60'>
+        <Skeleton className='h-5 w-40' />
+        <div className='ml-auto flex items-center gap-2'>
+          <Skeleton className='h-8 w-8 rounded-full' />
+        </div>
+      </div>
+      {/* Content placeholder */}
+      <div className='pt-14 md:ml-60'>
+        <div className='mx-auto w-full max-w-7xl space-y-6 p-3 sm:p-4 md:p-6 lg:p-8'>
+          <div className='space-y-2'>
+            <Skeleton className='h-8 w-48' />
+            <Skeleton className='h-4 w-72' />
+          </div>
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className='h-32 rounded-xl' />
+            ))}
+          </div>
+          <Skeleton className='h-64 rounded-xl' />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const AppLayout = ({ children }: PropsWithChildren) => {
   const { auth, isHydrated } = useAuth();
   const { isAiSuggestionsOpen } = useUiState();
+  const { sub } = useSubscription();
   const pathname = usePathname();
   const router = useRouter();
   const isAIAdvisorRoute = pathname === '/ai-advisor';
@@ -74,7 +120,7 @@ const AppLayout = ({ children }: PropsWithChildren) => {
   }, [isRouteLoading]);
 
   if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified || auth.user?.mustChangePassword) {
-    return null;
+    return <AppLayoutSkeleton />;
   }
 
   return (
@@ -97,6 +143,9 @@ const AppLayout = ({ children }: PropsWithChildren) => {
           <div className='flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden pt-14 md:h-dvh md:pt-0'>
             <AppHeader />
             <NewBusinessBanner />
+            {sub?.status === 'trialing' && sub.trialEndsAt && (
+              <TrialingBanner trialEndsAt={sub.trialEndsAt} planName={sub.plan} />
+            )}
             <main className='flex-1 overflow-hidden'>
               <div
                 className={cn(
@@ -112,6 +161,9 @@ const AppLayout = ({ children }: PropsWithChildren) => {
           <div className='pt-14 md:pt-0'>
             <AppHeader />
             <NewBusinessBanner />
+            {sub?.status === 'trialing' && sub.trialEndsAt && (
+              <TrialingBanner trialEndsAt={sub.trialEndsAt} planName={sub.plan} />
+            )}
             <main>
               <div
                 className={cn(
