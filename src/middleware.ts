@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'servixos.com';
-const RESERVED = new Set(['www', 'app']);
+const RESERVED = new Set(['www', 'app', 'app-dev']);
 
 export function middleware(req: NextRequest) {
   const hostname = req.headers.get('host') ?? '';
