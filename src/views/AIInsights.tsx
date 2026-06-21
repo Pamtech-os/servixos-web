@@ -161,44 +161,53 @@ const AIInsights = () => {
 
   return (
     <div className='space-y-6'>
-      <div className='flex items-center justify-between'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='font-display text-2xl font-bold md:text-3xl flex items-center gap-2'>
+          <h1 className='font-display flex items-center gap-2 text-2xl font-bold md:text-3xl'>
             <Sparkles size={28} className='text-primary' />
             AI Insights
           </h1>
           <p className='text-sm text-muted-foreground'>Smart suggestions to grow your business</p>
         </div>
-        <Button variant='outline' size='sm' className='gap-2' onClick={handleRefresh}>
+        <Button
+          variant='outline'
+          size='sm'
+          className='w-full justify-center gap-2 sm:w-auto'
+          onClick={handleRefresh}
+        >
           <RefreshCw size={14} /> Refresh
         </Button>
       </div>
 
       {/* Category Filter Chips */}
-      <div className='flex flex-wrap gap-2'>
-        {(Object.keys(categoryConfig) as InsightCategory[]).map((cat) => {
-          const config = categoryConfig[cat];
-          const count = categoryCounts[cat] || 0;
-          const isActive = activeCategory === cat;
-          return (
-            <motion.button
-              key={cat}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setActiveCategory(isActive ? 'all' : cat)}
-              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all ${
-                isActive
-                  ? `${config.bg} border-current ${config.color} shadow-sm`
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted'
-              }`}
-            >
-              <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${config.bg}`}>
-                <config.icon size={14} className={config.color} />
-              </div>
-              {config.label}
-              <span className='font-bold'>{count}</span>
-            </motion.button>
-          );
-        })}
+      <div className='-mx-1 overflow-x-auto pb-1'>
+        <div className='flex w-max gap-2 px-1'>
+          {(Object.keys(categoryConfig) as InsightCategory[]).map((cat) => {
+            const config = categoryConfig[cat];
+            const count = categoryCounts[cat] || 0;
+            const isActive = activeCategory === cat;
+            return (
+              <motion.button
+                key={cat}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setActiveCategory(isActive ? 'all' : cat)}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-all sm:px-4 sm:py-2.5 sm:text-sm ${
+                  isActive
+                    ? `${config.bg} border-current ${config.color} shadow-sm`
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <div
+                  className={`flex h-6 w-6 items-center justify-center rounded-lg sm:h-7 sm:w-7 ${config.bg}`}
+                >
+                  <config.icon size={14} className={config.color} />
+                </div>
+                {config.label}
+                <span className='font-bold'>{count}</span>
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Insights List */}
@@ -231,15 +240,15 @@ const AIInsights = () => {
                 transition={{ delay: i * 0.06, type: 'spring', damping: 20 }}
               >
                 <Card className='transition-shadow hover:shadow-md'>
-                  <CardContent className='p-5'>
-                    <div className='flex items-start gap-4'>
+                  <CardContent className='p-4 sm:p-5'>
+                    <div className='flex items-start gap-3 sm:gap-4'>
                       <div
                         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.bg}`}
                       >
                         <config.icon size={18} className={config.color} />
                       </div>
                       <div className='flex-1 min-w-0'>
-                        <div className='flex items-center gap-2 flex-wrap mb-1'>
+                        <div className='mb-1 flex flex-wrap items-center gap-2'>
                           <h3 className='font-semibold text-sm'>{insight.title}</h3>
                           <Badge
                             variant='outline'

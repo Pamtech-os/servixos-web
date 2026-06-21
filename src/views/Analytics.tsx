@@ -1,94 +1,68 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { Eye, MousePointerClick, TrendingUp, Target, RefreshCw } from 'lucide-react';
+import { Eye, MousePointerClick, TrendingUp, Target, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-const trafficData = [
-  { date: 'Mon', visitors: 420, pageViews: 1240 },
-  { date: 'Tue', visitors: 380, pageViews: 1100 },
-  { date: 'Wed', visitors: 510, pageViews: 1580 },
-  { date: 'Thu', visitors: 470, pageViews: 1340 },
-  { date: 'Fri', visitors: 600, pageViews: 1820 },
-  { date: 'Sat', visitors: 350, pageViews: 980 },
-  { date: 'Sun', visitors: 290, pageViews: 860 },
-];
+const TrafficChart = dynamic(() => import('@/components/charts/TrafficChart'), { ssr: false });
+import { useAnalyticsTraffic } from '@/hooks/queries/use-analytics';
 
-const topPages = [
-  { page: '/home', views: 4820, percentage: 100 },
-  { page: '/services', views: 3240, percentage: 67 },
-  { page: '/about', views: 2180, percentage: 45 },
-  { page: '/contact', views: 1960, percentage: 41 },
-  { page: '/portfolio', views: 1540, percentage: 32 },
-  { page: '/blog', views: 1120, percentage: 23 },
-  { page: '/pricing', views: 980, percentage: 20 },
-];
-
-const statCards = [
-  {
-    title: 'Total Visitors',
-    value: '3,020',
-    change: '+14.2%',
-    icon: Eye,
-    gradient: 'from-primary to-secondary',
-  },
-  {
-    title: 'Page Views',
-    value: '8,920',
-    change: '+8.7%',
-    icon: MousePointerClick,
-    gradient: 'from-secondary to-primary',
-  },
-  {
-    title: 'Daily Average',
-    value: '431',
-    change: '+5.3%',
-    icon: TrendingUp,
-    gradient: 'from-accent to-primary',
-  },
-  {
-    title: 'Conversion Rate',
-    value: '3.2%',
-    change: '+0.8%',
-    icon: Target,
-    gradient: 'from-primary to-accent',
-  },
-];
+function formatChartDate(dateStr: string): string {
+  const [, month, day] = dateStr.split('-');
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${monthNames[parseInt(month, 10) - 1]} ${parseInt(day, 10)}`;
+}
 
 const Analytics = () => {
-  const [loading, setLoading] = useState(true);
+  const { data, isPending } = useAnalyticsTraffic();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  const stats = data?.stats;
+  const trafficData = (data?.trafficData ?? []).map((d) => ({
+    ...d,
+    date: formatChartDate(d.date),
+  }));
+  const topPages = data?.topPages ?? [];
+  const hasTrafficData = trafficData.some((d) => d.pageViews > 0);
+
+  const statCards = [
+    {
+      title: 'Total Visitors',
+      value: stats != null ? stats.totalVisitors.toLocaleString() : '—',
+      icon: Eye,
+      iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
+    },
+    {
+      title: 'Page Views',
+      value: stats != null ? stats.totalPageViews.toLocaleString() : '—',
+      icon: MousePointerClick,
+      iconGradient: 'linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)))',
+    },
+    {
+      title: 'Daily Average',
+      value: stats != null ? Math.round(stats.dailyAverage).toLocaleString() : '—',
+      icon: TrendingUp,
+      iconGradient: 'linear-gradient(135deg, hsl(var(--accent)), hsl(var(--primary)))',
+    },
+    {
+      title: 'Conversion Rate',
+      value: stats != null ? `${stats.conversionRate.toFixed(2)}%` : '—',
+      icon: Target,
+      iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))',
+      tooltip: 'Tracks website-to-request conversions. Shows 0.00% until website traffic tracking is active.',
+    },
+  ];
 
   return (
     <div className='space-y-6'>
-      <div className='flex items-center justify-between'>
-        <div>
-          <h1 className='font-display text-2xl font-bold md:text-3xl'>Analytics</h1>
-          <p className='text-sm text-muted-foreground'>
-            Track your website performance and traffic.
-          </p>
-        </div>
-        <Button variant='outline' size='sm' className='gap-2'>
-          <RefreshCw size={14} /> Refresh
-        </Button>
+      <div>
+        <h1 className='font-display text-2xl font-bold md:text-3xl'>Analytics</h1>
+        <p className='text-sm text-muted-foreground'>
+          Track your website performance and traffic.
+        </p>
       </div>
 
       {/* Stat Cards */}
@@ -100,7 +74,7 @@ const Analytics = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
           >
-            {loading ? (
+            {isPending ? (
               <Card>
                 <CardContent className='p-6'>
                   <Skeleton className='mb-2 h-4 w-24' />
@@ -112,13 +86,26 @@ const Analytics = () => {
               <Card className='overflow-hidden'>
                 <CardContent className='relative p-6'>
                   <div
-                    className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={20} />
                   </div>
                   <p className='text-sm font-medium text-muted-foreground'>{stat.title}</p>
                   <p className='mt-1 font-display text-2xl font-bold'>{stat.value}</p>
-                  <p className='mt-1 text-xs text-emerald-500 font-medium'>{stat.change}</p>
+                  {stat.tooltip && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className='mt-1 flex cursor-help items-center gap-1 text-xs text-muted-foreground'>
+                          <Info size={11} />
+                          Website tracking pending
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent className='max-w-64 text-xs'>
+                        {stat.tooltip}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -141,55 +128,17 @@ const Analytics = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {isPending ? (
                 <Skeleton className='h-72 w-full' />
+              ) : !hasTrafficData ? (
+                <div className='flex h-72 flex-col items-center justify-center gap-2 text-center'>
+                  <p className='text-sm font-medium text-muted-foreground'>No traffic data yet</p>
+                  <p className='text-xs text-muted-foreground'>
+                    Publish your website to start tracking visitors.
+                  </p>
+                </div>
               ) : (
-                <ResponsiveContainer width='100%' height={340}>
-                  <AreaChart data={trafficData}>
-                    <defs>
-                      <linearGradient id='visitorsGrad' x1='0' y1='0' x2='0' y2='1'>
-                        <stop offset='5%' stopColor='hsl(217, 91%, 60%)' stopOpacity={0.3} />
-                        <stop offset='95%' stopColor='hsl(217, 91%, 60%)' stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id='pageViewsGrad' x1='0' y1='0' x2='0' y2='1'>
-                        <stop offset='5%' stopColor='hsl(270, 70%, 60%)' stopOpacity={0.3} />
-                        <stop offset='95%' stopColor='hsl(270, 70%, 60%)' stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      stroke='hsl(220, 13%, 88%)'
-                      opacity={0.3}
-                    />
-                    <XAxis dataKey='date' tick={{ fontSize: 12 }} stroke='hsl(220, 10%, 46%)' />
-                    <YAxis tick={{ fontSize: 12 }} stroke='hsl(220, 10%, 46%)' />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                      }}
-                    />
-                    <Legend iconType='circle' iconSize={8} wrapperStyle={{ fontSize: '12px' }} />
-                    <Area
-                      type='monotone'
-                      dataKey='visitors'
-                      stroke='hsl(217, 91%, 60%)'
-                      fill='url(#visitorsGrad)'
-                      strokeWidth={2}
-                      name='Visitors'
-                    />
-                    <Area
-                      type='monotone'
-                      dataKey='pageViews'
-                      stroke='hsl(270, 70%, 60%)'
-                      fill='url(#pageViewsGrad)'
-                      strokeWidth={2}
-                      name='Page Views'
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <TrafficChart data={trafficData} />
               )}
             </CardContent>
           </Card>
@@ -208,7 +157,7 @@ const Analytics = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {isPending ? (
                 <div className='space-y-4'>
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className='flex items-center gap-4'>
@@ -217,6 +166,13 @@ const Analytics = () => {
                       <Skeleton className='h-4 w-16' />
                     </div>
                   ))}
+                </div>
+              ) : topPages.length === 0 ? (
+                <div className='flex h-40 flex-col items-center justify-center gap-2 text-center'>
+                  <p className='text-sm font-medium text-muted-foreground'>No page data yet</p>
+                  <p className='text-xs text-muted-foreground'>
+                    Page view data will appear once your website receives traffic.
+                  </p>
                 </div>
               ) : (
                 <div className='space-y-4'>

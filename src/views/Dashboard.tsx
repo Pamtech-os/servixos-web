@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -13,77 +13,98 @@ import {
   Clock,
   CreditCard,
   UserPlus,
+  Settings,
+  ShieldCheck,
+  UserCog,
+  CheckSquare,
+  Globe,
   ArrowRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  mockActivities,
-  mockClients,
-  mockRevenueData,
-  mockJobStatusData,
-} from '@/lib/mock-data';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
 
-const statCards = [
-  {
-    title: 'Monthly Revenue',
-    value: '$19,800',
-    change: '+12.5%',
-    icon: DollarSign,
-    gradient: 'from-primary to-secondary',
-  },
-  {
-    title: 'Active Clients',
-    value: '8',
-    change: '+2 this month',
-    icon: Users,
-    gradient: 'from-accent to-primary',
-  },
-  {
-    title: 'Outstanding Invoices',
-    value: '4',
-    change: '$11,600 total',
-    icon: FileText,
-    gradient: 'from-secondary to-primary',
-  },
-  {
-    title: 'Reviews',
-    value: '4.8',
-    change: '32 reviews',
-    icon: Star,
-    gradient: 'from-primary to-accent',
-  },
-];
+const RevenueChart = dynamic(() => import('@/components/charts/RevenueChart'), { ssr: false });
+const JobsStatusChart = dynamic(() => import('@/components/charts/JobsStatusChart'), { ssr: false });
+import {
+  useAnalyticsDashboard,
+  useAnalyticsRevenue,
+  useAnalyticsJobs,
+} from '@/hooks/queries/use-analytics';
+import type { ActivityLogCategory } from '@/lib/api-client';
 
-const activityIcons: Record<string, typeof DollarSign> = {
+const STATUS_COLORS: Record<string, string> = {
+  pending: '#f59e0b',
+  in_progress: '#3b82f6',
+  completed: '#22c55e',
+  cancelled: '#ef4444',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+const ACTIVITY_ICONS: Record<ActivityLogCategory, typeof Clock> = {
   invoice: FileText,
   client: UserPlus,
   job: Briefcase,
   payment: CreditCard,
+  auth: ShieldCheck,
+  settings: Settings,
+  role: ShieldCheck,
+  employee: UserCog,
+  task: CheckSquare,
+  request: FileText,
+  website: Globe,
 };
 
+function formatMonth(monthKey: string): string {
+  const [, month] = monthKey.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(month, 10) - 1];
+}
+
+function formatRelativeTime(timestamp: string): string {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
+  const { data: dashboardData, isPending: dashboardPending } = useAnalyticsDashboard();
+  const { data: revenueData, isPending: revenuePending } = useAnalyticsRevenue(7);
+  const { data: jobsData, isPending: jobsPending } = useAnalyticsJobs();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
+  const revenueChartData = (revenueData ?? []).map((d) => ({
+    month: formatMonth(d.month),
+    revenue: d.revenue,
+  }));
 
-  const topClients = [...mockClients].sort((a, b) => b.totalSpent - a.totalSpent).slice(0, 5);
+  const jobsChartData = (jobsData ?? [])
+    .filter((d) => d.count > 0)
+    .map((d) => ({
+      name: STATUS_LABELS[d.status] ?? d.status,
+      value: d.count,
+      fill: STATUS_COLORS[d.status] ?? '#94a3b8',
+    }));
+
+  const hasJobData = (jobsData ?? []).some((d) => d.count > 0);
 
   return (
     <div className='space-y-6'>
@@ -96,14 +117,48 @@ const Dashboard = () => {
 
       {/* Stat Cards */}
       <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-        {statCards.map((stat, i) => (
+        {[
+          {
+            title: 'Monthly Revenue',
+            value: dashboardData != null
+              ? `$${dashboardData.monthlyRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : '—',
+            sub: 'Current month',
+            icon: DollarSign,
+            iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
+          },
+          {
+            title: 'Active Clients',
+            value: dashboardData != null ? dashboardData.activeClientsCount.toLocaleString() : '—',
+            sub: 'With open jobs',
+            icon: Users,
+            iconGradient: 'linear-gradient(135deg, hsl(var(--accent)), hsl(var(--primary)))',
+          },
+          {
+            title: 'Outstanding Invoices',
+            value: dashboardData != null ? String(dashboardData.outstandingInvoices.count) : '—',
+            sub: dashboardData != null
+              ? `$${dashboardData.outstandingInvoices.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} remaining`
+              : '',
+            icon: FileText,
+            iconGradient: 'linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)))',
+          },
+          {
+            title: 'Reviews',
+            value: '—',
+            sub: 'Coming soon',
+            icon: Star,
+            iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))',
+            muted: true,
+          },
+        ].map((stat, i) => (
           <motion.div
             key={stat.title}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
           >
-            {loading ? (
+            {dashboardPending ? (
               <Card>
                 <CardContent className='p-6'>
                   <Skeleton className='mb-2 h-4 w-24' />
@@ -112,16 +167,17 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Card className='overflow-hidden'>
+              <Card className={stat.muted ? 'overflow-hidden opacity-50' : 'overflow-hidden'}>
                 <CardContent className='relative p-6'>
                   <div
-                    className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} text-primary-foreground`}
+                    className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
+                    style={{ background: stat.iconGradient }}
                   >
                     <stat.icon size={20} />
                   </div>
                   <p className='text-sm font-medium text-muted-foreground'>{stat.title}</p>
                   <p className='mt-1 font-display text-2xl font-bold'>{stat.value}</p>
-                  <p className='mt-1 text-xs text-muted-foreground'>{stat.change}</p>
+                  <p className='mt-1 text-xs text-muted-foreground'>{stat.sub}</p>
                 </CardContent>
               </Card>
             )}
@@ -140,55 +196,19 @@ const Dashboard = () => {
         >
           <Card>
             <CardHeader>
-              <div className='flex items-center justify-between w-full'>
+              <div className='flex w-full items-center justify-between'>
                 <CardTitle className='flex items-center gap-2 text-base'>
                   <TrendingUp size={18} className='text-primary' />
                   Revenue Trend
                 </CardTitle>
-                <span className='text-xs text-muted-foreground font-medium'>Last 7 months</span>
+                <span className='text-xs font-medium text-muted-foreground'>Last 7 months</span>
               </div>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {revenuePending ? (
                 <Skeleton className='h-64 w-full' />
               ) : (
-                <ResponsiveContainer width='100%' height={260}>
-                  <AreaChart data={mockRevenueData}>
-                    <defs>
-                      <linearGradient id='revenueGrad' x1='0' y1='0' x2='0' y2='1'>
-                        <stop offset='5%' stopColor='hsl(217, 91%, 60%)' stopOpacity={0.3} />
-                        <stop offset='95%' stopColor='hsl(217, 91%, 60%)' stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      stroke='hsl(220, 13%, 88%)'
-                      opacity={0.3}
-                    />
-                    <XAxis dataKey='month' tick={{ fontSize: 12 }} stroke='hsl(220, 10%, 46%)' />
-                    <YAxis
-                      tick={{ fontSize: 12 }}
-                      stroke='hsl(220, 10%, 46%)'
-                      tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                      }}
-                      formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Revenue']}
-                    />
-                    <Area
-                      type='monotone'
-                      dataKey='revenue'
-                      stroke='hsl(217, 91%, 60%)'
-                      fill='url(#revenueGrad)'
-                      strokeWidth={2}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <RevenueChart data={revenueChartData} />
               )}
             </CardContent>
           </Card>
@@ -208,36 +228,17 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {jobsPending ? (
                 <Skeleton className='mx-auto h-52 w-52 rounded-full' />
+              ) : !hasJobData ? (
+                <div className='flex h-[260px] flex-col items-center justify-center gap-2 text-center'>
+                  <p className='text-sm font-medium text-muted-foreground'>No jobs yet</p>
+                  <p className='text-xs text-muted-foreground'>
+                    Job status distribution will appear here.
+                  </p>
+                </div>
               ) : (
-                <ResponsiveContainer width='100%' height={260}>
-                  <PieChart>
-                    <Pie
-                      data={mockJobStatusData}
-                      cx='50%'
-                      cy='45%'
-                      innerRadius={55}
-                      outerRadius={85}
-                      dataKey='value'
-                      paddingAngle={4}
-                      strokeWidth={0}
-                    >
-                      {mockJobStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Legend iconType='circle' iconSize={8} wrapperStyle={{ fontSize: '12px' }} />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                        fontSize: '13px',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <JobsStatusChart data={jobsChartData} />
               )}
             </CardContent>
           </Card>
@@ -260,7 +261,7 @@ const Dashboard = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {dashboardPending ? (
                 <div className='space-y-4'>
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className='flex items-start gap-3'>
@@ -272,18 +273,27 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
+              ) : !dashboardData?.recentActivity.length ? (
+                <div className='flex h-40 flex-col items-center justify-center gap-2 text-center'>
+                  <p className='text-sm font-medium text-muted-foreground'>No recent activity</p>
+                  <p className='text-xs text-muted-foreground'>
+                    Actions taken by your team will appear here.
+                  </p>
+                </div>
               ) : (
                 <div className='space-y-4'>
-                  {mockActivities.map((activity) => {
-                    const Icon = activityIcons[activity.type] || Clock;
+                  {dashboardData.recentActivity.map((activity) => {
+                    const Icon = ACTIVITY_ICONS[activity.category] ?? Clock;
                     return (
                       <div key={activity.id} className='flex items-start gap-3'>
                         <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted'>
                           <Icon size={14} className='text-muted-foreground' />
                         </div>
                         <div className='min-w-0 flex-1'>
-                          <p className='text-sm'>{activity.description}</p>
-                          <p className='text-xs text-muted-foreground'>{activity.time}</p>
+                          <p className='text-sm'>{activity.action}</p>
+                          <p className='text-xs text-muted-foreground'>
+                            {activity.actorName} · {formatRelativeTime(activity.timestamp)}
+                          </p>
                         </div>
                       </div>
                     );
@@ -302,21 +312,21 @@ const Dashboard = () => {
         >
           <Card>
             <CardHeader>
-              <div className='flex items-center justify-between w-full'>
+              <div className='flex w-full items-center justify-between'>
                 <CardTitle className='flex items-center gap-2 text-base'>
                   <Users size={18} className='text-primary' />
                   Top Clients
                 </CardTitle>
                 <Link
                   href='/clients'
-                  className='text-xs text-primary hover:underline flex items-center gap-1'
+                  className='flex items-center gap-1 text-xs text-primary hover:underline'
                 >
                   View all <ArrowRight size={12} />
                 </Link>
               </div>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {dashboardPending ? (
                 <div className='space-y-4'>
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className='flex items-center justify-between'>
@@ -331,19 +341,23 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
+              ) : !dashboardData?.topClients.length ? (
+                <div className='flex h-40 flex-col items-center justify-center gap-2 text-center'>
+                  <p className='text-sm font-medium text-muted-foreground'>No client data yet</p>
+                  <p className='text-xs text-muted-foreground'>
+                    Top clients by spend will appear here.
+                  </p>
+                </div>
               ) : (
                 <div className='space-y-4'>
-                  {topClients.map((client) => (
-                    <div key={client.id} className='flex items-center justify-between'>
+                  {dashboardData.topClients.map((client) => (
+                    <div key={client.clientId} className='flex items-center justify-between'>
                       <div className='flex items-center gap-3'>
-                        <div className='flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-secondary text-xs font-bold text-primary-foreground'>
-                          {client.fullName
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
+                        <div className='gradient-bg flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-primary-foreground'>
+                          {getInitials(client.name)}
                         </div>
                         <div>
-                          <p className='text-sm font-medium'>{client.fullName}</p>
+                          <p className='text-sm font-medium'>{client.name}</p>
                           <p className='text-xs text-muted-foreground'>{client.email}</p>
                         </div>
                       </div>

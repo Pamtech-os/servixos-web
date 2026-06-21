@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   DollarSign,
-  Clock,
   AlertTriangle,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle2,
   Pencil,
   CalendarIcon,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +19,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PriceInput } from '@/components/ui/price-input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -47,12 +47,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { mockPayments, mockInvoices, type Payment } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import PaginationControls from '@/components/ui/pagination-controls';
+import ConfirmModal from '@/components/ConfirmModal';
+import { toast } from '@/components/ui/sonner';
+import { usePayments } from '@/hooks/queries/use-payments';
+import { useClients } from '@/hooks/queries/use-clients';
+import { useInvoices } from '@/hooks/queries/use-invoices';
+import {
+  useCreatePayment,
+  useUpdatePayment,
+  useDeletePayment,
+} from '@/hooks/mutations/use-payments';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import type { Payment, PaymentMode, PaymentStatus, UpdatePaymentInput } from '@/lib/api-client';
 
-const ITEMS_PER_PAGE = 6;
+const ITEMS_PER_PAGE = 20;
 
-const paymentModeLabels: Record<Payment['paymentMode'], string> = {
+const paymentModeLabels: Record<PaymentMode, string> = {
   cash: 'Cash',
   bank_transfer: 'Bank Transfer',
   credit_card: 'Credit Card',
@@ -60,7 +71,7 @@ const paymentModeLabels: Record<Payment['paymentMode'], string> = {
   mobile_money: 'Mobile Money',
 };
 
-const statusColor = (s: Payment['status']) => {
+const statusColor = (s: PaymentStatus) => {
   switch (s) {
     case 'completed':
       return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
@@ -70,144 +81,192 @@ const statusColor = (s: Payment['status']) => {
 };
 
 const Payments = () => {
-  const [loading, setLoading] = useState(true);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editPayment, setEditPayment] = useState<Payment | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
 
-  // Form state
-  const [formBusinessName, setFormBusinessName] = useState('');
+  const query = {
+    search: search || undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    page,
+    limit: ITEMS_PER_PAGE,
+  };
+
+  const { data, isLoading } = usePayments(query);
+  const { data: clientsData } = useClients({ limit: 50 });
+  const { data: invoicesData } = useInvoices({ limit: 50, status: 'pending' });
+
+  const createPayment = useCreatePayment();
+  const updatePayment = useUpdatePayment();
+  const deletePayment = useDeletePayment();
+
+  const paymentList = data?.data ?? [];
+  const meta = data?.meta;
+  const statistics = data?.statistics;
+  const clientList = clientsData?.data ?? [];
+  const invoiceList = invoicesData?.data ?? [];
+
+  // Create form state
+  const [formClientId, setFormClientId] = useState('');
+  const [formInvoiceId, setFormInvoiceId] = useState('');
   const [formDate, setFormDate] = useState<Date | undefined>(undefined);
-  const [formMode, setFormMode] = useState<Payment['paymentMode']>('bank_transfer');
-  const [formAmount, setFormAmount] = useState('');
-  const [formStatus, setFormStatus] = useState<Payment['status']>('completed');
+  const [formMode, setFormMode] = useState<PaymentMode>('bank_transfer');
+  const [formAmount, setFormAmount] = useState(0);
+  const [formStatus, setFormStatus] = useState<PaymentStatus>('completed');
+  const [formNotes, setFormNotes] = useState('');
 
   // Edit form state
-  const [editFormMode, setEditFormMode] = useState<Payment['paymentMode']>('bank_transfer');
-  const [editFormAmount, setEditFormAmount] = useState('');
-  const [editFormStatus, setEditFormStatus] = useState<Payment['status']>('completed');
+  const [editFormMode, setEditFormMode] = useState<PaymentMode>('bank_transfer');
+  const [editFormAmount, setEditFormAmount] = useState(0);
+  const [editFormStatus, setEditFormStatus] = useState<PaymentStatus>('completed');
   const [editFormDate, setEditFormDate] = useState<Date | undefined>(undefined);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPayments(mockPayments);
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Summary calculations
-  const summary = useMemo(() => {
-    const received = payments
-      .filter((p) => p.status === 'completed')
-      .reduce((sum, p) => sum + p.amount, 0);
-    const pending = mockInvoices
-      .filter((inv) => inv.status === 'pending')
-      .reduce((sum, inv) => sum + inv.price, 0);
-    const overdue = mockInvoices
-      .filter((inv) => inv.status === 'partial')
-      .reduce((sum, inv) => sum + inv.price, 0);
-    const totalIncome = received;
-    const totalOutstanding = pending + overdue;
-    return { received, pending, overdue, totalIncome, totalOutstanding };
-  }, [payments]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return payments.filter(
-      (p) =>
-        p.businessName.toLowerCase().includes(q) ||
-        paymentModeLabels[p.paymentMode].toLowerCase().includes(q)
-    );
-  }, [payments, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const [editFormNotes, setEditFormNotes] = useState('');
 
   const resetForm = () => {
-    setFormBusinessName('');
+    setFormClientId('');
+    setFormInvoiceId('');
     setFormDate(undefined);
     setFormMode('bank_transfer');
-    setFormAmount('');
+    setFormAmount(0);
     setFormStatus('completed');
+    setFormNotes('');
   };
 
   const openEditDialog = (payment: Payment) => {
     setEditPayment(payment);
     setEditFormMode(payment.paymentMode);
-    setEditFormAmount(String(payment.amount));
+    setEditFormAmount(payment.amount);
     setEditFormStatus(payment.status);
     setEditFormDate(new Date(payment.paymentDate));
+    setEditFormNotes(payment.notes ?? '');
     setEditDialogOpen(true);
+  };
+
+  const handleRecord = () => {
+    if (!formDate || !formAmount) {
+      toast.error('Missing fields', { description: 'Please fill in date and amount.' });
+      return;
+    }
+    const amount = formAmount;
+    if (amount < 0.01) {
+      toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
+      return;
+    }
+
+    createPayment.mutate(
+      {
+        clientId: formClientId || undefined,
+        invoiceId: formInvoiceId || undefined,
+        paymentDate: format(formDate, 'yyyy-MM-dd'),
+        paymentMode: formMode,
+        amount,
+        status: formStatus,
+        notes: formNotes.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Payment recorded', {
+            description: `$${amount.toLocaleString()} has been recorded.`,
+          });
+          setDialogOpen(false);
+          resetForm();
+        },
+        onError: (err) => {
+          toast.error('Failed to record payment', { description: getApiErrorMessage(err) });
+        },
+      }
+    );
   };
 
   const handleEditSave = () => {
     if (!editPayment || !editFormAmount) return;
-    setPayments((prev) =>
-      prev.map((p) =>
-        p.id === editPayment.id
-          ? {
-              ...p,
-              paymentMode: editFormMode,
-              amount: parseFloat(editFormAmount),
-              status: editFormStatus,
-              paymentDate: editFormDate ? format(editFormDate, 'yyyy-MM-dd') : p.paymentDate,
-            }
-          : p
-      )
-    );
-    setEditDialogOpen(false);
-    setEditPayment(null);
-    toast.success('Payment updated', {
-      description: `Payment for ${editPayment.businessName} has been updated.`,
-    });
-  };
-
-  const handleRecord = () => {
-    if (!formBusinessName.trim() || !formDate || !formAmount) {
-      toast.error('Missing fields', { description: 'Please fill in all required fields.' });
+    const amount = editFormAmount;
+    if (amount < 0.01) {
+      toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
       return;
     }
-    const newPayment: Payment = {
-      id: `p-${Date.now()}`,
-      businessName: formBusinessName.trim(),
-      paymentDate: format(formDate, 'yyyy-MM-dd'),
-      paymentMode: formMode,
-      amount: parseFloat(formAmount),
-      status: formStatus,
+
+    const input: UpdatePaymentInput = {
+      paymentMode: editFormMode,
+      amount,
+      status: editFormStatus,
+      paymentDate: editFormDate ? format(editFormDate, 'yyyy-MM-dd') : undefined,
+      notes: editFormNotes.trim() || undefined,
     };
-    setPayments((prev) => [newPayment, ...prev]);
-    setDialogOpen(false);
-    resetForm();
-    toast.success('Payment recorded', {
-      description: `$${parseFloat(formAmount).toLocaleString()} from ${formBusinessName}`,
+
+    updatePayment.mutate(
+      { id: editPayment._id, input },
+      {
+        onSuccess: () => {
+          toast.success('Payment updated');
+          setEditDialogOpen(false);
+          setEditPayment(null);
+        },
+        onError: (err) => {
+          toast.error('Failed to update payment', { description: getApiErrorMessage(err) });
+        },
+      }
+    );
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deletePayment.mutate(deleteTarget._id, {
+      onSuccess: () => {
+        toast.success('Payment deleted');
+        setDeleteTarget(null);
+      },
+      onError: (err) => {
+        toast.error('Failed to delete payment', { description: getApiErrorMessage(err) });
+        setDeleteTarget(null);
+      },
     });
   };
 
   const summaryCards = [
     {
+      label: 'Total Income',
+      value: statistics?.totalIncome ?? 0,
+      icon: DollarSign,
+      color: 'text-green-600 dark:text-green-400',
+      bg: 'bg-green-500/10',
+      currency: true,
+    },
+    {
       label: 'Received',
-      value: summary.received,
+      value: statistics?.received ?? 0,
       icon: CheckCircle2,
       color: 'text-green-600 dark:text-green-400',
       bg: 'bg-green-500/10',
+      currency: true,
     },
     {
       label: 'Pending',
-      value: summary.pending,
-      icon: Clock,
+      value: statistics?.pending ?? 0,
+      icon: AlertTriangle,
       color: 'text-yellow-600 dark:text-yellow-400',
       bg: 'bg-yellow-500/10',
+      currency: true,
     },
     {
       label: 'Overdue',
-      value: summary.overdue,
+      value: statistics?.overdue ?? 0,
+      icon: AlertTriangle,
+      color: 'text-yellow-600 dark:text-yellow-400',
+      bg: 'bg-yellow-500/10',
+      currency: true,
+    },
+    {
+      label: 'Outstanding',
+      value: statistics?.outstanding ?? 0,
       icon: AlertTriangle,
       color: 'text-red-600 dark:text-red-400',
       bg: 'bg-red-500/10',
+      currency: true,
     },
   ];
 
@@ -230,41 +289,7 @@ const Payments = () => {
         </Button>
       </div>
 
-      {/* Income / Outstanding summary */}
-      <div className='grid grid-cols-2 gap-4'>
-        <Card>
-          <CardContent className='flex items-center gap-3 p-4'>
-            <div className='rounded-lg bg-green-500/10 p-2.5'>
-              <DollarSign size={20} className='text-green-600 dark:text-green-400' />
-            </div>
-            <div>
-              <p className='text-xs text-muted-foreground'>Total Income</p>
-              {loading ? (
-                <Skeleton className='mt-1 h-5 w-20' />
-              ) : (
-                <p className='text-lg font-bold'>${summary.totalIncome.toLocaleString()}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className='flex items-center gap-3 p-4'>
-            <div className='rounded-lg bg-red-500/10 p-2.5'>
-              <AlertTriangle size={20} className='text-red-600 dark:text-red-400' />
-            </div>
-            <div>
-              <p className='text-xs text-muted-foreground'>Outstanding</p>
-              {loading ? (
-                <Skeleton className='mt-1 h-5 w-20' />
-              ) : (
-                <p className='text-lg font-bold'>${summary.totalOutstanding.toLocaleString()}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Payment status cards */}
+      {/* Summary cards */}
       <div className='grid gap-4 sm:grid-cols-3'>
         {summaryCards.map((card, i) => (
           <motion.div
@@ -280,10 +305,14 @@ const Payments = () => {
                 </div>
                 <div>
                   <p className='text-xs text-muted-foreground'>{card.label}</p>
-                  {loading ? (
-                    <Skeleton className='mt-1 h-5 w-16' />
+                  {isLoading ? (
+                    <Skeleton className='mt-1 h-5 w-20' />
                   ) : (
-                    <p className='text-lg font-bold'>${card.value.toLocaleString()}</p>
+                    <p className='text-lg font-bold'>
+                      {card.currency
+                        ? `$${card.value.toLocaleString()}`
+                        : card.value.toLocaleString()}
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -297,31 +326,49 @@ const Payments = () => {
         <CardHeader className='pb-3'>
           <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
             <CardTitle className='text-base'>Payment History</CardTitle>
-            <div className='relative w-full sm:w-64'>
-              <Search
-                size={16}
-                className='absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground'
-              />
-              <Input
-                placeholder='Search payments...'
-                className='pl-9'
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <div className='relative w-full sm:w-56'>
+                <Search
+                  size={16}
+                  className='absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground'
+                />
+                <Input
+                  placeholder='Search payments...'
+                  className='pl-9'
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </div>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => {
+                  setStatusFilter(v as PaymentStatus | 'all');
                   setPage(1);
                 }}
-              />
+              >
+                <SelectTrigger className='w-36'>
+                  <SelectValue placeholder='Status' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>All statuses</SelectItem>
+                  <SelectItem value='completed'>Completed</SelectItem>
+                  <SelectItem value='partial'>Partial</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className='space-y-3'>
               {[...Array(4)].map((_, i) => (
                 <Skeleton key={i} className='h-12 w-full' />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : paymentList.length === 0 ? (
             <p className='py-8 text-center text-sm text-muted-foreground'>No payments found.</p>
           ) : (
             <>
@@ -329,7 +376,8 @@ const Payments = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Business Name</TableHead>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Invoice</TableHead>
                       <TableHead>Payment Date</TableHead>
                       <TableHead>Payment Mode</TableHead>
                       <TableHead className='text-right'>Amount</TableHead>
@@ -338,68 +386,84 @@ const Payments = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginated.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className='font-medium'>{p.businessName}</TableCell>
-                        <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
-                        <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
-                        <TableCell className='text-right font-medium'>
-                          ${p.amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant='outline' className={statusColor(p.status)}>
-                            {p.status === 'completed' ? 'Completed' : 'Partial'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className='text-right'>
-                          {p.status !== 'completed' && (
-                            <Button
-                              variant='ghost'
-                              size='icon'
-                              className='h-8 w-8'
-                              onClick={() => openEditDialog(p)}
-                            >
-                              <Pencil size={14} />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {paymentList.map((p) => {
+                      const client = clientList.find((c) => c._id === p.clientId);
+                      const invoice = p.invoiceId
+                        ? invoiceList.find((inv) => inv._id === p.invoiceId?.invoiceNumber)
+                        : null;
+                      return (
+                        <TableRow key={p._id}>
+                          <TableCell className='font-medium'>{client?.name ?? '—'}</TableCell>
+                          <TableCell>
+                            {invoice?.invoiceNumber ??
+                              (p.invoiceId ? p.invoiceId.invoiceNumber : '—')}
+                          </TableCell>
+                          <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
+                          <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
+                          <TableCell className='text-right font-medium'>
+                            ${p.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant='outline' className={statusColor(p.status)}>
+                              {p.status === 'completed' ? 'Completed' : 'Partial'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className='text-right'>
+                            <div className='flex items-center justify-end gap-1'>
+                              {p.status !== 'completed' && (
+                                <>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-8 w-8'
+                                    onClick={() => openEditDialog(p)}
+                                  >
+                                    <Pencil size={14} />
+                                  </Button>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-8 w-8 text-destructive hover:text-destructive'
+                                    onClick={() => setDeleteTarget(p)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
 
-              {/* Pagination */}
-              <div className='mt-4 flex items-center justify-between'>
-                <p className='text-xs text-muted-foreground'>
-                  Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
-                  {Math.min(page * ITEMS_PER_PAGE, filtered.length)} of {filtered.length}
-                </p>
-                <div className='flex gap-1'>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft size={16} />
-                  </Button>
-                  <Button
-                    size='icon'
-                    variant='outline'
-                    className='h-8 w-8'
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    <ChevronRight size={16} />
-                  </Button>
-                </div>
-              </div>
+              {meta && (
+                <PaginationControls
+                  meta={meta}
+                  onPageChange={setPage}
+                  className='mt-4 flex items-center justify-between'
+                  controlsClassName='flex gap-1'
+                />
+              )}
             </>
           )}
         </CardContent>
       </Card>
+
+      {/* Delete confirm */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title='Delete Payment'
+        description='Are you sure you want to delete this payment? This will reverse the corresponding invoice amount.'
+        confirmLabel='Delete'
+        onConfirm={handleDelete}
+        variant='destructive'
+      />
 
       {/* Record Payment Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -411,13 +475,39 @@ const Payments = () => {
 
           <div className='space-y-4 py-2'>
             <div className='space-y-2'>
-              <Label htmlFor='pay-business'>Business / Client Name</Label>
-              <Input
-                id='pay-business'
-                placeholder='e.g. Sarah Johnson'
-                value={formBusinessName}
-                onChange={(e) => setFormBusinessName(e.target.value)}
-              />
+              <Label>
+                Client <span className='text-muted-foreground'>(optional)</span>
+              </Label>
+              <Select value={formClientId} onValueChange={setFormClientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder='Select a client' />
+                </SelectTrigger>
+                <SelectContent>
+                  {clientList.map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className='space-y-2'>
+              <Label>
+                Invoice <span className='text-muted-foreground'>(optional)</span>
+              </Label>
+              <Select value={formInvoiceId} onValueChange={setFormInvoiceId}>
+                <SelectTrigger>
+                  <SelectValue placeholder='Link to invoice' />
+                </SelectTrigger>
+                <SelectContent>
+                  {invoiceList.map((inv) => (
+                    <SelectItem key={inv._id} value={inv._id}>
+                      {inv.invoiceNumber} — ${inv.totalAmount.toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className='grid grid-cols-2 gap-4'>
@@ -449,13 +539,11 @@ const Payments = () => {
               </div>
               <div className='space-y-2'>
                 <Label htmlFor='pay-amount'>Amount ($)</Label>
-                <Input
+                <PriceInput
                   id='pay-amount'
-                  type='number'
-                  min='0'
-                  placeholder='0.00'
                   value={formAmount}
-                  onChange={(e) => setFormAmount(e.target.value)}
+                  onChange={setFormAmount}
+                  placeholder='0.00'
                 />
               </div>
             </div>
@@ -463,28 +551,24 @@ const Payments = () => {
             <div className='grid grid-cols-2 gap-4'>
               <div className='space-y-2'>
                 <Label>Payment Mode</Label>
-                <Select
-                  value={formMode}
-                  onValueChange={(v) => setFormMode(v as Payment['paymentMode'])}
-                >
+                <Select value={formMode} onValueChange={(v) => setFormMode(v as PaymentMode)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='cash'>Cash</SelectItem>
-                    <SelectItem value='bank_transfer'>Bank Transfer</SelectItem>
-                    <SelectItem value='credit_card'>Credit Card</SelectItem>
-                    <SelectItem value='cheque'>Cheque</SelectItem>
-                    <SelectItem value='mobile_money'>Mobile Money</SelectItem>
+                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
+                      ([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
               </div>
               <div className='space-y-2'>
                 <Label>Status</Label>
-                <Select
-                  value={formStatus}
-                  onValueChange={(v) => setFormStatus(v as Payment['status'])}
-                >
+                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as PaymentStatus)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -495,14 +579,30 @@ const Payments = () => {
                 </Select>
               </div>
             </div>
+
+            <div className='space-y-2'>
+              <Label>
+                Notes <span className='text-muted-foreground'>(optional)</span>
+              </Label>
+              <Textarea
+                placeholder='e.g. Paid via GTBank'
+                value={formNotes}
+                onChange={(e) => setFormNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant='outline' onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleRecord} className='gradient-bg text-primary-foreground'>
-              Record Payment
+            <Button
+              onClick={handleRecord}
+              disabled={createPayment.isPending}
+              className='gradient-bg text-primary-foreground'
+            >
+              {createPayment.isPending ? 'Recording...' : 'Record Payment'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -513,9 +613,7 @@ const Payments = () => {
         <DialogContent className='sm:max-w-md'>
           <DialogHeader>
             <DialogTitle>Edit Payment</DialogTitle>
-            <DialogDescription>
-              Update payment details for {editPayment?.businessName}.
-            </DialogDescription>
+            <DialogDescription>Update payment details.</DialogDescription>
           </DialogHeader>
 
           <div className='space-y-4 py-2'>
@@ -551,27 +649,28 @@ const Payments = () => {
                 <Label>Payment Mode</Label>
                 <Select
                   value={editFormMode}
-                  onValueChange={(v) => setEditFormMode(v as Payment['paymentMode'])}
+                  onValueChange={(v) => setEditFormMode(v as PaymentMode)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='cash'>Cash</SelectItem>
-                    <SelectItem value='bank_transfer'>Bank Transfer</SelectItem>
-                    <SelectItem value='credit_card'>Credit Card</SelectItem>
-                    <SelectItem value='cheque'>Cheque</SelectItem>
-                    <SelectItem value='mobile_money'>Mobile Money</SelectItem>
+                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
+                      ([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
               </div>
               <div className='space-y-2'>
                 <Label>Amount ($)</Label>
-                <Input
-                  type='number'
-                  min='0'
+                <PriceInput
                   value={editFormAmount}
-                  onChange={(e) => setEditFormAmount(e.target.value)}
+                  onChange={setEditFormAmount}
+                  placeholder='0.00'
                 />
               </div>
             </div>
@@ -580,7 +679,7 @@ const Payments = () => {
               <Label>Status</Label>
               <Select
                 value={editFormStatus}
-                onValueChange={(v) => setEditFormStatus(v as Payment['status'])}
+                onValueChange={(v) => setEditFormStatus(v as PaymentStatus)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -591,14 +690,29 @@ const Payments = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className='space-y-2'>
+              <Label>
+                Notes <span className='text-muted-foreground'>(optional)</span>
+              </Label>
+              <Textarea
+                value={editFormNotes}
+                onChange={(e) => setEditFormNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant='outline' onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditSave} className='gradient-bg text-primary-foreground'>
-              Save Changes
+            <Button
+              onClick={handleEditSave}
+              disabled={updatePayment.isPending}
+              className='gradient-bg text-primary-foreground'
+            >
+              {updatePayment.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

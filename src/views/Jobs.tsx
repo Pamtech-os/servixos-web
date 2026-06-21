@@ -1,14 +1,12 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
   Briefcase,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
   Eye,
   Play,
@@ -21,15 +19,13 @@ import {
   Sparkles,
   Send,
   Loader2,
+  Receipt,
 } from 'lucide-react';
-import { CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -43,11 +39,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -57,13 +50,29 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import PaginationControls from '@/components/ui/pagination-controls';
 import ConfirmModal from '@/components/ConfirmModal';
-import { mockJobs, mockClients, type Job } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import { useJobs } from '@/hooks/queries/use-jobs';
+import { useClients } from '@/hooks/queries/use-clients';
+import {
+  useDeleteJob,
+  useBulkDeleteJobs,
+  useStartJob,
+  useCompleteJob,
+} from '@/hooks/mutations/use-jobs';
+import { useCreateContract } from '@/hooks/mutations/use-contracts';
+import { useContractByJob } from '@/hooks/queries/use-contracts';
+import { useCreateInvoice } from '@/hooks/mutations/use-invoices';
+import CreateJobDialog from '@/components/jobs/CreateJobDialog';
+import DepositDialog from '@/components/jobs/DepositDialog';
+import ContractReviewDialog from '@/components/jobs/ContractReviewDialog';
+import type { Job, JobStatus, Contract } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 8;
 
-const statusColor = (s: Job['status']) => {
+const statusColor = (s: JobStatus) => {
   switch (s) {
     case 'pending':
       return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20';
@@ -71,10 +80,12 @@ const statusColor = (s: Job['status']) => {
       return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
     case 'completed':
       return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
+    case 'cancelled':
+      return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
   }
 };
 
-const statusLabel = (s: Job['status']) => {
+const statusLabel = (s: JobStatus) => {
   switch (s) {
     case 'pending':
       return 'Pending';
@@ -82,205 +93,204 @@ const statusLabel = (s: Job['status']) => {
       return 'In Progress';
     case 'completed':
       return 'Completed';
+    case 'cancelled':
+      return 'Cancelled';
   }
 };
 
-interface ExtendedJob extends Job {
-  price?: number;
-  time?: string;
-  location?: string;
-  notes?: string;
-  contract?: string;
-  contractSent?: boolean;
-}
-
-const generateMockContract = (job: ExtendedJob, clientName: string): string => {
-  return `SERVICE AGREEMENT CONTRACT
-
-Contract Number: SC-${Date.now().toString().slice(-6)}
-Date: ${format(new Date(), 'MMMM d, yyyy')}
-
-PARTIES:
-This Service Agreement ("Agreement") is entered into between:
-- Service Provider: Servix OS Business ("Provider")
-- Client: ${clientName} ("Client")
-
-SCOPE OF WORK:
-Service: ${job.title}
-Description: ${job.notes || 'Standard service as agreed upon by both parties.'}
-
-SCHEDULE:
-- Start Date: ${job.date}
-- Scheduled Time: ${job.time || 'To be confirmed'}
-- Location: ${job.location || "Client's premises"}
-
-COMPENSATION:
-- Total Price: $${(job.price ?? 0).toLocaleString()}
-- Payment Terms: Due upon completion of services
-- Payment Method: Cash, check, or electronic transfer
-
-TERMS AND CONDITIONS:
-1. The Provider agrees to perform the services described above in a professional and workmanlike manner.
-2. The Client agrees to provide reasonable access to the work area and any necessary utilities.
-3. Any changes to the scope of work must be agreed upon in writing by both parties.
-4. Either party may cancel this agreement with 24-hour notice.
-5. The Provider carries appropriate insurance for all work performed.
-
-SIGNATURES:
-Provider: _________________________ Date: _________
-Client: _________________________ Date: _________
-
-This contract is generated by Servix OS and is legally binding upon signature by both parties.`;
-};
-
 const Jobs = () => {
-  const [loading, setLoading] = useState(true);
-  const [jobs, setJobs] = useState<ExtendedJob[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [clientFilter, setClientFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ExtendedJob | null>(null);
-  const [viewJob, setViewJob] = useState<ExtendedJob | null>(null);
-
-  // Contract states
-  const [contractGenerating, setContractGenerating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
+  const [viewJob, setViewJob] = useState<Job | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [contractReviewOpen, setContractReviewOpen] = useState(false);
-  const [contractText, setContractText] = useState('');
+  const [activeContractForReview, setActiveContractForReview] = useState<Contract | null>(null);
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
 
-  // Create form state
-  const [formTitle, setFormTitle] = useState('');
-  const [formClientId, setFormClientId] = useState('');
-  const [formDate, setFormDate] = useState<Date>(new Date());
-  const [formPrice, setFormPrice] = useState('');
-  const [formTime, setFormTime] = useState('');
-  const [formLocation, setFormLocation] = useState('');
-  const [formNotes, setFormNotes] = useState('');
+  const jobsQuery = useJobs({
+    search: search || undefined,
+    clientId: clientFilter !== 'all' ? clientFilter : undefined,
+    status: statusFilter !== 'all' ? (statusFilter as JobStatus) : undefined,
+    page,
+    limit: ITEMS_PER_PAGE,
+  });
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const extended: ExtendedJob[] = mockJobs.map((j) => ({
-        ...j,
-        price: Math.floor(Math.random() * 5000) + 500,
-        time: '09:00 AM',
-        location: mockClients.find((c) => c.id === j.clientId)?.jobLocation ?? '',
-        notes: '',
-      }));
-      setJobs(extended);
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(t);
-  }, []);
+  const clientsQuery = useClients({ limit: 50 });
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return jobs.filter((job) => {
-      const client = mockClients.find((c) => c.id === job.clientId);
-      const matchSearch =
-        job.title.toLowerCase().includes(q) || client?.fullName.toLowerCase().includes(q);
-      const matchClient = clientFilter === 'all' || job.clientId === clientFilter;
-      const matchStatus = statusFilter === 'all' || job.status === statusFilter;
-      return matchSearch && matchClient && matchStatus;
-    });
-  }, [jobs, search, clientFilter, statusFilter]);
+  const deleteJob = useDeleteJob();
+  const bulkDeleteJobs = useBulkDeleteJobs();
+  const startJob = useStartJob();
+  const completeJob = useCompleteJob();
+  const createContract = useCreateContract();
+  const jobContractQuery = useContractByJob(viewJob?._id, viewJob?.clientId);
+  const jobContract = jobContractQuery.data ?? null;
+  const createInvoice = useCreateInvoice();
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const jobList = jobsQuery.data?.data ?? [];
+  const paginationMeta = jobsQuery.data?.meta;
+  const clientList = useMemo(() => clientsQuery.data?.data ?? [], [clientsQuery.data?.data]);
+
+  const clientMap = useMemo(
+    () => Object.fromEntries(clientList.map((c) => [c._id, c.name])),
+    [clientList],
+  );
+
+  const clientEmailMap = useMemo(
+    () => Object.fromEntries(clientList.map((c) => [c._id, c.email])),
+    [clientList],
+  );
+
+  const contractSigned = jobContract?.status === 'signed';
+  const contractSent = jobContract?.status === 'sent';
+  const contractIsDraft = jobContract?.status === 'draft';
+  const hasContract = !!jobContract;
+
+  const selectedJobsCount = selectedJobIds.length;
+  const allVisibleSelected =
+    jobList.length > 0 && jobList.every((job) => selectedJobIds.includes(job._id));
+  const someVisibleSelected =
+    jobList.some((job) => selectedJobIds.includes(job._id)) && !allVisibleSelected;
+
+  const handleToggleJobSelection = (jobId: string, checked: boolean) => {
+    setSelectedJobIds((prev) =>
+      checked ? (prev.includes(jobId) ? prev : [...prev, jobId]) : prev.filter((id) => id !== jobId),
+    );
+  };
+
+  const handleToggleVisibleSelection = (checked: boolean) => {
+    const visibleIds = jobList.map((job) => job._id);
+    setSelectedJobIds((prev) =>
+      checked
+        ? Array.from(new Set([...prev, ...visibleIds]))
+        : prev.filter((id) => !visibleIds.includes(id)),
+    );
+  };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
-    toast.success('Job deleted', { description: `"${deleteTarget.title}" has been removed.` });
-    setDeleteTarget(null);
-  };
-
-  const resetForm = () => {
-    setFormTitle('');
-    setFormClientId('');
-    setFormDate(new Date());
-    setFormPrice('');
-    setFormTime('');
-    setFormLocation('');
-    setFormNotes('');
-  };
-
-  const handleCreate = () => {
-    if (!formTitle.trim() || !formClientId) {
-      toast.error('Validation Error', { description: 'Title and client are required.' });
-      return;
-    }
-    const newJob: ExtendedJob = {
-      id: `j-${Date.now()}`,
-      clientId: formClientId,
-      title: formTitle,
-      date: format(formDate, 'yyyy-MM-dd'),
-      status: 'pending',
-      price: Number(formPrice) || 0,
-      time: formTime,
-      location: formLocation,
-      notes: formNotes,
-    };
-    setJobs((prev) => [newJob, ...prev]);
-    toast.success('Job created', { description: `"${newJob.title}" added successfully.` });
-    setCreateOpen(false);
-    resetForm();
-  };
-
-  const handleStartJob = (job: ExtendedJob) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === job.id ? { ...j, status: 'in_progress' as const } : j))
-    );
-    setViewJob((prev) => (prev && prev.id === job.id ? { ...prev, status: 'in_progress' } : prev));
-    toast.success('Job started', { description: `"${job.title}" is now in progress.` });
-  };
-
-  const handleCreateInvoice = (job: ExtendedJob) => {
-    toast.success('Invoice created', { description: `Invoice generated for "${job.title}".` });
-  };
-
-  const handleGenerateContract = async () => {
-    if (!viewJob) return;
-    setContractGenerating(true);
-    // Simulate AI contract generation
-    await new Promise((r) => setTimeout(r, 2500));
-    const client = mockClients.find((c) => c.id === viewJob.clientId);
-    const contract = generateMockContract(viewJob, client?.fullName ?? 'Unknown Client');
-    setContractText(contract);
-    setContractGenerating(false);
-    setContractReviewOpen(true);
-  };
-
-  const handleSendContract = () => {
-    if (!viewJob) return;
-    setJobs((prev) =>
-      prev.map((j) =>
-        j.id === viewJob.id ? { ...j, contract: contractText, contractSent: true } : j
-      )
-    );
-    setViewJob((prev) => (prev ? { ...prev, contract: contractText, contractSent: true } : prev));
-    setContractReviewOpen(false);
-    toast.success('Contract sent', {
-      description: `Contract has been sent to the client for review and signature.`,
+    deleteJob.mutate(deleteTarget._id, {
+      onSuccess: () => {
+        toast.success('Job deleted', { description: `"${deleteTarget.title}" has been removed.` });
+        setSelectedJobIds((prev) => prev.filter((id) => id !== deleteTarget._id));
+        if (viewJob?._id === deleteTarget._id) setViewJob(null);
+        setDeleteTarget(null);
+      },
+      onError: (err) => {
+        toast.error('Failed to delete', { description: getApiErrorMessage(err) });
+      },
     });
   };
 
+  const handleBulkDelete = () => {
+    bulkDeleteJobs.mutate(selectedJobIds, {
+      onSuccess: (result) => {
+        toast.success('Jobs deleted', {
+          description: `${result.deletedCount} job${result.deletedCount !== 1 ? 's' : ''} removed.`,
+        });
+        if (viewJob && selectedJobIds.includes(viewJob._id)) setViewJob(null);
+        setSelectedJobIds([]);
+        setBulkDeleteOpen(false);
+      },
+      onError: (err) => {
+        toast.error('Failed to delete', { description: getApiErrorMessage(err) });
+      },
+    });
+  };
+
+  const handleStartJob = (job: Job) => {
+    startJob.mutate(job._id, {
+      onSuccess: (updated) => {
+        toast.success('Job started', { description: `"${job.title}" is now in progress.` });
+        setViewJob(updated);
+      },
+      onError: (err) => {
+        toast.error('Failed to start job', { description: getApiErrorMessage(err) });
+      },
+    });
+  };
+
+  const handleCompleteJob = (job: Job) => {
+    completeJob.mutate(job._id, {
+      onSuccess: (updated) => {
+        toast.success('Job completed', { description: `"${job.title}" marked as completed.` });
+        setViewJob(updated);
+      },
+      onError: (err) => {
+        toast.error('Failed to complete job', { description: getApiErrorMessage(err) });
+      },
+    });
+  };
+
+  const handleGenerateContract = () => {
+    if (!viewJob) return;
+    createContract.mutate(
+      {
+        clientId: viewJob.clientId,
+        jobId: viewJob._id,
+        name: viewJob.title,
+        amount: viewJob.price ?? 0,
+      },
+      {
+        onSuccess: (contract) => {
+          setActiveContractForReview(contract);
+          setContractReviewOpen(true);
+        },
+        onError: (err) => {
+          toast.error('Failed to create contract', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
+
+  const handleCreateInvoice = () => {
+    if (!viewJob) return;
+    createInvoice.mutate(
+      {
+        clientId: viewJob.clientId,
+        jobId: viewJob._id,
+        invoiceDate: new Date().toISOString(),
+        lineItems: [
+          {
+            description: viewJob.title,
+            quantity: 1,
+            unitPrice: viewJob.price ?? 0,
+          },
+        ],
+      },
+      {
+        onSuccess: () => {
+          toast.success('Invoice created', {
+            description: `Invoice for "${viewJob.title}" created successfully.`,
+          });
+        },
+        onError: (err) => {
+          toast.error('Failed to create invoice', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
+
   return (
-    <div className='space-y-6'>
+    <div className='space-y-4 sm:space-y-6'>
       {/* Header */}
-      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
         <div>
-          <h1 className='text-2xl font-bold tracking-tight'>Jobs</h1>
+          <h1 className='text-xl font-bold tracking-tight sm:text-2xl'>Jobs</h1>
           <p className='text-sm text-muted-foreground'>Manage and track all jobs</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className='gap-2'>
+        <Button onClick={() => setCreateOpen(true)} className='w-full gap-2 sm:w-auto'>
           <Plus size={16} /> New Job
         </Button>
       </div>
 
       {/* Filters */}
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
-        <div className='relative flex-1 max-w-sm'>
+        <div className='relative w-full flex-1 sm:max-w-sm'>
           <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
           <Input
             placeholder='Search jobs...'
@@ -299,14 +309,14 @@ const Jobs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[180px]'>
+          <SelectTrigger className='w-full sm:w-[180px]'>
             <SelectValue placeholder='All Clients' />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value='all'>All Clients</SelectItem>
-            {mockClients.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.fullName}
+            {clientList.map((c) => (
+              <SelectItem key={c._id} value={c._id}>
+                {c.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -318,7 +328,7 @@ const Jobs = () => {
             setPage(1);
           }}
         >
-          <SelectTrigger className='w-[160px]'>
+          <SelectTrigger className='w-full sm:w-[160px]'>
             <SelectValue placeholder='All Statuses' />
           </SelectTrigger>
           <SelectContent>
@@ -326,50 +336,140 @@ const Jobs = () => {
             <SelectItem value='pending'>Pending</SelectItem>
             <SelectItem value='in_progress'>In Progress</SelectItem>
             <SelectItem value='completed'>Completed</SelectItem>
+            <SelectItem value='cancelled'>Cancelled</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
+      {selectedJobsCount > 0 && (
+        <Card className='card-shadow p-3'>
+          <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+            <p className='text-sm font-medium'>
+              {selectedJobsCount} job{selectedJobsCount > 1 ? 's' : ''} selected
+            </p>
+            <Button variant='destructive' onClick={() => setBulkDeleteOpen(true)}>
+              Delete Selected
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Table */}
-      {loading ? (
+      {jobsQuery.isLoading ? (
         <div className='space-y-3'>
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className='h-12 rounded-lg' />
           ))}
         </div>
       ) : (
-        <Card className='card-shadow overflow-hidden'>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job Title</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className='text-right'>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginated.length === 0 ? (
+        <>
+          <div className='space-y-3 md:hidden'>
+            {jobList.length === 0 ? (
+              <Card className='card-shadow p-6 text-center text-sm text-muted-foreground'>
+                <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' />
+                No jobs found.
+              </Card>
+            ) : (
+              jobList.map((job, i) => (
+                <motion.div
+                  key={job._id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                >
+                  <Card className='card-shadow p-3'>
+                    <div className='space-y-2'>
+                      <div className='flex items-start justify-between gap-2'>
+                        <div className='flex items-start gap-2'>
+                          <Checkbox
+                            checked={selectedJobIds.includes(job._id)}
+                            onCheckedChange={(checked) =>
+                              handleToggleJobSelection(job._id, checked === true)
+                            }
+                            aria-label={`Select ${job.title}`}
+                          />
+                          <p className='text-sm font-medium leading-tight'>{job.title}</p>
+                        </div>
+                        <Badge variant='outline' className={statusColor(job.status)}>
+                          {statusLabel(job.status)}
+                        </Badge>
+                      </div>
+                      <p className='text-xs text-muted-foreground'>
+                        {clientMap[job.clientId] ?? 'Unknown'}
+                      </p>
+                      <p className='text-xs text-muted-foreground'>
+                        {format(new Date(job.scheduledDate), 'PP')}
+                      </p>
+                      <div className='flex justify-end gap-1 pt-1'>
+                        <Button variant='ghost' size='icon' onClick={() => setViewJob(job)}>
+                          <Eye size={16} />
+                        </Button>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          onClick={() => setDeleteTarget(job)}
+                          className='text-destructive hover:text-destructive'
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                </motion.div>
+              ))
+            )}
+          </div>
+
+          <Card className='card-shadow hidden overflow-hidden md:block'>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className='py-10 text-center text-muted-foreground'>
-                    <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' /> No jobs found.
-                  </TableCell>
+                  <TableHead className='w-10'>
+                    <Checkbox
+                      checked={
+                        allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false
+                      }
+                      onCheckedChange={(checked) =>
+                        handleToggleVisibleSelection(checked === true)
+                      }
+                      aria-label='Select visible jobs'
+                    />
+                  </TableHead>
+                  <TableHead>Job Title</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Scheduled Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className='text-right'>Actions</TableHead>
                 </TableRow>
-              ) : (
-                paginated.map((job, i) => {
-                  const client = mockClients.find((c) => c.id === job.clientId);
-                  return (
+              </TableHeader>
+              <TableBody>
+                {jobList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className='py-10 text-center text-muted-foreground'>
+                      <Briefcase className='mx-auto mb-2 h-8 w-8 opacity-40' /> No jobs found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  jobList.map((job, i) => (
                     <motion.tr
-                      key={job.id}
+                      key={job._id}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
                       className='border-b transition-colors hover:bg-muted/50'
                     >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedJobIds.includes(job._id)}
+                          onCheckedChange={(checked) =>
+                            handleToggleJobSelection(job._id, checked === true)
+                          }
+                          aria-label={`Select ${job.title}`}
+                        />
+                      </TableCell>
                       <TableCell className='font-medium'>{job.title}</TableCell>
-                      <TableCell>{client?.fullName ?? 'Unknown'}</TableCell>
-                      <TableCell>{job.date}</TableCell>
+                      <TableCell>{clientMap[job.clientId] ?? 'Unknown'}</TableCell>
+                      <TableCell>{format(new Date(job.scheduledDate), 'PP')}</TableCell>
                       <TableCell>
                         <Badge variant='outline' className={statusColor(job.status)}>
                           {statusLabel(job.status)}
@@ -391,37 +491,21 @@ const Jobs = () => {
                         </div>
                       </TableCell>
                     </motion.tr>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-          {totalPages > 1 && (
-            <div className='flex items-center justify-between border-t px-4 py-3'>
-              <p className='text-sm text-muted-foreground'>
-                Page {page} of {totalPages}
-              </p>
-              <div className='flex gap-1'>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft size={16} />
-                </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight size={16} />
-                </Button>
-              </div>
-            </div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {paginationMeta && (
+            <PaginationControls
+              meta={paginationMeta}
+              onPageChange={setPage}
+              className='flex items-center justify-between gap-2 border-t px-1 py-3 sm:px-2 md:rounded-b-lg md:border md:px-4'
+              controlsClassName='flex gap-1'
+            />
           )}
-        </Card>
+        </>
       )}
 
       {/* Delete modal */}
@@ -437,6 +521,16 @@ const Jobs = () => {
         variant='destructive'
       />
 
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title='Delete Selected Jobs'
+        description={`Are you sure you want to delete ${selectedJobsCount} selected job${selectedJobsCount > 1 ? 's' : ''}? This action cannot be undone.`}
+        confirmLabel='Delete Selected'
+        onConfirm={handleBulkDelete}
+        variant='destructive'
+      />
+
       {/* View Job Detail Dialog */}
       <Dialog
         open={!!viewJob}
@@ -444,303 +538,209 @@ const Jobs = () => {
           if (!open) setViewJob(null);
         }}
       >
-        <DialogContent className='sm:max-w-lg'>
+        <DialogContent className='max-h-[90dvh] overflow-y-auto sm:max-w-lg'>
           <DialogHeader>
             <DialogTitle>Job Details</DialogTitle>
             <DialogDescription>View job information and take actions</DialogDescription>
           </DialogHeader>
-          {viewJob &&
-            (() => {
-              const client = mockClients.find((c) => c.id === viewJob.clientId);
-              return (
-                <div className='space-y-4 py-2'>
-                  <div className='flex items-center justify-between'>
-                    <h3 className='text-lg font-semibold'>{viewJob.title}</h3>
-                    <Badge variant='outline' className={statusColor(viewJob.status)}>
-                      {statusLabel(viewJob.status)}
-                    </Badge>
-                  </div>
-                  <Separator />
-                  <div className='grid gap-3 sm:grid-cols-2'>
-                    <div className='flex items-center gap-2 text-sm'>
-                      <Briefcase size={14} className='text-muted-foreground' />
-                      <span className='text-muted-foreground'>Client:</span>
-                      <span className='font-medium'>{client?.fullName ?? 'Unknown'}</span>
-                    </div>
-                    <div className='flex items-center gap-2 text-sm'>
-                      <CalendarDays size={14} className='text-muted-foreground' />
-                      <span className='text-muted-foreground'>Date:</span>
-                      <span className='font-medium'>{viewJob.date}</span>
-                    </div>
-                    <div className='flex items-center gap-2 text-sm'>
-                      <DollarSign size={14} className='text-muted-foreground' />
-                      <span className='text-muted-foreground'>Price:</span>
-                      <span className='font-medium'>${(viewJob.price ?? 0).toLocaleString()}</span>
-                    </div>
-                    <div className='flex items-center gap-2 text-sm'>
-                      <Clock size={14} className='text-muted-foreground' />
-                      <span className='text-muted-foreground'>Time:</span>
-                      <span className='font-medium'>{viewJob.time || 'N/A'}</span>
-                    </div>
-                    <div className='flex items-center gap-2 text-sm sm:col-span-2'>
-                      <MapPin size={14} className='text-muted-foreground' />
-                      <span className='text-muted-foreground'>Location:</span>
-                      <span className='font-medium'>{viewJob.location || 'N/A'}</span>
-                    </div>
-                  </div>
-                  {viewJob.notes && (
-                    <>
-                      <Separator />
-                      <div className='space-y-1'>
-                        <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-                          <StickyNote size={14} /> Notes
-                        </div>
-                        <p className='text-sm'>{viewJob.notes}</p>
-                      </div>
-                    </>
-                  )}
-                  <Separator />
-                  <div className='flex flex-wrap gap-2'>
-                    {viewJob.status === 'pending' && (
-                      <Button onClick={() => handleStartJob(viewJob)} className='gap-2'>
-                        <Play size={14} /> Start Job
-                      </Button>
-                    )}
-                    {viewJob.status === 'completed' && (
-                      <Button
-                        onClick={() => handleCreateInvoice(viewJob)}
-                        variant='outline'
-                        className='gap-2'
-                      >
-                        <FileText size={14} /> Create Invoice
-                      </Button>
-                    )}
-                    {viewJob.status === 'in_progress' && (
-                      <>
-                        <Button
-                          onClick={() => {
-                            setJobs((prev) =>
-                              prev.map((j) =>
-                                j.id === viewJob.id ? { ...j, status: 'completed' as const } : j
-                              )
-                            );
-                            setViewJob((prev) => (prev ? { ...prev, status: 'completed' } : prev));
-                            toast.success('Job completed', {
-                              description: `"${viewJob.title}" marked as completed.`,
-                            });
-                          }}
-                          className='gap-2'
-                        >
-                          <Briefcase size={14} /> Mark Complete
-                        </Button>
-                        <Button
-                          onClick={() => handleCreateInvoice(viewJob)}
-                          variant='outline'
-                          className='gap-2'
-                        >
-                          <FileText size={14} /> Create Invoice
-                        </Button>
-                      </>
-                    )}
-                    {/* Generate / Send Contract Button */}
-                    {!viewJob.contractSent ? (
-                      <Button
-                        onClick={
-                          viewJob.contract
-                            ? () => {
-                                setContractText(viewJob.contract!);
-                                setContractReviewOpen(true);
-                              }
-                            : handleGenerateContract
-                        }
-                        variant='outline'
-                        className='gap-2'
-                        disabled={contractGenerating}
-                      >
-                        {contractGenerating ? (
-                          <>
-                            <Loader2 size={14} className='animate-spin' /> Generating...
-                          </>
-                        ) : viewJob.contract ? (
-                          <>
-                            <Send size={14} /> Send Contract
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={14} /> Generate Contract
-                          </>
-                        )}
-                      </Button>
-                    ) : (
-                      <Badge
-                        variant='outline'
-                        className='bg-emerald-500/10 text-emerald-600 border-emerald-500/20 gap-1.5 py-1.5 px-3'
-                      >
-                        <FileText size={14} /> Contract Sent
-                      </Badge>
-                    )}
-                  </div>
+          {viewJob && (
+            <div className='space-y-4 py-2'>
+              <div className='flex items-center justify-between'>
+                <h3 className='text-lg font-semibold'>{viewJob.title}</h3>
+                <Badge variant='outline' className={statusColor(viewJob.status)}>
+                  {statusLabel(viewJob.status)}
+                </Badge>
+              </div>
+              <Separator />
+              <div className='grid gap-3 sm:grid-cols-2'>
+                <div className='flex items-center gap-2 text-sm'>
+                  <Briefcase size={14} className='text-muted-foreground' />
+                  <span className='text-muted-foreground'>Client:</span>
+                  <span className='font-medium'>{clientMap[viewJob.clientId] ?? 'Unknown'}</span>
                 </div>
-              );
-            })()}
+                <div className='flex items-center gap-2 text-sm'>
+                  <CalendarDays size={14} className='text-muted-foreground' />
+                  <span className='text-muted-foreground'>Date:</span>
+                  <span className='font-medium'>
+                    {format(new Date(viewJob.scheduledDate), 'PP')}
+                  </span>
+                </div>
+                <div className='flex items-center gap-2 text-sm'>
+                  <Clock size={14} className='text-muted-foreground' />
+                  <span className='text-muted-foreground'>Time:</span>
+                  <span className='font-medium'>
+                    {format(new Date(viewJob.scheduledDate), 'p')}
+                  </span>
+                </div>
+                {viewJob.price != null && (
+                  <div className='flex items-center gap-2 text-sm'>
+                    <DollarSign size={14} className='text-muted-foreground' />
+                    <span className='text-muted-foreground'>Price:</span>
+                    <span className='font-medium'>${viewJob.price.toLocaleString()}</span>
+                  </div>
+                )}
+                {viewJob.location && (
+                  <div className='flex items-center gap-2 text-sm sm:col-span-2'>
+                    <MapPin size={14} className='text-muted-foreground' />
+                    <span className='text-muted-foreground'>Location:</span>
+                    <span className='font-medium'>{viewJob.location}</span>
+                  </div>
+                )}
+              </div>
+              {viewJob.description && (
+                <>
+                  <Separator />
+                  <div className='space-y-1'>
+                    <p className='text-sm text-muted-foreground'>Description</p>
+                    <p className='text-sm'>{viewJob.description}</p>
+                  </div>
+                </>
+              )}
+              {viewJob.notes && (
+                <>
+                  <Separator />
+                  <div className='space-y-1'>
+                    <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+                      <StickyNote size={14} /> Notes
+                    </div>
+                    <p className='text-sm'>{viewJob.notes}</p>
+                  </div>
+                </>
+              )}
+              <Separator />
+              <div className='flex flex-wrap gap-2'>
+                {!hasContract && (
+                  <Button
+                    onClick={handleGenerateContract}
+                    className='gap-2'
+                    disabled={createContract.isPending}
+                  >
+                    {createContract.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
+                    ) : (
+                      <Sparkles size={14} />
+                    )}
+                    {createContract.isPending ? 'Generating…' : 'Generate Contract'}
+                  </Button>
+                )}
+
+                {contractIsDraft && (
+                  <Button
+                    variant='outline'
+                    className='gap-2'
+                    onClick={() => {
+                      setActiveContractForReview(jobContract);
+                      setContractReviewOpen(true);
+                    }}
+                  >
+                    <FileText size={14} /> Review &amp; Send Contract
+                  </Button>
+                )}
+
+                {contractSent && (
+                  <Badge
+                    variant='outline'
+                    className='gap-1.5 border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-amber-600 dark:text-amber-400'
+                  >
+                    <Send size={14} /> Contract Sent – Awaiting Signature
+                  </Badge>
+                )}
+
+                {contractSigned && (
+                  <Badge
+                    variant='outline'
+                    className='gap-1.5 border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-emerald-600 dark:text-emerald-400'
+                  >
+                    <FileText size={14} /> Contract Signed
+                  </Badge>
+                )}
+
+                {contractSigned && viewJob.status === 'pending' && (
+                  <Button
+                    onClick={() => handleStartJob(viewJob)}
+                    className='gap-2'
+                    disabled={startJob.isPending}
+                  >
+                    {startJob.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
+                    ) : (
+                      <Play size={14} />
+                    )}
+                    Start Job
+                  </Button>
+                )}
+                {contractSigned && viewJob.status === 'in_progress' && (
+                  <Button
+                    onClick={() => handleCompleteJob(viewJob)}
+                    className='gap-2'
+                    disabled={completeJob.isPending}
+                  >
+                    {completeJob.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
+                    ) : (
+                      <Briefcase size={14} />
+                    )}
+                    Mark Complete
+                  </Button>
+                )}
+
+                {contractSigned && (
+                  <Button
+                    variant='outline'
+                    onClick={handleCreateInvoice}
+                    className='gap-2'
+                    disabled={createInvoice.isPending}
+                  >
+                    {createInvoice.isPending ? (
+                      <Loader2 size={14} className='animate-spin' />
+                    ) : (
+                      <Receipt size={14} />
+                    )}
+                    Create Invoice
+                  </Button>
+                )}
+
+                {contractSigned && (
+                  <Button
+                    variant='outline'
+                    onClick={() => setDepositDialogOpen(true)}
+                    className='gap-2'
+                  >
+                    <DollarSign size={14} />
+                    Record Deposit
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* Contract Review Dialog - Non-closable */}
-      <Dialog
+      <ContractReviewDialog
         open={contractReviewOpen}
-        onOpenChange={() => {
-          /* non-closable */
-        }}
-      >
-        <DialogContent
-          className='sm:max-w-2xl max-h-[85vh] flex flex-col'
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle className='flex items-center gap-2'>
-              <FileText size={18} className='text-primary' /> Contract Review
-            </DialogTitle>
-            <DialogDescription>
-              Review and edit the AI-generated contract before sending it to the client.
-            </DialogDescription>
-          </DialogHeader>
-          <div className='flex-1 min-h-0 overflow-hidden'>
-            <Textarea
-              value={contractText}
-              onChange={(e) => setContractText(e.target.value)}
-              className='h-full min-h-[300px] max-h-[50vh] font-mono text-xs resize-none'
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => {
-                setContractReviewOpen(false);
-              }}
-            >
-              Save Draft
-            </Button>
-            <Button onClick={handleSendContract} className='gap-2'>
-              <Send size={14} /> Send Contract
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Job Dialog */}
-      <Dialog
-        open={createOpen}
         onOpenChange={(open) => {
-          setCreateOpen(open);
-          if (!open) resetForm();
+          setContractReviewOpen(open);
+          if (!open) setActiveContractForReview(null);
         }}
-      >
-        <DialogContent className='sm:max-w-lg'>
-          <DialogHeader>
-            <DialogTitle>Create New Job</DialogTitle>
-            <DialogDescription>Fill in the details to create a new job</DialogDescription>
-          </DialogHeader>
-          <div className='space-y-4 py-2'>
-            <div className='space-y-1.5'>
-              <Label>Title</Label>
-              <Input
-                placeholder='Job title'
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-              />
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Client</Label>
-              <Select value={formClientId} onValueChange={setFormClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder='Select a client' />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockClients.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.fullName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
-              <div className='space-y-1.5'>
-                <Label>Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant='outline'
-                      className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !formDate && 'text-muted-foreground'
-                      )}
-                    >
-                      <CalendarIcon className='mr-2 h-4 w-4' />
-                      {formDate ? format(formDate, 'PPP') : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className='w-auto p-0' align='start'>
-                    <Calendar
-                      mode='single'
-                      selected={formDate}
-                      onSelect={(d) => d && setFormDate(d)}
-                      initialFocus
-                      className={cn('p-3 pointer-events-auto')}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className='space-y-1.5'>
-                <Label>Price ($)</Label>
-                <Input
-                  type='number'
-                  min={0}
-                  placeholder='0'
-                  value={formPrice}
-                  onChange={(e) => setFormPrice(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className='grid gap-3 sm:grid-cols-2'>
-              <div className='space-y-1.5'>
-                <Label>Time</Label>
-                <Input type='time' value={formTime} onChange={(e) => setFormTime(e.target.value)} />
-              </div>
-              <div className='space-y-1.5'>
-                <Label>Location</Label>
-                <Input
-                  placeholder='Job location'
-                  value={formLocation}
-                  onChange={(e) => setFormLocation(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className='space-y-1.5'>
-              <Label>Notes</Label>
-              <Textarea
-                placeholder='Additional notes...'
-                value={formNotes}
-                onChange={(e) => setFormNotes(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant='outline'
-              onClick={() => {
-                setCreateOpen(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleCreate}>Create Job</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        contract={activeContractForReview}
+        clientEmail={viewJob ? (clientEmailMap[viewJob.clientId] ?? '') : ''}
+        onSent={() => {
+          setActiveContractForReview(null);
+          void jobContractQuery.refetch();
+        }}
+      />
+
+      <DepositDialog
+        open={depositDialogOpen}
+        onOpenChange={setDepositDialogOpen}
+        job={viewJob}
+      />
+
+      <CreateJobDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        clientList={clientList}
+      />
     </div>
   );
 };

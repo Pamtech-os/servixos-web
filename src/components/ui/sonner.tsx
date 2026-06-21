@@ -28,18 +28,21 @@ const Toaster = ({ ...props }: ToasterProps) => {
         classNames: {
           toast:
             'group toast group-[.toaster]:bg-card group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-xl group-[.toaster]:backdrop-blur-xl group-[.toaster]:rounded-xl group-[.toaster]:border',
+          title: 'group-[.toast]:text-foreground group-[.toast]:font-medium',
           description: 'group-[.toast]:text-muted-foreground',
+          closeButton:
+            'group-[.toast]:bg-background/95 group-[.toast]:text-muted-foreground group-[.toast]:border-border hover:group-[.toast]:text-foreground hover:group-[.toast]:bg-muted',
           actionButton:
             'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground group-[.toast]:rounded-lg',
           cancelButton:
             'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground group-[.toast]:rounded-lg',
           success:
-            'group-[.toaster]:!border-emerald-500/30 group-[.toaster]:!bg-emerald-500/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(16,185,129,0.3)]',
+            'group-[.toaster]:!text-foreground group-[.toaster]:!border-emerald-500/30 group-[.toaster]:!bg-emerald-500/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(16,185,129,0.3)]',
           error:
-            'group-[.toaster]:!border-destructive/30 group-[.toaster]:!bg-destructive/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(239,68,68,0.3)]',
+            'group-[.toaster]:!text-foreground group-[.toaster]:!border-destructive/30 group-[.toaster]:!bg-destructive/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(239,68,68,0.3)]',
           warning:
-            'group-[.toaster]:!border-amber-500/30 group-[.toaster]:!bg-amber-500/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(245,158,11,0.3)]',
-          info: 'group-[.toaster]:!border-primary/30 group-[.toaster]:!bg-primary/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(59,130,246,0.3)]',
+            'group-[.toaster]:!text-foreground group-[.toaster]:!border-amber-500/30 group-[.toaster]:!bg-amber-500/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(245,158,11,0.3)]',
+          info: 'group-[.toaster]:!text-foreground group-[.toaster]:!border-primary/30 group-[.toaster]:!bg-primary/5 group-[.toaster]:!shadow-[0_0_20px_-4px_rgba(59,130,246,0.3)]',
         },
       }}
       {...props}

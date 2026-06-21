@@ -1,17 +1,16 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  DollarSign,
   Clock,
   Plus,
   Search,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Trash2,
   CalendarIcon,
+  Send,
+  CheckCircle2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,28 +42,33 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import ConfirmModal from '@/components/ConfirmModal';
-import { mockInvoices, mockClients, type Invoice } from '@/lib/mock-data';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { format, parse } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import PaginationControls from '@/components/ui/pagination-controls';
+import { PriceInput } from '@/components/ui/price-input';
 import { cn } from '@/lib/utils';
+import { useInvoices } from '@/hooks/queries/use-invoices';
+import { useClients } from '@/hooks/queries/use-clients';
+import { useCreateInvoice, useDeleteInvoice, useSendInvoice, useGetInvoicePdf } from '@/hooks/mutations/use-invoices';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import type { Invoice, InvoiceClient, InvoiceLineItem, InvoiceStatus } from '@/lib/api-client';
 
-const ITEMS_PER_PAGE = 6;
-
-interface InvoiceLineItem {
-  description: string;
-  quantity: number;
-  price: number;
+function getClientName(clientId: Invoice['clientId']): string {
+  if (typeof clientId === 'object' && clientId !== null) return (clientId as InvoiceClient).name;
+  return '—';
 }
+
+const ITEMS_PER_PAGE = 20;
 
 const emptyLineItem = (): InvoiceLineItem => ({
   description: '',
   quantity: 1,
-  price: 0,
+  unitPrice: 0,
 });
 
-const statusColor = (s: Invoice['status']) => {
+const statusColor = (s: InvoiceStatus) => {
   switch (s) {
     case 'paid':
       return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
@@ -76,62 +80,41 @@ const statusColor = (s: Invoice['status']) => {
 };
 
 const Invoices = () => {
-  const [loading, setLoading] = useState(true);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [sendTarget, setSendTarget] = useState<Invoice | null>(null);
+
+  const query = {
+    search: search || undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    page,
+    limit: ITEMS_PER_PAGE,
+  };
+
+  const { data, isLoading } = useInvoices(query);
+  const { data: clientsData } = useClients({ limit: 50 });
+
+  const createInvoice = useCreateInvoice();
+  const deleteInvoice = useDeleteInvoice();
+  const sendInvoice = useSendInvoice();
+  const getPdf = useGetInvoicePdf();
+
+  const invoiceList = data?.data ?? [];
+  const meta = data?.meta;
+  const statistics = data?.statistics;
+  const clientList = clientsData?.data ?? [];
 
   // Create form state
-  const [businessName, setBusinessName] = useState('Servix OS');
-  const [businessContact, setBusinessContact] = useState('hello@servix.com');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState('');
   const [taxRate, setTaxRate] = useState(0);
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([emptyLineItem()]);
 
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setInvoices(mockInvoices);
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(t);
-  }, []);
-
-  const collected = useMemo(
-    () => invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.price, 0),
-    [invoices]
-  );
-  const outstanding = useMemo(
-    () => invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + i.price, 0),
-    [invoices]
-  );
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return invoices.filter((inv) => {
-      const client = mockClients.find((c) => c.id === inv.clientId);
-      return (
-        inv.invoiceNumber.toLowerCase().includes(q) || client?.fullName.toLowerCase().includes(q)
-      );
-    });
-  }, [invoices, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
-  const paginated = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
-
-  const handleDelete = () => {
-    if (!deleteTarget) return;
-    setInvoices((prev) => prev.filter((i) => i.id !== deleteTarget.id));
-    toast.success('Invoice deleted', {
-      description: `${deleteTarget.invoiceNumber} has been removed.`,
-    });
-    setDeleteTarget(null);
-  };
-
-  const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.price, 0);
+  const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.unitPrice, 0);
   const taxAmount = subtotal * (taxRate / 100);
   const total = subtotal + taxAmount;
 
@@ -148,29 +131,73 @@ const Invoices = () => {
   };
 
   const handleCreate = () => {
-    if (
-      !selectedClientId ||
-      lineItems.some((li) => !li.description || li.quantity <= 0 || li.price <= 0)
-    ) {
-      toast.error('Validation Error', {
-        description: 'Please fill in all fields correctly.',
-      });
+    if (!selectedClientId) {
+      toast.error('Validation Error', { description: 'Please select a client.' });
       return;
     }
-    const newInv: Invoice = {
-      id: `inv-${Date.now()}`,
-      clientId: selectedClientId,
-      invoiceNumber: `INV-${String(invoices.length + 1).padStart(3, '0')}`,
-      price: total,
-      date: invoiceDate,
-      status: 'pending',
-    };
-    setInvoices((prev) => [newInv, ...prev]);
-    toast.success('Invoice created', {
-      description: `${newInv.invoiceNumber} for $${total.toLocaleString()}`,
+    if (lineItems.some((li) => !li.description || li.quantity < 1 || li.unitPrice < 0)) {
+      toast.error('Validation Error', { description: 'Please fill in all line items correctly.' });
+      return;
+    }
+
+    createInvoice.mutate(
+      {
+        clientId: selectedClientId,
+        invoiceDate,
+        dueDate: dueDate || undefined,
+        lineItems,
+        taxRate: taxRate || undefined,
+      },
+      {
+        onSuccess: (inv) => {
+          toast.success('Invoice created', { description: `${inv.invoiceNumber} has been created.` });
+          setCreateOpen(false);
+          resetForm();
+        },
+        onError: (err) => {
+          toast.error('Failed to create invoice', { description: getApiErrorMessage(err) });
+        },
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteInvoice.mutate(deleteTarget._id, {
+      onSuccess: () => {
+        toast.success('Invoice deleted', { description: `${deleteTarget.invoiceNumber} has been removed.` });
+        setDeleteTarget(null);
+      },
+      onError: (err) => {
+        toast.error('Failed to delete invoice', { description: getApiErrorMessage(err) });
+        setDeleteTarget(null);
+      },
     });
-    setCreateOpen(false);
-    resetForm();
+  };
+
+  const handleSend = () => {
+    if (!sendTarget) return;
+    sendInvoice.mutate(sendTarget._id, {
+      onSuccess: () => {
+        toast.success('Invoice sent', { description: `${sendTarget.invoiceNumber} has been emailed to the client.` });
+        setSendTarget(null);
+      },
+      onError: (err) => {
+        toast.error('Failed to send invoice', { description: getApiErrorMessage(err) });
+        setSendTarget(null);
+      },
+    });
+  };
+
+  const handleDownloadPdf = (inv: Invoice) => {
+    getPdf.mutate(inv._id, {
+      onSuccess: ({ pdfUrl }) => {
+        window.open(pdfUrl, '_blank');
+      },
+      onError: (err) => {
+        toast.error('Failed to get PDF', { description: getApiErrorMessage(err) });
+      },
+    });
   };
 
   return (
@@ -187,67 +214,88 @@ const Invoices = () => {
 
       {/* Summary cards */}
       <div className='grid gap-4 sm:grid-cols-2'>
-        {loading ? (
+        {isLoading ? (
           <>
-            <Skeleton className='h-28 rounded-xl' />
-            <Skeleton className='h-28 rounded-xl' />
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className='h-24 rounded-xl' />
+            ))}
           </>
         ) : (
           <>
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-            >
-              <Card className='card-shadow'>
-                <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                  <CardTitle className='text-sm font-medium text-muted-foreground'>
-                    Total Collected
-                  </CardTitle>
-                  <DollarSign className='h-5 w-5 text-green-500' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>${collected.toLocaleString()}</div>
-                </CardContent>
-              </Card>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className='card-shadow'>
-                <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                  <CardTitle className='text-sm font-medium text-muted-foreground'>
-                    Outstanding
-                  </CardTitle>
-                  <Clock className='h-5 w-5 text-yellow-500' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>${outstanding.toLocaleString()}</div>
-                </CardContent>
-              </Card>
-            </motion.div>
+            {[
+              {
+                label: 'Total Collected',
+                value: statistics?.totalCollected ?? 0,
+                icon: CheckCircle2,
+                color: 'text-green-500',
+              },
+              {
+                label: 'Outstanding',
+                value: statistics?.outstanding ?? 0,
+                icon: Clock,
+                color: 'text-yellow-500',
+              },
+            ].map((card, i) => (
+              <motion.div
+                key={card.label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+              >
+                <Card className='card-shadow'>
+                  <CardHeader className='flex flex-row items-center justify-between pb-2'>
+                    <CardTitle className='text-sm font-medium text-muted-foreground'>
+                      {card.label}
+                    </CardTitle>
+                    <card.icon className={`h-5 w-5 ${card.color}`} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className='text-2xl font-bold'>
+                      ${card.value.toLocaleString()}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
           </>
         )}
       </div>
 
-      {/* Search */}
-      <div className='relative max-w-sm'>
-        <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
-        <Input
-          placeholder='Search invoices...'
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+      {/* Filters */}
+      <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+        <div className='relative max-w-sm flex-1'>
+          <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
+          <Input
+            placeholder='Search invoices...'
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className='pl-9'
+          />
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => {
+            setStatusFilter(v as InvoiceStatus | 'all');
             setPage(1);
           }}
-          className='pl-9'
-        />
+        >
+          <SelectTrigger className='w-36'>
+            <SelectValue placeholder='Status' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='all'>All statuses</SelectItem>
+            <SelectItem value='pending'>Pending</SelectItem>
+            <SelectItem value='partial'>Partial</SelectItem>
+            <SelectItem value='paid'>Paid</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}
-      {loading ? (
+      {isLoading ? (
         <div className='space-y-3'>
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className='h-12 rounded-lg' />
@@ -261,81 +309,91 @@ const Invoices = () => {
                 <TableHead>Invoice #</TableHead>
                 <TableHead>Client</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Paid</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Due</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className='text-right'>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginated.length === 0 ? (
+              {invoiceList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className='py-10 text-center text-muted-foreground'>
+                  <TableCell colSpan={8} className='py-10 text-center text-muted-foreground'>
                     <FileText className='mx-auto mb-2 h-8 w-8 opacity-40' />
                     No invoices found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginated.map((inv, i) => {
-                  const client = mockClients.find((c) => c.id === inv.clientId);
-                  return (
+                invoiceList.map((inv, i) => (
                     <motion.tr
-                      key={inv.id}
+                      key={inv._id}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
                       className='border-b transition-colors hover:bg-muted/50'
                     >
                       <TableCell className='font-medium'>{inv.invoiceNumber}</TableCell>
-                      <TableCell>{client?.fullName ?? 'Unknown'}</TableCell>
-                      <TableCell>${inv.price.toLocaleString()}</TableCell>
-                      <TableCell>{inv.date}</TableCell>
+                      <TableCell>{getClientName(inv.clientId)}</TableCell>
+                      <TableCell>${inv.totalAmount.toLocaleString()}</TableCell>
+                      <TableCell>${inv.amountPaid.toLocaleString()}</TableCell>
+                      <TableCell>
+                        {format(new Date(inv.invoiceDate), 'MMM d, yyyy')}
+                      </TableCell>
+                      <TableCell>
+                        {inv.dueDate ? format(new Date(inv.dueDate), 'MMM d, yyyy') : '—'}
+                      </TableCell>
                       <TableCell>
                         <Badge variant='outline' className={statusColor(inv.status)}>
                           {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
                         </Badge>
                       </TableCell>
                       <TableCell className='text-right'>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => setDeleteTarget(inv)}
-                          className='text-destructive hover:text-destructive'
-                        >
-                          <Trash2 size={16} />
-                        </Button>
+                        <div className='flex items-center justify-end gap-1'>
+                          <Button
+                            variant='ghost'
+                            size='icon'
+                            onClick={() => handleDownloadPdf(inv)}
+                            title='Download PDF'
+                          >
+                            <FileText size={15} />
+                          </Button>
+                          {!inv.sentAt && inv.status !== 'paid' && (
+                            <Button
+                              variant='ghost'
+                              size='icon'
+                              onClick={() => setSendTarget(inv)}
+                              title='Send to client'
+                            >
+                              <Send size={15} />
+                            </Button>
+                          )}
+                          {inv.status === 'pending' && (
+                            <Button
+                              variant='ghost'
+                              size='icon'
+                              onClick={() => setDeleteTarget(inv)}
+                              className='text-destructive hover:text-destructive'
+                              title='Delete'
+                            >
+                              <Trash2 size={15} />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </motion.tr>
-                  );
-                })
+                  ))
               )}
             </TableBody>
           </Table>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className='flex items-center justify-between border-t px-4 py-3'>
-              <p className='text-sm text-muted-foreground'>
-                Page {page} of {totalPages}
-              </p>
-              <div className='flex gap-1'>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronLeft size={16} />
-                </Button>
-                <Button
-                  variant='outline'
-                  size='icon'
-                  disabled={page === totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronRight size={16} />
-                </Button>
-              </div>
-            </div>
+          {meta && (
+            <PaginationControls
+              meta={meta}
+              onPageChange={setPage}
+              className='flex items-center justify-between border-t px-4 py-3'
+              controlsClassName='flex gap-1'
+            />
           )}
         </Card>
       )}
@@ -343,14 +401,22 @@ const Invoices = () => {
       {/* Delete modal */}
       <ConfirmModal
         open={!!deleteTarget}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title='Delete Invoice'
         description={`Are you sure you want to delete ${deleteTarget?.invoiceNumber}? This action cannot be undone.`}
         confirmLabel='Delete'
         onConfirm={handleDelete}
         variant='destructive'
+      />
+
+      {/* Send modal */}
+      <ConfirmModal
+        open={!!sendTarget}
+        onOpenChange={(open) => { if (!open) setSendTarget(null); }}
+        title='Send Invoice'
+        description={`Send ${sendTarget?.invoiceNumber} to the client via email?`}
+        confirmLabel='Send'
+        onConfirm={handleSend}
       />
 
       {/* Create Invoice Dialog */}
@@ -367,32 +433,10 @@ const Invoices = () => {
           </DialogHeader>
 
           <div className='space-y-6 py-2'>
-            {/* Business info */}
+            {/* Client */}
             <div>
-              <h3 className='mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider'>
-                Your Business
-              </h3>
-              <div className='grid gap-3 sm:grid-cols-2'>
-                <div className='space-y-1.5'>
-                  <Label>Business Name</Label>
-                  <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
-                </div>
-                <div className='space-y-1.5'>
-                  <Label>Contact Info</Label>
-                  <Input
-                    value={businessContact}
-                    onChange={(e) => setBusinessContact(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Client info */}
-            <div>
-              <h3 className='mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider'>
-                Client
+              <h3 className='mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground'>
+                Invoice Info
               </h3>
               <div className='space-y-1.5'>
                 <Label>Select Client</Label>
@@ -401,9 +445,9 @@ const Invoices = () => {
                     <SelectValue placeholder='Choose a client' />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockClients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.fullName} — {c.email}
+                    {clientList.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        {c.name} — {c.email}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -415,8 +459,8 @@ const Invoices = () => {
 
             {/* Dates */}
             <div>
-              <h3 className='mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider'>
-                Invoice Details
+              <h3 className='mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground'>
+                Dates
               </h3>
               <div className='grid gap-3 sm:grid-cols-2'>
                 <div className='space-y-1.5'>
@@ -425,25 +469,18 @@ const Invoices = () => {
                     <PopoverTrigger asChild>
                       <Button
                         variant='outline'
-                        className={cn(
-                          'w-full justify-start text-left font-normal',
-                          !invoiceDate && 'text-muted-foreground'
-                        )}
+                        className={cn('w-full justify-start text-left font-normal', !invoiceDate && 'text-muted-foreground')}
                       >
                         <CalendarIcon className='mr-2 h-4 w-4' />
-                        {invoiceDate ? (
-                          format(parse(invoiceDate, 'yyyy-MM-dd', new Date()), 'PPP')
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
+                        {invoiceDate
+                          ? format(parse(invoiceDate, 'yyyy-MM-dd', new Date()), 'PPP')
+                          : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className='w-auto p-0' align='start'>
                       <Calendar
                         mode='single'
-                        selected={
-                          invoiceDate ? parse(invoiceDate, 'yyyy-MM-dd', new Date()) : undefined
-                        }
+                        selected={invoiceDate ? parse(invoiceDate, 'yyyy-MM-dd', new Date()) : undefined}
                         onSelect={(d) => d && setInvoiceDate(format(d, 'yyyy-MM-dd'))}
                         initialFocus
                         className={cn('p-3 pointer-events-auto')}
@@ -452,22 +489,17 @@ const Invoices = () => {
                   </Popover>
                 </div>
                 <div className='space-y-1.5'>
-                  <Label>Due Date</Label>
+                  <Label>Due Date <span className='text-muted-foreground'>(optional)</span></Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant='outline'
-                        className={cn(
-                          'w-full justify-start text-left font-normal',
-                          !dueDate && 'text-muted-foreground'
-                        )}
+                        className={cn('w-full justify-start text-left font-normal', !dueDate && 'text-muted-foreground')}
                       >
                         <CalendarIcon className='mr-2 h-4 w-4' />
-                        {dueDate ? (
-                          format(parse(dueDate, 'yyyy-MM-dd', new Date()), 'PPP')
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
+                        {dueDate
+                          ? format(parse(dueDate, 'yyyy-MM-dd', new Date()), 'PPP')
+                          : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className='w-auto p-0' align='start'>
@@ -488,7 +520,7 @@ const Invoices = () => {
 
             {/* Line items */}
             <div>
-              <h3 className='mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider'>
+              <h3 className='mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground'>
                 Items
               </h3>
               <div className='space-y-3'>
@@ -512,12 +544,11 @@ const Invoices = () => {
                       />
                     </div>
                     <div className='space-y-1.5'>
-                      {idx === 0 && <Label>Price</Label>}
-                      <Input
-                        type='number'
-                        min={0}
-                        value={li.price}
-                        onChange={(e) => updateLineItem(idx, 'price', Number(e.target.value))}
+                      {idx === 0 && <Label>Unit Price</Label>}
+                      <PriceInput
+                        value={li.unitPrice}
+                        onChange={(val) => updateLineItem(idx, 'unitPrice', val)}
+                        placeholder='0'
                       />
                     </div>
                     <Button
@@ -552,13 +583,11 @@ const Invoices = () => {
               <div className='flex items-center justify-between text-sm'>
                 <div className='flex items-center gap-2'>
                   <span className='text-muted-foreground'>Tax (%)</span>
-                  <Input
-                    type='number'
-                    min={0}
-                    max={100}
+                  <PriceInput
                     value={taxRate}
-                    onChange={(e) => setTaxRate(Number(e.target.value))}
-                    className='w-20 h-8'
+                    onChange={setTaxRate}
+                    placeholder='0'
+                    className='h-8 w-20'
                   />
                 </div>
                 <span>${taxAmount.toLocaleString()}</span>
@@ -581,7 +610,9 @@ const Invoices = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleCreate}>Create Invoice</Button>
+            <Button onClick={handleCreate} disabled={createInvoice.isPending}>
+              {createInvoice.isPending ? 'Creating...' : 'Create Invoice'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

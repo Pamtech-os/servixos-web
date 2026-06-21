@@ -1,340 +1,196 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Plus, Pencil, Trash2, Check } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import ConfirmModal from '@/components/ConfirmModal';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
+import { splitPermission } from '@/common/auth/permissions';
+import { useRoles } from '@/hooks/queries/use-roles';
+import { useDeleteRole } from '@/hooks/mutations/use-roles';
+import type { Role } from '@/lib/api-client';
 
-const ALL_PERMISSIONS = [
-  'dashboard.view',
-  'clients.view',
-  'clients.create',
-  'clients.edit',
-  'clients.delete',
-  'invoices.view',
-  'invoices.create',
-  'invoices.edit',
-  'invoices.delete',
-  'jobs.view',
-  'jobs.create',
-  'jobs.edit',
-  'jobs.delete',
-  'contracts.view',
-  'contracts.create',
-  'contracts.edit',
-  'contracts.delete',
-  'roles.view',
-  'roles.create',
-  'roles.edit',
-  'roles.delete',
-  'reports.view',
-  'settings.view',
-  'settings.edit',
-] as const;
+const toTitleCase = (value: string) =>
+  value.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-type Permission = (typeof ALL_PERMISSIONS)[number];
+const formatPermissionBadge = (perm: string) => {
+  const { module: group, action } = splitPermission(perm);
+  return `${toTitleCase(group)}:${toTitleCase(action)}`;
+};
 
-interface Role {
-  id: string;
-  name: string;
-  permissions: Permission[];
-  isDefault?: boolean;
+const countModules = (permissions: string[]) =>
+  new Set(permissions.map((p) => splitPermission(p).module).filter(Boolean)).size;
+
+function RoleCard({ role, index, onDelete, isDeleting }: {
+  role: Role;
+  index: number;
+  onDelete: (role: Role) => void;
+  isDeleting: boolean;
+}) {
+  const router = useRouter();
+  const moduleCount = countModules(role.permissions);
+  const permCount = role.permissions.length;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04 }}
+      className='rounded-xl border border-border/80 bg-card p-4 sm:p-5'
+    >
+      {/* Top row */}
+      <div className='flex items-start justify-between gap-4'>
+        <div className='flex items-center gap-3 min-w-0'>
+          <div className='gradient-bg flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-primary-foreground shadow-sm'>
+            <ShieldCheck size={18} />
+          </div>
+          <div className='min-w-0'>
+            <div className='flex items-center gap-2'>
+              <h3 className='font-semibold leading-none'>{role.name}</h3>
+              {role.isSystem && (
+                <Badge variant='secondary' className='text-[10px] uppercase tracking-wide'>
+                  System
+                </Badge>
+              )}
+            </div>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              {permCount} permission{permCount !== 1 ? 's' : ''} across {moduleCount} module{moduleCount !== 1 ? 's' : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className='flex shrink-0 items-center gap-2'>
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={() => router.push(`/roles/${role._id}`)}
+          >
+            <Pencil size={13} className='mr-1.5' /> Edit
+          </Button>
+          {!role.isSystem && (
+            <Button
+              size='sm'
+              variant='outline'
+              className='text-destructive hover:bg-destructive/10'
+              onClick={() => onDelete(role)}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <Loader2 size={13} className='animate-spin' />
+              ) : (
+                <Trash2 size={13} className='mr-1.5' />
+              )}
+              {isDeleting ? '' : 'Delete'}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Permission badges */}
+      {permCount > 0 && (
+        <>
+          <Separator className='my-3' />
+          <div className='flex flex-wrap gap-1.5'>
+            {role.permissions.slice(0, 6).map((perm) => (
+              <span
+                key={perm}
+                className='inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground'
+              >
+                {formatPermissionBadge(perm)}
+              </span>
+            ))}
+            {permCount > 6 && (
+              <span className='inline-flex items-center rounded-md border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground'>
+                +{permCount - 6} more
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </motion.div>
+  );
 }
 
-const defaultRoles: Role[] = [
-  { id: 'owner', name: 'Owner', permissions: [...ALL_PERMISSIONS], isDefault: true },
-  {
-    id: 'manager',
-    name: 'Manager',
-    permissions: [
-      'dashboard.view',
-      'clients.view',
-      'clients.create',
-      'clients.edit',
-      'invoices.view',
-      'invoices.create',
-      'invoices.edit',
-      'jobs.view',
-      'jobs.create',
-      'jobs.edit',
-      'contracts.view',
-      'reports.view',
-    ],
-  },
-  {
-    id: 'employee',
-    name: 'Employee',
-    permissions: ['dashboard.view', 'clients.view', 'jobs.view', 'jobs.edit', 'invoices.view'],
-  },
-];
-
-const permissionGroups = (() => {
-  const groups: Record<string, Permission[]> = {};
-  ALL_PERMISSIONS.forEach((p) => {
-    const [group] = p.split('.');
-    if (!groups[group]) groups[group] = [];
-    groups[group].push(p);
-  });
-  return groups;
-})();
-
 const Roles = () => {
-  const [loading, setLoading] = useState(true);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
-  const [roleName, setRoleName] = useState('');
-  const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>([]);
-  const [nameError, setNameError] = useState('');
+  const router = useRouter();
+  const { data: roles = [], isLoading } = useRoles();
+  const deleteRole = useDeleteRole();
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setRoles(defaultRoles);
-      setLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const openCreate = () => {
-    setEditingRole(null);
-    setRoleName('');
-    setSelectedPermissions([]);
-    setNameError('');
-    setDialogOpen(true);
-  };
-
-  const openEdit = (role: Role) => {
-    setEditingRole(role);
-    setRoleName(role.name);
-    setSelectedPermissions([...role.permissions]);
-    setNameError('');
-    setDialogOpen(true);
-  };
-
-  const togglePermission = (perm: Permission) => {
-    setSelectedPermissions((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
-    );
-  };
-
-  const toggleGroup = (group: string) => {
-    const groupPerms = permissionGroups[group];
-    const allSelected = groupPerms.every((p) => selectedPermissions.includes(p));
-    if (allSelected) {
-      setSelectedPermissions((prev) => prev.filter((p) => !groupPerms.includes(p)));
-    } else {
-      setSelectedPermissions((prev) => [...new Set([...prev, ...groupPerms])]);
-    }
-  };
-
-  const handleSave = () => {
-    if (!roleName.trim()) {
-      setNameError('Role name is required');
-      return;
-    }
-    if (selectedPermissions.length === 0) {
-      setNameError('Select at least one permission');
-      return;
-    }
-
-    if (editingRole) {
-      setRoles((prev) =>
-        prev.map((r) =>
-          r.id === editingRole.id
-            ? { ...r, name: roleName.trim(), permissions: selectedPermissions }
-            : r
-        )
-      );
-      toast.success('Role updated', { description: `"${roleName.trim()}" has been updated.` });
-    } else {
-      const newRole: Role = {
-        id: Date.now().toString(),
-        name: roleName.trim(),
-        permissions: selectedPermissions,
-      };
-      setRoles((prev) => [...prev, newRole]);
-      toast.success('Role created', { description: `"${roleName.trim()}" has been created.` });
-    }
-    setDialogOpen(false);
-  };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    setRoles((prev) => prev.filter((r) => r.id !== deleteTarget.id));
-    toast.success('Role deleted', { description: `"${deleteTarget.name}" has been removed.` });
-    setDeleteTarget(null);
+    const { _id, name } = deleteTarget;
+    deleteRole.mutate(_id, {
+      onSuccess: () => {
+        toast.success('Role deleted', { description: `"${name}" has been removed.` });
+      },
+      onError: (err) => {
+        toast.error('Failed to delete role', { description: getApiErrorMessage(err) });
+      },
+    });
   };
 
   return (
     <div className='space-y-6'>
+      {/* Header */}
       <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
         <div>
           <h1 className='font-display text-2xl font-bold md:text-3xl'>Roles</h1>
-          <p className='text-sm text-muted-foreground'>Manage business roles and permissions</p>
+          <p className='text-sm text-muted-foreground'>
+            Manage team roles and their access permissions
+          </p>
         </div>
-        <Button onClick={openCreate} className='gradient-bg text-primary-foreground'>
+        <Button
+          onClick={() => router.push('/roles/new')}
+          className='gradient-bg text-primary-foreground'
+        >
           <Plus size={16} className='mr-1' /> Create Role
         </Button>
       </div>
 
-      <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>
-        {loading
+      {/* Role list */}
+      <div className='space-y-3'>
+        {isLoading
           ? [...Array(3)].map((_, i) => (
-              <Card key={i}>
-                <CardHeader>
-                  <Skeleton className='h-5 w-32' />
-                </CardHeader>
-                <CardContent className='space-y-3'>
-                  <Skeleton className='h-4 w-full' />
-                  <Skeleton className='h-4 w-3/4' />
-                  <Skeleton className='h-4 w-1/2' />
-                  <div className='flex gap-2 pt-2'>
-                    <Skeleton className='h-8 w-20' />
-                    <Skeleton className='h-8 w-20' />
+              <div key={i} className='rounded-xl border border-border/80 bg-card p-5'>
+                <div className='flex items-start justify-between gap-4'>
+                  <div className='flex items-center gap-3'>
+                    <Skeleton className='h-10 w-10 rounded-xl' />
+                    <div className='space-y-2'>
+                      <Skeleton className='h-4 w-28' />
+                      <Skeleton className='h-3 w-44' />
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className='flex gap-2'>
+                    <Skeleton className='h-8 w-16 rounded-md' />
+                    <Skeleton className='h-8 w-16 rounded-md' />
+                  </div>
+                </div>
+                <Separator className='my-3' />
+                <div className='flex flex-wrap gap-1.5'>
+                  {[...Array(5)].map((_, j) => (
+                    <Skeleton key={j} className='h-5 w-20 rounded-md' />
+                  ))}
+                </div>
+              </div>
             ))
           : roles.map((role, i) => (
-              <motion.div
-                key={role.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <Card className='h-full'>
-                  <CardHeader className='pb-3'>
-                    <CardTitle className='flex items-center gap-2 text-base'>
-                      <ShieldCheck size={18} className='text-primary' />
-                      {role.name}
-                      {role.isDefault && (
-                        <Badge variant='secondary' className='ml-auto text-xs'>
-                          Default
-                        </Badge>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className='mb-4 flex flex-wrap gap-1.5'>
-                      {role.permissions.slice(0, 6).map((p) => (
-                        <Badge key={p} variant='outline' className='text-xs font-normal'>
-                          {p}
-                        </Badge>
-                      ))}
-                      {role.permissions.length > 6 && (
-                        <Badge variant='outline' className='text-xs font-normal'>
-                          +{role.permissions.length - 6} more
-                        </Badge>
-                      )}
-                    </div>
-                    <p className='mb-4 text-xs text-muted-foreground'>
-                      {role.permissions.length} permission{role.permissions.length !== 1 ? 's' : ''}
-                    </p>
-                    {!role.isDefault && (
-                      <div className='flex gap-2'>
-                        <Button size='sm' variant='outline' onClick={() => openEdit(role)}>
-                          <Pencil size={14} className='mr-1' /> Edit
-                        </Button>
-                        <Button
-                          size='sm'
-                          variant='outline'
-                          className='text-destructive hover:bg-destructive/10'
-                          onClick={() => setDeleteTarget(role)}
-                        >
-                          <Trash2 size={14} className='mr-1' /> Delete
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <RoleCard
+                key={role._id}
+                role={role}
+                index={i}
+                onDelete={setDeleteTarget}
+                isDeleting={deleteRole.isPending && deleteRole.variables === role._id}
+              />
             ))}
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className='max-h-[85vh] overflow-y-auto sm:max-w-lg'>
-          <DialogHeader>
-            <DialogTitle>{editingRole ? 'Edit Role' : 'Create Role'}</DialogTitle>
-            <DialogDescription>
-              {editingRole
-                ? 'Update the role name and permissions.'
-                : 'Define a new role with specific permissions.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className='space-y-5 py-2'>
-            <div className='space-y-2'>
-              <Label htmlFor='role-name'>Role Name</Label>
-              <Input
-                id='role-name'
-                placeholder='e.g. Technician'
-                value={roleName}
-                onChange={(e) => {
-                  setRoleName(e.target.value);
-                  setNameError('');
-                }}
-                className={nameError ? 'border-destructive' : ''}
-              />
-              {nameError && <p className='text-xs text-destructive'>{nameError}</p>}
-            </div>
-            <div className='space-y-3'>
-              <Label>Permissions</Label>
-              {Object.entries(permissionGroups).map(([group, perms]) => {
-                const allChecked = perms.every((p) => selectedPermissions.includes(p));
-                const someChecked = perms.some((p) => selectedPermissions.includes(p));
-                return (
-                  <div key={group} className='rounded-lg border border-border p-3'>
-                    <div className='mb-2 flex items-center gap-2'>
-                      <Checkbox
-                        checked={allChecked}
-                        onCheckedChange={() => toggleGroup(group)}
-                        className={someChecked && !allChecked ? 'opacity-60' : ''}
-                      />
-                      <span className='text-sm font-semibold capitalize'>{group}</span>
-                    </div>
-                    <div className='ml-6 grid grid-cols-2 gap-2'>
-                      {perms.map((perm) => (
-                        <label key={perm} className='flex items-center gap-2 text-sm'>
-                          <Checkbox
-                            checked={selectedPermissions.includes(perm)}
-                            onCheckedChange={() => togglePermission(perm)}
-                          />
-                          <span className='text-muted-foreground'>{perm.split('.')[1]}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} className='gradient-bg text-primary-foreground'>
-              <Check size={16} className='mr-1' />
-              {editingRole ? 'Update Role' : 'Create Role'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmModal
         open={!!deleteTarget}

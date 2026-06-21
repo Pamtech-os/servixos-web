@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -9,7 +9,11 @@ import { Eye, EyeOff, LogIn, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLogin } from '@/hooks/mutations/use-auth';
+import { decodeJwt } from '@/lib/api-client';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -17,30 +21,85 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const router = useRouter();
-  const { login } = useAuth();
+  const { auth, isHydrated, setSession } = useAuth();
+  const loginMutation = useLogin();
+  const hasNavigatedRef = useRef(false);
+
+  const routeAfterAuth = useCallback(
+    (options: { mustChangePassword?: boolean; isPinVerified: boolean }) => {
+      if (hasNavigatedRef.current) return;
+      hasNavigatedRef.current = true;
+      setIsRedirecting(true);
+
+      if (options.mustChangePassword) {
+        router.replace('/complete-setup');
+        return;
+      }
+
+      router.replace(options.isPinVerified ? '/dashboard' : '/pin');
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (!isHydrated || !auth.isLoggedIn || hasNavigatedRef.current) return;
+    routeAfterAuth({
+      mustChangePassword: auth.user?.mustChangePassword,
+      isPinVerified: auth.isPinVerified,
+    });
+  }, [
+    auth.isLoggedIn,
+    auth.isPinVerified,
+    auth.user?.mustChangePassword,
+    isHydrated,
+    routeAfterAuth,
+  ]);
+
+  useEffect(() => {
+    if (!auth.isLoggedIn) {
+      hasNavigatedRef.current = false;
+      setIsRedirecting(false);
+    }
+  }, [auth.isLoggedIn]);
 
   const validate = () => {
-    const errs: typeof errors = {};
+    const errs: typeof fieldErrors = {};
     if (!email) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = 'Invalid email format';
     if (!password) errs.password = 'Password is required';
-    else if (password.length < 6) errs.password = 'Password must be at least 6 characters';
-    setErrors(errs);
+    setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    login(email);
-    setLoading(false);
-    router.push('/pin');
+
+    try {
+      const session = await loginMutation.mutateAsync({ email, password });
+      setSession(session);
+      const pinVerified = (() => {
+        try {
+          return decodeJwt(session.accessToken).pinVerified;
+        } catch {
+          return false;
+        }
+      })();
+      routeAfterAuth({
+        mustChangePassword: session.user.mustChangePassword,
+        isPinVerified: pinVerified,
+      });
+    } catch (err) {
+      setIsRedirecting(false);
+      toast.error(getApiErrorMessage(err));
+    }
   };
+
+  const loading = loginMutation.isPending || isRedirecting;
+  const canSubmit = email.trim().length > 0 && password.trim().length > 0;
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
@@ -133,9 +192,10 @@ const Login = () => {
                 placeholder='you@example.com'
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={errors.email ? 'border-destructive' : ''}
+                className={fieldErrors.email ? 'border-destructive' : ''}
+                disabled={loading}
               />
-              {errors.email && <p className='text-xs text-destructive'>{errors.email}</p>}
+              {fieldErrors.email && <p className='text-xs text-destructive'>{fieldErrors.email}</p>}
             </div>
 
             <div className='space-y-2'>
@@ -147,21 +207,28 @@ const Login = () => {
                   placeholder='••••••••'
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
+                  className={fieldErrors.password ? 'border-destructive pr-10' : 'pr-10'}
+                  disabled={loading}
                 />
                 <button
                   type='button'
                   onClick={() => setShowPassword(!showPassword)}
                   className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {errors.password && <p className='text-xs text-destructive'>{errors.password}</p>}
+              {fieldErrors.password && <p className='text-xs text-destructive'>{fieldErrors.password}</p>}
             </div>
 
             <div className='flex justify-end'>
-              <Link href='/forgot-password' className='text-xs text-primary hover:underline sm:text-sm'>
+              <Link
+                href='/forgot-password'
+                className={`text-xs text-primary hover:underline sm:text-sm ${
+                  loading ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
                 Forgot password?
               </Link>
             </div>
@@ -171,17 +238,13 @@ const Login = () => {
                 type='submit'
                 className='gradient-bg w-full text-primary-foreground'
                 size='lg'
-                disabled={loading}
+                disabled={loading || !canSubmit}
               >
                 {loading ? (
                   <motion.div
                     className='h-5 w-5 rounded-full border-2 border-primary-foreground border-t-transparent'
                     animate={{ rotate: 360 }}
-                    transition={{
-                      duration: 1,
-                      repeat: Infinity,
-                      ease: 'linear',
-                    }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                   />
                 ) : (
                   <>
@@ -193,7 +256,12 @@ const Login = () => {
 
             <p className='mt-3 text-center text-xs text-muted-foreground sm:mt-4'>
               Do not have an account?{' '}
-              <Link href='/signup' className='text-primary hover:underline font-medium'>
+              <Link
+                href='/signup'
+                className={`text-primary hover:underline font-medium ${
+                  loading ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
                 Sign up
               </Link>
             </p>
