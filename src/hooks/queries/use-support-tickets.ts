@@ -1,27 +1,26 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supportTickets, type SupportTicketsQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useSupportTickets(query: SupportTicketsQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['support-tickets', businessId, query],
     queryFn: () => supportTickets.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useSupportTicket(id: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['support-tickets', businessId, id],
     queryFn: () => supportTickets.get(businessId, id),
-    enabled: !!businessId && auth.isPinVerified && !!id,
+    enabled: isReady && !!id,
   });
 }

@@ -1,27 +1,26 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { reviews, type ReviewsQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useReviews(query: ReviewsQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['reviews', businessId, query],
     queryFn: () => reviews.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useReviewStats() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['reviews', 'stats', businessId],
     queryFn: () => reviews.stats(businessId),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
   });
 }

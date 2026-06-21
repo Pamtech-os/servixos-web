@@ -2,13 +2,12 @@
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { teamMessages } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export const TEAM_MESSAGES_LIMIT = 50;
 
 export function useTeamMessages(options?: { enabled?: boolean }) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useInfiniteQuery({
     queryKey: ['team-messages', businessId],
@@ -20,6 +19,6 @@ export function useTeamMessages(options?: { enabled?: boolean }) {
       if (!meta) return undefined;
       return meta.page < meta.totalPages ? meta.page + 1 : undefined;
     },
-    enabled: !!businessId && auth.isPinVerified && (options?.enabled ?? true),
+    enabled: isReady && (options?.enabled ?? true),
   });
 }

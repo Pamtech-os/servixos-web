@@ -80,15 +80,8 @@ const CompleteSetup = () => {
     e.preventDefault();
     if (!validate()) return;
 
-    const token = auth.accessToken;
-    if (!token) {
-      router.replace('/login');
-      return;
-    }
-
     try {
-      const setupToken = await completeSetupMutation.mutateAsync({
-        token,
+      await completeSetupMutation.mutateAsync({
         input: {
           newPassword,
           confirmPassword,
@@ -97,7 +90,7 @@ const CompleteSetup = () => {
         },
       });
 
-      completeSetupAuth(setupToken);
+      completeSetupAuth();
       toast.success('Setup completed', {
         description: 'Your password and PIN were updated successfully.',
       });

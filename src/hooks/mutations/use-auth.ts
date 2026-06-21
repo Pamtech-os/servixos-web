@@ -16,20 +16,13 @@ export function useLogin() {
 
 export function useVerifyPin() {
   return useMutation({
-    mutationFn: ({ pin, token }: { pin: string; token: string }) =>
-      auth.verifyPin(pin, token),
+    mutationFn: ({ pin }: { pin: string }) => auth.verifyPin(pin),
   });
 }
 
 export function useCompleteSetup() {
   return useMutation({
-    mutationFn: ({
-      input,
-      token,
-    }: {
-      input: CompleteSetupInput;
-      token: string;
-    }) => auth.completeSetup(input, token),
+    mutationFn: ({ input }: { input: CompleteSetupInput }) => auth.completeSetup(input),
   });
 }
 

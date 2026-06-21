@@ -2,15 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { files } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useClientFiles(clientId: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['client-files', businessId, clientId],
     queryFn: () => files.listByClient(businessId, clientId),
-    enabled: !!businessId && auth.isPinVerified && !!clientId,
+    enabled: isReady && !!clientId,
   });
 }

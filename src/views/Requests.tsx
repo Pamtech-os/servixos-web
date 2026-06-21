@@ -213,7 +213,6 @@ function RequestChatSheet({
 }) {
   const { auth } = useAuth();
   const businessId = auth.user?.businessId ?? '';
-  const accessToken = auth.accessToken ?? '';
   const businessUserId = auth.user?.id ?? '';
 
   const socketRef = useRef<Socket | null>(null);
@@ -378,14 +377,12 @@ function RequestChatSheet({
   }, [open, conversation?.messages]);
 
   useEffect(() => {
-    if (!open || !requestId || !clientId || !businessId || !accessToken) return;
+    if (!open || !requestId || !clientId || !businessId) return;
 
     const socket = io(`${SOCKET_BASE_URL}/chat`, {
-      auth: {
-        token: accessToken,
-        businessId,
-      },
+      auth: { businessId },
       transports: ['websocket', 'polling'],
+      withCredentials: true,
     });
     socketRef.current = socket;
 
@@ -537,7 +534,6 @@ function RequestChatSheet({
     requestClientName,
     clientId,
     businessId,
-    accessToken,
     businessUserId,
     clearIncomingTypingLabel,
     emitTypingStop,

@@ -3,13 +3,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobs, type CreateJobInput, type UpdateJobInput, type Job } from '@/lib/api-client';
 import type { PaginationMeta } from '@/lib/pagination';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 type JobsPage = { data: Job[]; meta: PaginationMeta };
 
 export function useCreateJob() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -21,8 +20,7 @@ export function useCreateJob() {
 }
 
 export function useUpdateJob() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -35,8 +33,7 @@ export function useUpdateJob() {
 }
 
 export function useStartJob() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -48,8 +45,7 @@ export function useStartJob() {
 }
 
 export function useCompleteJob() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -61,8 +57,7 @@ export function useCompleteJob() {
 }
 
 export function useDeleteJob() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -84,8 +79,7 @@ export function useDeleteJob() {
 }
 
 export function useBulkDeleteJobs() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

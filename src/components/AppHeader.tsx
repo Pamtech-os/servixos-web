@@ -8,9 +8,6 @@ import {
   LogOut as LogOutIcon,
   Circle,
   Users,
-  Sparkles,
-  CreditCard,
-  Lock,
   Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,12 +15,8 @@ import { useClock } from '@/contexts/ClockContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useUpgradePlan } from '@/common/state/upgrade-plan-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnlineEmployees } from '@/hooks/queries/use-employees';
-import { decodeJwt } from '@/lib/api-client';
-import GracePeriodModal from '@/components/GracePeriodModal';
-import SubscriptionLockedModal from '@/components/SubscriptionLockedModal';
 
 type OnlineTeamMember = {
   name: string;
@@ -134,7 +127,6 @@ const AppHeader = () => {
     trackingMode,
     employeeMappingState,
   } = useClock();
-  const { showUpgradeModal } = useUpgradePlan();
   const { auth } = useAuth();
   const onlineEmployeesQuery = useOnlineEmployees();
 
@@ -143,17 +135,7 @@ const AppHeader = () => {
   const initials = user
     ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase()
     : 'BO';
-  const userRoleLabel = useMemo(() => {
-    const token = auth.accessToken;
-    if (!token) return 'User';
-
-    try {
-      const payload = decodeJwt(token);
-      return toTitleCase(payload.userRole);
-    } catch {
-      return 'User';
-    }
-  }, [auth.accessToken]);
+  const userRoleLabel = auth.userRole ? toTitleCase(auth.userRole) : 'User';
   const clockStatusLabel =
     status === 'clocked_in' ? 'Clocked In' : status === 'on_break' ? 'On Break' : 'Clocked Out';
   const clockSyncLabel =
@@ -174,8 +156,6 @@ const AppHeader = () => {
   }, [onlineEmployeesQuery.data]);
 
   const [elapsed, setElapsed] = useState('');
-  const [isGracePeriodPreviewOpen, setIsGracePeriodPreviewOpen] = useState(false);
-  const [isSubscriptionLockedPreviewOpen, setIsSubscriptionLockedPreviewOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'clocked_out' || !clockedInAt) {
@@ -299,73 +279,16 @@ const AppHeader = () => {
       </div>
 
       <div className='ml-2 flex shrink-0 items-center gap-2 sm:gap-3'>
-        <div className='flex items-center gap-2'>
-          <Button
-            size='sm'
-            variant='outline'
-            className='gap-1.5 border-primary/40 text-primary hover:bg-primary/10'
-            onClick={() =>
-              showUpgradeModal({
-                featureName: 'Advanced Analytics',
-                currentPlan: 'Starter',
-                requiredPlan: 'Pro',
-              })
-            }
-          >
-            <Sparkles size={14} />
-            <span className='hidden sm:inline'>Preview Upgrade</span>
-          </Button>
-          <Button
-            size='sm'
-            variant='outline'
-            className='gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10'
-            onClick={() => setIsGracePeriodPreviewOpen(true)}
-          >
-            <CreditCard size={14} />
-            <span className='hidden sm:inline'>Preview Grace</span>
-          </Button>
-          <Button
-            size='sm'
-            variant='outline'
-            className='gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10'
-            onClick={() => setIsSubscriptionLockedPreviewOpen(true)}
-          >
-            <Lock size={14} />
-            <span className='hidden sm:inline'>Preview Locked</span>
-          </Button>
-        </div>
         <div className='hidden text-right sm:block'>
           <p className='text-sm font-semibold'>{displayName}</p>
           <p className='text-xs text-muted-foreground'>
             {userRoleLabel} ({clockStatusLabel})
           </p>
-          {/* <p className='text-[11px] text-muted-foreground'>{clockSyncLabel}</p> */}
         </div>
         <div className='gradient-bg flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground'>
           {initials}
         </div>
       </div>
-      <GracePeriodModal
-        open={isGracePeriodPreviewOpen}
-        onOpenChange={setIsGracePeriodPreviewOpen}
-        planName='Pro'
-        billingCycle='Monthly'
-        renewalAmount={49}
-        currency='USD'
-        daysRemaining={4}
-        dueDate='May 6, 2026'
-        onPayNow={() => setIsGracePeriodPreviewOpen(false)}
-        onCancel={() => setIsGracePeriodPreviewOpen(false)}
-      />
-      <SubscriptionLockedModal
-        open={isSubscriptionLockedPreviewOpen}
-        planName='Pro'
-        billingCycle='Monthly'
-        renewalAmount={49}
-        currency='USD'
-        lockedSince='April 29, 2026'
-        onPayNow={() => setIsSubscriptionLockedPreviewOpen(false)}
-      />
     </header>
   );
 };

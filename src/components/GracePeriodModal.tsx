@@ -64,11 +64,16 @@ const GracePeriodModal = ({
     minimumFractionDigits: 2,
   }).format(renewalAmount);
 
-  const progress = Math.max(0, Math.min(100, (daysRemaining / 7) * 100));
+  const progress = Math.max(0, Math.min(100, (daysRemaining / 5) * 100));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='p-0 overflow-hidden border-0 max-w-[480px] bg-transparent shadow-none [&>button]:hidden'>
+      <DialogContent
+        className='p-0 overflow-hidden border-0 max-w-[480px] bg-transparent shadow-none [&>button]:hidden'
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogTitle className='sr-only'>Subscription grace period</DialogTitle>
         <DialogDescription className='sr-only'>
           Your {planName} subscription payment is overdue. {daysRemaining} days
@@ -204,7 +209,7 @@ const GracePeriodModal = ({
                   transition={{ delay: 0.25 }}
                   className='flex items-center gap-2 mb-3'
                 >
-                  <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'>
+                  <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500 text-white shadow-sm'>
                     <Clock className='w-3 h-3' />
                     Grace period • {daysRemaining} day
                     {daysRemaining === 1 ? '' : 's'} left
@@ -247,7 +252,7 @@ const GracePeriodModal = ({
                   <div className='flex items-center justify-between text-xs text-muted-foreground mb-1.5'>
                     <span>Grace period</span>
                     <span className='font-semibold text-foreground'>
-                      {daysRemaining} of 7 days
+                      {daysRemaining} of 5 days
                     </span>
                   </div>
                   <div className='h-2 rounded-full bg-muted overflow-hidden'>

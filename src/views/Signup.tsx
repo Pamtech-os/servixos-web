@@ -40,7 +40,12 @@ import {
   useGenerateWebsite,
 } from '@/hooks/mutations/use-onboarding';
 import { useBusinessCategories } from '@/hooks/queries/use-business-categories';
-import { onboarding, auth as authApi } from '@/lib/api-client';
+import dynamic from 'next/dynamic';
+import { onboarding, auth as authApi, subscription } from '@/lib/api-client';
+
+const OnboardingCardStep = dynamic(() => import('@/components/OnboardingCardStep'), {
+  ssr: false,
+});
 import { getApiErrorMessage } from '@/common/network/http-client';
 import servixLogo from '@/assets/servix-logo.png';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -96,7 +101,7 @@ const clearProgress = () => localStorage.removeItem(ONBOARDING_KEY);
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
-const STEPS = ['Registration', 'Business Setup', 'Website Builder'];
+const STEPS = ['Registration', 'Business Setup', 'Payment Setup', 'Website Builder'];
 
 const colorSchemes = [
   { id: 'blue', label: 'Ocean Blue', primary: '#3B82F6', secondary: '#8B5CF6' },
@@ -147,7 +152,7 @@ const shuffleArray = (arr: number[]) => {
 
 const Signup = () => {
   const router = useRouter();
-  const { setSession, auth: authState } = useAuth();
+  const { setSession, completeVerification, auth: authState } = useAuth();
   const [step, setStep] = useState(0);
 
   // Queries
@@ -205,6 +210,11 @@ const Signup = () => {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiStage, setAiStage] = useState('');
+
+  // Step 2: Card collection
+  const [cardClientSecret, setCardClientSecret] = useState('');
+  const [cardFetching, setCardFetching] = useState(false);
+  const [cardError, setCardError] = useState('');
 
   // Step 3: Website Builder
   const [websiteGenerating, setWebsiteGenerating] = useState(false);
@@ -308,6 +318,21 @@ const Signup = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin, confirmPin, pinPhase, pinLoading]);
+
+  // Re-fetch setup intent when restored to card step (e.g. after page refresh)
+  useEffect(() => {
+    if (step !== 2 || cardClientSecret || cardFetching) return;
+    const businessId = authState.user?.businessId;
+    if (!businessId) return;
+
+    setCardFetching(true);
+    setCardError('');
+    subscription.setupIntent(businessId)
+      .then((data) => setCardClientSecret(data.clientSecret))
+      .catch((err) => setCardError(getApiErrorMessage(err)))
+      .finally(() => setCardFetching(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, authState.user?.businessId]);
 
   // Restore onboarding progress on mount
   useEffect(() => {
@@ -492,13 +517,11 @@ const Signup = () => {
         timezone,
       });
 
-      // Silently verify PIN so the stored token has pinVerified: true.
+      // Silently verify PIN so the session has isPinVerified: true.
       if (savedPin) {
-        const verifiedToken = await authApi.verifyPin(
-          savedPin,
-          session.accessToken,
-        );
-        setSession({ ...session, accessToken: verifiedToken });
+        await authApi.verifyPin(savedPin);
+        setSession(session);
+        completeVerification();
         setSavedPin(''); // clear from memory
       } else {
         // Restoration path: user came back without a cached PIN.
@@ -507,6 +530,9 @@ const Signup = () => {
         router.push('/pin');
         return;
       }
+
+      const setupData = await subscription.setupIntent(session.user.businessId);
+      setCardClientSecret(setupData.clientSecret);
 
       clearInterval(stageInterval);
       setAiProgress(100);
@@ -889,6 +915,47 @@ const Signup = () => {
     </motion.div>
   );
 
+  const renderCardStep = () => (
+    <motion.div
+      initial={{ opacity: 0, x: 40 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -40 }}
+      className='space-y-5'
+    >
+      {cardFetching ? (
+        <div className='flex flex-col items-center gap-4 py-8'>
+          <Loader2 className='h-8 w-8 animate-spin text-primary' />
+          <p className='text-sm text-muted-foreground'>Preparing your payment setup...</p>
+        </div>
+      ) : cardError ? (
+        <div className='space-y-3'>
+          <div className='rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive'>
+            {cardError}
+          </div>
+          <Button
+            variant='outline'
+            className='w-full'
+            onClick={() => {
+              setCardError('');
+              setCardFetching(false);
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : cardClientSecret ? (
+        <OnboardingCardStep
+          clientSecret={cardClientSecret}
+          onSuccess={() => {
+            saveProgress({ step: 3 });
+            toast.success('Card saved! Your subscription is secured.');
+            setStep(3);
+          }}
+        />
+      ) : null}
+    </motion.div>
+  );
+
   const renderBusinessOnboarding = () => (
     <motion.div
       initial={{ opacity: 0, x: 40 }}
@@ -936,6 +1003,7 @@ const Signup = () => {
             <div className='h-2 rounded-full bg-muted overflow-hidden'>
               <motion.div
                 className='h-full rounded-full bg-gradient-to-r from-primary to-secondary'
+                initial={{ width: '0%' }}
                 animate={{ width: `${aiProgress}%` }}
                 transition={{ duration: 0.5 }}
               />
@@ -1307,6 +1375,7 @@ const Signup = () => {
               <div className='h-2 rounded-full bg-muted overflow-hidden'>
                 <motion.div
                   className='h-full rounded-full bg-gradient-to-r from-primary to-secondary'
+                  initial={{ width: '0%' }}
                   animate={{ width: `${websiteProgress}%` }}
                   transition={{ duration: 0.5 }}
                 />
@@ -1474,7 +1543,8 @@ const Signup = () => {
                   </h1>
                   <p className='text-xs text-muted-foreground text-center'>
                     {step === 0 && 'Create your Servix OS account'}
-                    {step === 2 && 'Generate a professional website'}
+                    {step === 2 && 'Secure your plan before your trial ends'}
+                    {step === 3 && 'Generate a professional website'}
                   </p>
                 </>
               )}
@@ -1487,7 +1557,9 @@ const Signup = () => {
                   ? renderEmailVerify()
                   : step === 0
                     ? renderRegistrationForm()
-                    : renderWebsiteBuilder()}
+                    : step === 2
+                      ? renderCardStep()
+                      : renderWebsiteBuilder()}
             </AnimatePresence>
           </div>
         )}

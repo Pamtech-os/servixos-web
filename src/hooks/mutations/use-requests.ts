@@ -2,11 +2,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { serviceRequests, type UpdateRequestInput } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useUpdateRequest() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -22,8 +21,7 @@ export function useUpdateRequest() {
 }
 
 export function useDeleteRequest() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({

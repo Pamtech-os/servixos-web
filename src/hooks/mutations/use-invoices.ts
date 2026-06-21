@@ -2,11 +2,10 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoices, type CreateInvoiceInput, type UpdateInvoiceInput } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 
 export function useCreateInvoice() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -18,8 +17,7 @@ export function useCreateInvoice() {
 }
 
 export function useUpdateInvoice() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -32,8 +30,7 @@ export function useUpdateInvoice() {
 }
 
 export function useDeleteInvoice() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -45,8 +42,7 @@ export function useDeleteInvoice() {
 }
 
 export function useSendInvoice() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -58,8 +54,7 @@ export function useSendInvoice() {
 }
 
 export function useGetInvoicePdf() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
 
   return useMutation({
     mutationFn: (id: string) => invoices.getPdf(businessId, id),

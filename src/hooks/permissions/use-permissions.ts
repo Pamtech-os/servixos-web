@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import { decodeJwt } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoles } from '@/hooks/queries/use-roles';
 import { useCurrentEmployee } from '@/hooks/queries/use-employees';
@@ -15,14 +14,7 @@ export interface ResolvedPermissions {
 export function usePermissions(): ResolvedPermissions {
   const { auth } = useAuth();
 
-  const isOwner = (() => {
-    if (!auth.accessToken) return false;
-    try {
-      return decodeJwt(auth.accessToken).userRole === 'owner';
-    } catch {
-      return false;
-    }
-  })();
+  const isOwner = auth.userRole === 'owner';
 
   const directPermissions = (() => {
     const value = (auth.user as { permissions?: unknown } | null)?.permissions;

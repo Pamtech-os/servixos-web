@@ -1,8 +1,8 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { serviceRequests, type ServiceRequestsQuery } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { HttpError } from '@/common/network/http-client';
 
 const CLIENT_NOT_PROVISIONED_MESSAGE = 'client not provisioned';
@@ -13,24 +13,23 @@ export function isClientProvisioningPendingError(error: unknown): boolean {
 }
 
 export function useServiceRequests(query: ServiceRequestsQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['requests', businessId, query],
     queryFn: () => serviceRequests.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: isReady,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useServiceRequest(id: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['requests', businessId, id],
     queryFn: () => serviceRequests.get(businessId, id),
-    enabled: !!businessId && auth.isPinVerified && !!id,
+    enabled: isReady && !!id,
   });
 }
 
@@ -39,28 +38,26 @@ export function useRequestConversation(
   enabled = false,
   options?: { retryOnClientProvisioning?: boolean; pollingInterval?: number }
 ) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
   const retryOnClientProvisioning = options?.retryOnClientProvisioning ?? false;
   const pollingInterval = options?.pollingInterval;
 
   return useQuery({
     queryKey: ['requests', businessId, id, 'conversation'],
     queryFn: () => serviceRequests.getConversation(businessId, id),
-    enabled: !!businessId && auth.isPinVerified && !!id && enabled,
+    enabled: isReady && !!id && enabled,
     refetchInterval: (query) => {
       if (retryOnClientProvisioning && isClientProvisioningPendingError(query.state.error)) {
         return 3000;
       }
       return pollingInterval ?? false;
     },
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
 }
 
 export function useRequestPriceEstimate(id: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['requests', businessId, id, 'price-estimate'],

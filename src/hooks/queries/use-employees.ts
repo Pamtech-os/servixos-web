@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import {
   employees,
   clock,
@@ -8,7 +8,7 @@ import {
   type EmployeeClockHistoryQuery,
   type Employee,
 } from '@/lib/api-client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { HttpError } from '@/common/network/http-client';
 
 const CURRENT_EMPLOYEE_LIMIT = 50;
@@ -53,30 +53,28 @@ async function scanEmployeePages(
 }
 
 export function useEmployees(query: EmployeesQuery = {}, options?: { enabled?: boolean }) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['employees', businessId, query],
     queryFn: () => employees.list(businessId, query),
-    enabled: !!businessId && auth.isPinVerified && (options?.enabled ?? true),
+    enabled: isReady && (options?.enabled ?? true),
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useEmployee(id: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['employees', businessId, id],
     queryFn: () => employees.get(businessId, id),
-    enabled: !!businessId && auth.isPinVerified && !!id,
+    enabled: isReady && !!id,
   });
 }
 
 export function useCurrentEmployee(options?: { enabled?: boolean }) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { auth, businessId, isReady } = useBusinessAuth();
   const userId = auth.user?.id ?? '';
   const email = auth.user?.email?.trim().toLowerCase() ?? '';
 
@@ -113,42 +111,40 @@ export function useCurrentEmployee(options?: { enabled?: boolean }) {
         throw error;
       }
     },
-    enabled: !!businessId && auth.isPinVerified && !!email && (options?.enabled ?? true),
+    enabled: isReady && !!email && (options?.enabled ?? true),
   });
 }
 
 export function useOnlineEmployees() {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['employees', businessId, 'online'],
     queryFn: () => employees.online(businessId),
-    enabled: !!businessId && auth.isPinVerified,
+    enabled: false,
     staleTime: 0,
-    refetchInterval: 15_000,
+    refetchInterval: false,
   });
 }
 
 export function useEmployeeClockHistory(employeeId: string, query: EmployeeClockHistoryQuery = {}) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['employee-clock-history', businessId, employeeId, query],
     queryFn: () => employees.getClockHistory(businessId, employeeId, query),
-    enabled: !!businessId && auth.isPinVerified && !!employeeId,
+    enabled: isReady && !!employeeId,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useEmployeeClockStatus(employeeId: string) {
-  const { auth } = useAuth();
-  const businessId = auth.user?.businessId ?? '';
+  const { businessId, isReady } = useBusinessAuth();
 
   return useQuery({
     queryKey: ['employee-clock-status', businessId, employeeId],
     queryFn: () => clock.status(businessId, employeeId),
-    enabled: !!businessId && auth.isPinVerified && !!employeeId,
+    enabled: isReady && !!employeeId,
     staleTime: 0,
     refetchInterval: 15_000,
   });
