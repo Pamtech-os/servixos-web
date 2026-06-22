@@ -5,21 +5,50 @@ import { getWebsiteData } from './get-website-data';
 function SiteNav({
   businessName,
   primaryColor,
+  secondaryColor,
+  hasAbout,
+  logoUrl,
 }: {
   businessName: string;
   primaryColor: string;
+  secondaryColor: string;
+  hasAbout: boolean;
+  logoUrl?: string;
 }) {
   return (
     <header
-      className='sticky top-0 z-50 bg-white/95 backdrop-blur-sm'
-      style={{ borderBottom: '1px solid #e5e7eb' }}
+      className='sticky top-0 z-50 bg-white/90 backdrop-blur-md'
+      style={{ borderBottom: '1px solid rgba(0,0,0,.07)' }}
     >
-      <div className='mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6'>
-        <span className='text-lg font-bold text-gray-900'>{businessName}</span>
+      <div className='mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6'>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href='/' className='transition-opacity hover:opacity-70'>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt={businessName} className='h-9 w-auto' />
+          ) : (
+            <span className='text-base font-bold text-gray-900 sm:text-lg'>{businessName}</span>
+          )}
+        </a>
+        <nav className='hidden items-center gap-7 sm:flex'>
+          {[
+            { label: 'Services', href: '#services' },
+            ...(hasAbout ? [{ label: 'About', href: '#about' }] : []),
+            { label: 'Contact', href: '#contact' },
+          ].map(({ label, href }) => (
+            <a
+              key={href}
+              href={href}
+              className='text-sm font-medium text-gray-500 transition-colors hover:text-gray-900'
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
         <a
           href='booking'
-          className='rounded-lg px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90'
-          style={{ backgroundColor: primaryColor }}
+          className='rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 hover:shadow-md'
+          style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor || primaryColor})` }}
         >
           Book Now
         </a>
@@ -41,6 +70,7 @@ export default async function SiteLayout({
 
   const { colorPrimary, font } = data.website;
   const googleFont = font.replace(/\s+/g, '+');
+  const hasAbout = !!(data.website.aiContent?.about || data.business.description);
 
   return (
     <>
@@ -56,11 +86,12 @@ export default async function SiteLayout({
           {
             '--site-primary': colorPrimary,
             fontFamily: `'${font}', sans-serif`,
+            scrollBehavior: 'smooth',
           } as React.CSSProperties
         }
         className='min-h-screen bg-white text-gray-900'
       >
-        <SiteNav businessName={data.business.name} primaryColor={colorPrimary} />
+        <SiteNav businessName={data.business.name} primaryColor={colorPrimary} secondaryColor={data.website.colorSecondary} hasAbout={hasAbout} logoUrl={data.website.logoUrl} />
         {children}
       </div>
     </>

@@ -6,6 +6,7 @@ import {
   type WebsiteBookingForm,
   type SaveDesignInput,
   type SaveContentInput,
+  type UploadLogoResult,
 } from '@/lib/api-client';
 import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { WEBSITE_CONFIG_KEY } from '@/hooks/queries/use-website';
@@ -52,6 +53,18 @@ export function usePublishWebsiteMutation() {
 
   return useMutation({
     mutationFn: () => website.generate(businessId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [WEBSITE_CONFIG_KEY, businessId] });
+    },
+  });
+}
+
+export function useUploadLogoMutation() {
+  const { businessId } = useBusinessAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation<UploadLogoResult, Error, File>({
+    mutationFn: (file: File) => website.uploadLogo(businessId, file),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [WEBSITE_CONFIG_KEY, businessId] });
     },

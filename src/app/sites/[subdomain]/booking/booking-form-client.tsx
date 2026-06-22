@@ -4,9 +4,7 @@ import { useState } from 'react';
 import type { WebsitePublicData, BookingField, BookingFieldKey } from '../types';
 import { DEFAULT_BOOKING_FIELDS } from '../types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL
-  ? `https://${process.env.NEXT_PUBLIC_API_BASE_URL}`
-  : 'https://api-dev.servixos.com/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api-dev.servixos.com/api';
 
 const INPUT_TYPE: Record<BookingFieldKey, string> = {
   clientName: 'text',
@@ -141,7 +139,7 @@ export default function BookingFormClient({ data, subdomain }: Props) {
                     rows={4}
                     value={value}
                     onChange={(e) => handleChange(field.key, e.target.value)}
-                    className='w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-transparent focus:ring-2'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-transparent focus:ring-2'
                     style={{ '--tw-ring-color': colorPrimary } as React.CSSProperties}
                   />
                 ) : inputType === 'select' ? (
@@ -151,7 +149,7 @@ export default function BookingFormClient({ data, subdomain }: Props) {
                     required={field.required}
                     value={value}
                     onChange={(e) => handleChange(field.key, e.target.value)}
-                    className='w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none transition-colors focus:ring-2'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-colors focus:ring-2'
                     style={{ '--tw-ring-color': colorPrimary } as React.CSSProperties}
                   >
                     <option value='' disabled>
@@ -173,7 +171,7 @@ export default function BookingFormClient({ data, subdomain }: Props) {
                     value={value}
                     min={inputType === 'date' ? new Date().toISOString().split('T')[0] : undefined}
                     onChange={(e) => handleChange(field.key, e.target.value)}
-                    className='w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:ring-2'
+                    className='w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:ring-2'
                     style={{ '--tw-ring-color': colorPrimary } as React.CSSProperties}
                   />
                 )}
