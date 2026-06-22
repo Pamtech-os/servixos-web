@@ -145,7 +145,7 @@ export default async function SiteLandingPage({
 
             {/* Badge */}
             <div className='fu1 mb-7 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-widest ring-1'
-              style={{ color: colorPrimary, background: `${colorPrimary}10`, ringColor: `${colorPrimary}30` }}>
+              style={{ color: colorPrimary, background: `${colorPrimary}10`, ['--tw-ring-color' as string]: `${colorPrimary}30` }}>
               <span className='h-1.5 w-1.5 rounded-full' style={{ background: colorPrimary }} />
               {business.categoryName}
             </div>
