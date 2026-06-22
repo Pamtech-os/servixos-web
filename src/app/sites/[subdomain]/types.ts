@@ -28,6 +28,7 @@ export interface WebsitePublicData {
     colorPrimary: string;
     colorSecondary: string;
     font: string;
+    logoUrl?: string;
     aiContent?: {
       hero: {
         headline: string;
