@@ -6,11 +6,17 @@ export async function getWebsiteData(subdomain: string): Promise<WebsitePublicDa
   try {
     const res = await fetch(`${API_BASE}/website/public/${subdomain}`, {
       next: { revalidate: 300 },
+      headers: { 'x-channel': 'web' },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[getWebsiteData] ${subdomain}: HTTP ${res.status}`);
+      return null;
+    }
     const json = await res.json();
+    if (!json.data) console.error(`[getWebsiteData] ${subdomain}: empty data`, json);
     return (json.data as WebsitePublicData) ?? null;
-  } catch {
+  } catch (err) {
+    console.error(`[getWebsiteData] ${subdomain}: fetch error`, err);
     return null;
   }
 }
