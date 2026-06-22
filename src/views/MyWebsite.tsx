@@ -20,6 +20,8 @@ import {
   Wrench,
   ClipboardList,
   Loader2,
+  Upload,
+  ImageIcon,
 } from 'lucide-react';
 import {
   Card,
@@ -44,6 +46,7 @@ import {
   useSaveDesignMutation,
   useSaveContentMutation,
   usePublishWebsiteMutation,
+  useUploadLogoMutation,
 } from '@/hooks/mutations/use-website';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import type { WebsiteBookingFieldKey, WebsiteAiContent } from '@/lib/api-client';
@@ -156,6 +159,7 @@ const MyWebsite = () => {
   const saveDesign = useSaveDesignMutation();
   const saveContent = useSaveContentMutation();
   const publishWebsite = usePublishWebsiteMutation();
+  const uploadLogo = useUploadLogoMutation();
 
   const websiteUrl = websiteData?.subdomain
     ? `${websiteData.subdomain}.${ROOT_DOMAIN}`
@@ -169,6 +173,7 @@ const MyWebsite = () => {
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
   const [secondaryColor, setSecondaryColor] = useState('#8B5CF6');
   const [fontFamily, setFontFamily] = useState('Inter');
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
 
   const [bookingFields, setBookingFields] = useState<BookingField[]>(DEFAULT_BOOKING_FIELDS);
   const [bookingTitle, setBookingTitle] = useState('Book a Service');
@@ -181,6 +186,7 @@ const MyWebsite = () => {
     setPrimaryColor(websiteData.colorPrimary);
     setSecondaryColor(websiteData.colorSecondary);
     setFontFamily(websiteData.font);
+    setLogoUrl(websiteData.logoUrl);
     setSectionContents(buildSectionContents(websiteData.aiContent));
     if (websiteData.bookingForm) {
       setBookingTitle(websiteData.bookingForm.title);
@@ -189,6 +195,18 @@ const MyWebsite = () => {
     setBookingFields(buildBookingFields(websiteData.bookingForm?.fields));
     setInitialized(true);
   }, [websiteData, initialized]);
+
+  // Preload all font options so the picker buttons render in their own typeface
+  useEffect(() => {
+    const fonts = ['Poppins', 'DM+Sans', 'Space+Grotesk', 'Nunito', 'Montserrat', 'Playfair+Display', 'Lato', 'Raleway'];
+    const id = 'my-website-font-preload';
+    if (document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?${fonts.map((f) => `family=${f}:wght@400;500;600;700`).join('&')}&display=swap`;
+    document.head.appendChild(link);
+  }, []);
 
   const handleSaveSection = async (sectionId: keyof SectionContents) => {
     try {
@@ -246,6 +264,19 @@ const MyWebsite = () => {
     } catch (err) {
       toast.error('Save failed', { description: getApiErrorMessage(err) });
     }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadLogo.mutateAsync(file);
+      setLogoUrl(result.logoUrl);
+      toast.success('Logo updated!');
+    } catch (err) {
+      toast.error('Upload failed', { description: getApiErrorMessage(err) });
+    }
+    e.target.value = '';
   };
 
   const handleSaveDesign = async () => {
@@ -626,6 +657,48 @@ const MyWebsite = () => {
             </CardHeader>
             <CardContent className='space-y-4'>
               <Separator />
+
+              {/* Logo upload */}
+              <div className='space-y-2'>
+                <Label className='flex items-center gap-1.5 text-xs'>
+                  <ImageIcon size={12} /> Logo
+                </Label>
+                <div className='flex items-center gap-4'>
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt='Business logo' className='h-14 w-auto rounded-lg border border-border object-contain p-1' />
+                  ) : (
+                    <div className='flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30'>
+                      <ImageIcon size={20} className='text-muted-foreground' />
+                    </div>
+                  )}
+                  <div>
+                    <Label
+                      htmlFor='logo-upload'
+                      className='inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted'
+                    >
+                      {uploadLogo.isPending ? (
+                        <Loader2 size={12} className='animate-spin' />
+                      ) : (
+                        <Upload size={12} />
+                      )}
+                      {logoUrl ? 'Replace Logo' : 'Upload Logo'}
+                    </Label>
+                    <input
+                      id='logo-upload'
+                      type='file'
+                      accept='image/jpeg,image/jpg,image/png'
+                      className='sr-only'
+                      disabled={uploadLogo.isPending}
+                      onChange={handleLogoUpload}
+                    />
+                    <p className='mt-1 text-[10px] text-muted-foreground'>JPEG or PNG, max 5 MB</p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
               <div className='grid grid-cols-2 gap-4'>
                 <div className='space-y-2'>
                   <Label className='flex items-center gap-1.5 text-xs'>
@@ -670,7 +743,7 @@ const MyWebsite = () => {
                   <Type size={12} /> Font Family
                 </Label>
                 <div className='flex flex-wrap gap-2'>
-                  {['Inter', 'Georgia', 'Nunito', 'Montserrat'].map((f) => (
+                  {['Inter', 'Poppins', 'DM Sans', 'Space Grotesk', 'Nunito', 'Montserrat', 'Georgia', 'Playfair Display', 'Lato', 'Raleway'].map((f) => (
                     <Button
                       key={f}
                       variant={fontFamily === f ? 'default' : 'outline'}

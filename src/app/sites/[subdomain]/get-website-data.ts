@@ -8,15 +8,10 @@ export async function getWebsiteData(subdomain: string): Promise<WebsitePublicDa
       next: { revalidate: 300 },
       headers: { 'x-channel': 'web' },
     });
-    if (!res.ok) {
-      console.error(`[getWebsiteData] ${subdomain}: HTTP ${res.status}`);
-      return null;
-    }
+    if (!res.ok) return null;
     const json = await res.json();
-    if (!json.data) console.error(`[getWebsiteData] ${subdomain}: empty data`, json);
     return (json.data as WebsitePublicData) ?? null;
-  } catch (err) {
-    console.error(`[getWebsiteData] ${subdomain}: fetch error`, err);
+  } catch {
     return null;
   }
 }
