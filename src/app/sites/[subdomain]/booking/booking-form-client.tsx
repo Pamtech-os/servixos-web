@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { WebsitePublicData, BookingField, BookingFieldKey } from '../types';
 import { DEFAULT_BOOKING_FIELDS } from '../types';
-import { publicCall } from '@/lib/api/core';
+import { requestEnvelope } from '@/lib/api/core';
 
 const INPUT_TYPE: Record<BookingFieldKey, string> = {
   clientName: 'text',
@@ -52,7 +52,7 @@ export default function BookingFormClient({ data, subdomain }: Props) {
     }
 
     try {
-      await publicCall(`/requests?businessSlug=${subdomain}`, body);
+      await requestEnvelope({ method: 'POST', path: `/requests?businessSlug=${subdomain}`, body, skipSigning: true });
       setSubmitted(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : null;
