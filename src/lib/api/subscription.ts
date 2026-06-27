@@ -36,6 +36,9 @@ export interface BusinessSubscription {
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   gracePeriodEndsAt: string | null;
+  pendingAmountDue: number | null;
+  pendingCurrency: string | null;
+  pendingStripeInvoiceId: string | null;
 }
 
 export interface BusinessProfile {

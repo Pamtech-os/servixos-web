@@ -26,6 +26,7 @@ export interface SubscriptionLockedModalProps {
   renewalAmount?: number;
   currency?: string;
   lockedSince?: string;
+  fromTrial?: boolean;
   onPayNow?: () => void;
 }
 
@@ -36,6 +37,7 @@ const SubscriptionLockedModal = ({
   renewalAmount = 49,
   currency = 'USD',
   lockedSince,
+  fromTrial = false,
   onPayNow,
 }: SubscriptionLockedModalProps) => {
   const particles = useMemo(
@@ -239,10 +241,21 @@ const SubscriptionLockedModal = ({
                   transition={{ delay: 0.35 }}
                   className='text-sm text-muted-foreground leading-relaxed mb-5'
                 >
-                  Your 7-day grace period has ended and your{' '}
-                  <strong className='text-foreground'>{planName}</strong>{' '}
-                  subscription is now locked. Settle the outstanding balance to
-                  instantly restore access to your office.
+                  {fromTrial ? (
+                    <>
+                      Your free trial has ended and we couldn&apos;t collect
+                      your first payment. Pay now to activate your{' '}
+                      <strong className='text-foreground'>{planName}</strong>{' '}
+                      account.
+                    </>
+                  ) : (
+                    <>
+                      Your grace period has ended and your{' '}
+                      <strong className='text-foreground'>{planName}</strong>{' '}
+                      subscription is now locked. Settle the outstanding balance
+                      to instantly restore access to your office.
+                    </>
+                  )}
                 </motion.p>
 
                 <motion.div
