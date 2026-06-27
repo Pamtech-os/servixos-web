@@ -81,8 +81,8 @@ const SubscriptionModals = () => {
         onOpenChange={(open) => { if (!open) setGracePeriodDismissed(true); }}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
-        renewalAmount={0}
-        currency='usd'
+        renewalAmount={(sub?.pendingAmountDue ?? 0) / 100}
+        currency={sub?.pendingCurrency ?? 'usd'}
         daysRemaining={daysRemaining(sub?.gracePeriodEndsAt ?? null)}
         dueDate={formatDate(sub?.gracePeriodEndsAt ?? null)}
         onPayNow={() => { setGracePeriodDismissed(false); void triggerPayNow(); }}
@@ -94,9 +94,10 @@ const SubscriptionModals = () => {
         open={isLocked && !isPaymentModalOpen}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
-        renewalAmount={0}
-        currency='usd'
+        renewalAmount={(sub?.pendingAmountDue ?? 0) / 100}
+        currency={sub?.pendingCurrency ?? 'usd'}
         lockedSince={formatDate(sub?.currentPeriodEnd ?? null)}
+        fromTrial={sub?.gracePeriodEndsAt === null}
         onPayNow={() => void triggerPayNow()}
       />
 
