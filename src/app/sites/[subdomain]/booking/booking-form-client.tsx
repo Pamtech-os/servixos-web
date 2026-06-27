@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import type { WebsitePublicData, BookingField, BookingFieldKey } from '../types';
 import { DEFAULT_BOOKING_FIELDS } from '../types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api-dev.servixos.com/api';
+import { requestEnvelope } from '@/lib/api/core';
 
 const INPUT_TYPE: Record<BookingFieldKey, string> = {
   clientName: 'text',
@@ -53,22 +52,11 @@ export default function BookingFormClient({ data, subdomain }: Props) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/requests?businessSlug=${subdomain}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (res.ok) {
-        setSubmitted(true);
-      } else {
-        const json = await res.json().catch(() => ({}));
-        setError(
-          json?.message ?? 'Something went wrong. Please try again.',
-        );
-      }
-    } catch {
-      setError('Unable to submit. Please check your connection and try again.');
+      await requestEnvelope({ method: 'POST', path: `/requests?businessSlug=${subdomain}`, body, skipSigning: true });
+      setSubmitted(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : null;
+      setError(message ?? 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
