@@ -390,6 +390,7 @@ function RequestChatSheet({
       if (!active) return;
 
       const socket = io(`${SOCKET_BASE_URL}/chat`, {
+        transports: ['websocket', 'polling'],
         auth: authPayload,
         extraHeaders: headers,
         transportOptions: { polling: { extraHeaders: headers } },
@@ -492,9 +493,9 @@ function RequestChatSheet({
         toast.error('Chat error', { description: message || 'Unable to complete chat action.' });
       };
 
-      const handleConnectionError = ({ message }: SocketErrorEvent) => {
-        toast.error('Chat connection error', {
-          description: message || 'Chat disconnected. Please reconnect.',
+      const handleConnectionError = (error: Error) => {
+        toast.error('Chat connection failed', {
+          description: error.message || 'Unable to connect to chat.',
         });
         socket.disconnect();
       };
@@ -518,13 +519,7 @@ function RequestChatSheet({
       socket.on('user_offline', handleClientOffline);
       socket.on('client_offline', handleClientOffline);
       socket.on('error', handleSocketError);
-      socket.on('connection_error', handleConnectionError);
-
-      socket.on('connect_error', (error: Error) => {
-        toast.error('Chat connection failed', {
-          description: error.message || 'Unable to connect to chat.',
-        });
-      });
+      socket.on('connect_error', handleConnectionError);
     }
 
     void connect();
