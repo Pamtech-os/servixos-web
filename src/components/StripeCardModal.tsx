@@ -115,18 +115,18 @@ const InnerForm = ({
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (!stripe || !elements) return;
+      if (!stripe) return;
       setError('');
       setIsPending(true);
 
-      const cardNumber = elements.getElement(CardNumberElement);
-      if (!cardNumber) {
-        setIsPending(false);
-        return;
-      }
-
       try {
         if (mode === 'setup') {
+          if (!elements) return;
+          const cardNumber = elements.getElement(CardNumberElement);
+          if (!cardNumber) {
+            setIsPending(false);
+            return;
+          }
           const { error: stripeErr, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
             payment_method: { card: cardNumber },
           });
@@ -140,13 +140,13 @@ const InnerForm = ({
             );
           }
         } else {
-          const { error: stripeErr, paymentIntent } = await stripe.confirmCardPayment(
-            clientSecret,
-            { payment_method: { card: cardNumber } }
-          );
+          // The backend already attempted the charge via stripe.invoices.pay().
+          // handleNextAction handles 3DS if required, and returns immediately
+          // with status 'succeeded' if the charge already went through.
+          const { error: stripeErr, paymentIntent } = await stripe.handleNextAction({ clientSecret });
           if (stripeErr) {
             setError(stripeErr.message ?? 'Payment failed. Please try again.');
-          } else if (paymentIntent.status === 'succeeded') {
+          } else if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'processing') {
             onSuccess();
           }
         }
@@ -159,18 +159,22 @@ const InnerForm = ({
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className='space-y-4'>
-      <StripeField label='Card number'>
-        <CardNumberElement options={stripeStyle} />
-      </StripeField>
+      {mode === 'setup' && (
+        <>
+          <StripeField label='Card number'>
+            <CardNumberElement options={stripeStyle} />
+          </StripeField>
 
-      <div className='grid grid-cols-2 gap-3'>
-        <StripeField label='Expiry date'>
-          <CardExpiryElement options={stripeStyle} />
-        </StripeField>
-        <StripeField label='CVC'>
-          <CardCvcElement options={stripeStyle} />
-        </StripeField>
-      </div>
+          <div className='grid grid-cols-2 gap-3'>
+            <StripeField label='Expiry date'>
+              <CardExpiryElement options={stripeStyle} />
+            </StripeField>
+            <StripeField label='CVC'>
+              <CardCvcElement options={stripeStyle} />
+            </StripeField>
+          </div>
+        </>
+      )}
 
       {error && (
         <motion.p

@@ -1,5 +1,5 @@
 import { HttpError, RequestTimeoutError } from '@/common/network/http-client';
-import { BASE_URL, buildCanonicalString, buildPathWithQuery, getClientToken, hmacSha256Hex, protectedGet, protectedRequest } from './core';
+import { BASE_URL, REAL_API_URL, buildCanonicalString, buildPathWithQuery, getClientToken, hmacSha256Hex, protectedGet, protectedRequest } from './core';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,18 +50,19 @@ async function protectedMultipartUpload<T>(
   businessId: string,
   formData: FormData
 ): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const fetchUrl = `${BASE_URL}${path}`;
+  const signUrl = `${REAL_API_URL}${path}`;
 
   const { token: clientToken } = await getClientToken();
   const timestamp = Date.now().toString();
-  const canonical = buildCanonicalString('POST', buildPathWithQuery(url), timestamp, '');
+  const canonical = buildCanonicalString('POST', buildPathWithQuery(signUrl), timestamp, '');
   const signature = await hmacSha256Hex(canonical, clientToken);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(fetchUrl, {
       method: 'POST',
       body: formData,
       signal: controller.signal,

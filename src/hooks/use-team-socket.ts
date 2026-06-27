@@ -80,6 +80,7 @@ export function useTeamSocket(seenMessageIds: React.RefObject<Set<string>>) {
       if (!active) return;
 
       const socket = io(`${SOCKET_BASE_URL}/chat`, {
+        transports: ['websocket', 'polling'],
         auth: authPayload,
         extraHeaders: headers,
         transportOptions: {
