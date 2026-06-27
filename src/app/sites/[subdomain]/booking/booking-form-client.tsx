@@ -5,6 +5,8 @@ import type { WebsitePublicData, BookingField, BookingFieldKey } from '../types'
 import { DEFAULT_BOOKING_FIELDS } from '../types';
 import { fetchJson } from '@/common/network/http-client';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api-dev.servixos.com/api';
+
 const INPUT_TYPE: Record<BookingFieldKey, string> = {
   clientName: 'text',
   clientEmail: 'email',
@@ -52,7 +54,7 @@ export default function BookingFormClient({ data, subdomain }: Props) {
     }
 
     try {
-      await fetchJson(`/requests?businessSlug=${subdomain}`, { method: 'POST', body: JSON.stringify(body) });
+      await fetchJson(`${API_BASE}/requests?businessSlug=${subdomain}`, { method: 'POST', body: JSON.stringify(body) });
       setSubmitted(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : null;
