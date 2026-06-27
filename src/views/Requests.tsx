@@ -45,6 +45,8 @@ import { buildPaginationMeta } from '@/lib/pagination';
 import {
   requestMessages,
   SOCKET_BASE_URL,
+  getSocketAuthPayload,
+  createSocketAuthHeaders,
   type RequestMessagePayload,
   type ServiceRequest,
   type RequestStatus,
@@ -379,152 +381,166 @@ function RequestChatSheet({
   useEffect(() => {
     if (!open || !requestId || !clientId || !businessId) return;
 
-    const socket = io(`${SOCKET_BASE_URL}/chat`, {
-      auth: { businessId },
-      transports: ['websocket', 'polling'],
-      withCredentials: true,
-    });
-    socketRef.current = socket;
+    let active = true;
 
-    const handleConnected = () => {
-      socket.emit('join_room', { clientId });
-    };
+    async function connect() {
+      const authPayload = await getSocketAuthPayload(businessId);
+      const headers = createSocketAuthHeaders(authPayload);
 
-    const handleServerConnected = () => {
-      hasJoinedRoomRef.current = false;
-    };
+      if (!active) return;
 
-    const handleRoomJoined = ({ history, clientOnline }: RoomJoinedPayload) => {
-      hasJoinedRoomRef.current = true;
-      if (Array.isArray(history)) {
-        setMessages((prev) => mergeRequestMessages(prev, history));
-      }
-      if (clientOnline !== undefined) setIsClientOnline(clientOnline);
-      flushOutboundQueue();
-    };
+      const socket = io(`${SOCKET_BASE_URL}/chat`, {
+        auth: authPayload,
+        extraHeaders: headers,
+        transportOptions: { polling: { extraHeaders: headers } },
+        withCredentials: true,
+      });
+      socketRef.current = socket;
 
-    const handleClientOnline = (data: PresenceEvent) => {
-      const id = data.clientId ?? data.userId ?? data._id ?? data.id;
-      if (!id || id === clientId) setIsClientOnline(true);
-    };
+      const handleConnected = () => {
+        socket.emit('join_room', { clientId });
+      };
 
-    const handleClientOffline = (data: PresenceEvent) => {
-      const id = data.clientId ?? data.userId ?? data._id ?? data.id;
-      if (!id || id === clientId) setIsClientOnline(false);
-    };
+      const handleServerConnected = () => {
+        hasJoinedRoomRef.current = false;
+      };
 
-    const handleMessageReceived = (data: MessageReceivedEvent | RequestMessagePayload) => {
-      const message = (data as MessageReceivedEvent).message ?? (data as RequestMessagePayload);
-      if (!message?.id) return;
-      if (message.clientId && clientId && message.clientId !== clientId) return;
-      setMessages((prev) => mergeRequestMessages(prev, [message]));
-    };
+      const handleRoomJoined = ({ history, clientOnline }: RoomJoinedPayload) => {
+        hasJoinedRoomRef.current = true;
+        if (Array.isArray(history)) {
+          setMessages((prev) => mergeRequestMessages(prev, history));
+        }
+        if (clientOnline !== undefined) setIsClientOnline(clientOnline);
+        flushOutboundQueue();
+      };
 
-    const handleMessageDelivered = ({ messageId, deliveredAt }: MessageDeliveredEvent) => {
-      if (!messageId) return;
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                status: msg.status === 'read' ? 'read' : 'delivered',
-                deliveredAt: deliveredAt ?? msg.deliveredAt,
-              }
-            : msg
-        )
-      );
-    };
+      const handleClientOnline = (data: PresenceEvent) => {
+        const id = data.clientId ?? data.userId ?? data._id ?? data.id;
+        if (!id || id === clientId) setIsClientOnline(true);
+      };
 
-    const handleMessageRead = ({ upToMessageId, readAt }: MessageReadEvent) => {
-      if (!upToMessageId) return;
-      setMessages((prev) => {
-        const upToIndex = prev.findIndex((msg) => msg.id === upToMessageId);
-        if (upToIndex === -1) return prev;
-        return prev.map((msg, idx) =>
-          idx <= upToIndex && msg.sender === 'business'
-            ? { ...msg, status: 'read', readAt: readAt ?? msg.readAt }
-            : msg
+      const handleClientOffline = (data: PresenceEvent) => {
+        const id = data.clientId ?? data.userId ?? data._id ?? data.id;
+        if (!id || id === clientId) setIsClientOnline(false);
+      };
+
+      const handleMessageReceived = (data: MessageReceivedEvent | RequestMessagePayload) => {
+        const message = (data as MessageReceivedEvent).message ?? (data as RequestMessagePayload);
+        if (!message?.id) return;
+        if (message.clientId && clientId && message.clientId !== clientId) return;
+        setMessages((prev) => mergeRequestMessages(prev, [message]));
+      };
+
+      const handleMessageDelivered = ({ messageId, deliveredAt }: MessageDeliveredEvent) => {
+        if (!messageId) return;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  status: msg.status === 'read' ? 'read' : 'delivered',
+                  deliveredAt: deliveredAt ?? msg.deliveredAt,
+                }
+              : msg
+          )
         );
+      };
+
+      const handleMessageRead = ({ upToMessageId, readAt }: MessageReadEvent) => {
+        if (!upToMessageId) return;
+        setMessages((prev) => {
+          const upToIndex = prev.findIndex((msg) => msg.id === upToMessageId);
+          if (upToIndex === -1) return prev;
+          return prev.map((msg, idx) =>
+            idx <= upToIndex && msg.sender === 'business'
+              ? { ...msg, status: 'read', readAt: readAt ?? msg.readAt }
+              : msg
+          );
+        });
+      };
+
+      const handleUserTyping = ({ userId, senderName }: UserTypingEvent) => {
+        if (userId && userId === businessUserId) return;
+        const name = senderName?.trim() || requestClientName;
+        setTypingLabel(`${name} is typing`);
+        if (incomingTypingClearTimerRef.current) {
+          clearTimeout(incomingTypingClearTimerRef.current);
+        }
+        incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
+      };
+
+      const handleUserStoppedTyping = ({ userId }: UserTypingEvent) => {
+        if (userId && userId === businessUserId) return;
+        clearIncomingTypingLabel();
+      };
+
+      const handleClientTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
+        if (typingClientId !== clientId) return;
+        setTypingLabel(`${requestClientName} is typing`);
+        if (incomingTypingClearTimerRef.current) {
+          clearTimeout(incomingTypingClearTimerRef.current);
+        }
+        incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
+      };
+
+      const handleClientStoppedTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
+        if (typingClientId !== clientId) return;
+        clearIncomingTypingLabel();
+      };
+
+      const handleSocketError = ({ message }: SocketErrorEvent) => {
+        toast.error('Chat error', { description: message || 'Unable to complete chat action.' });
+      };
+
+      const handleConnectionError = ({ message }: SocketErrorEvent) => {
+        toast.error('Chat connection error', {
+          description: message || 'Chat disconnected. Please reconnect.',
+        });
+        socket.disconnect();
+      };
+
+      socket.on('connect', handleConnected);
+      socket.on('connected', handleServerConnected);
+      socket.on('room_joined', handleRoomJoined);
+      socket.on('message_received', handleMessageReceived);
+      socket.on('new_message', handleMessageReceived);
+      socket.on('message_delivered', handleMessageDelivered);
+      socket.on('message_read', handleMessageRead);
+      socket.on('user_typing', handleUserTyping);
+      socket.on('typing', handleUserTyping);
+      socket.on('is_typing', handleUserTyping);
+      socket.on('user_stopped_typing', handleUserStoppedTyping);
+      socket.on('typing_stop', handleUserStoppedTyping);
+      socket.on('client_typing', handleClientTyping);
+      socket.on('client_stopped_typing', handleClientStoppedTyping);
+      socket.on('user_online', handleClientOnline);
+      socket.on('client_online', handleClientOnline);
+      socket.on('user_offline', handleClientOffline);
+      socket.on('client_offline', handleClientOffline);
+      socket.on('error', handleSocketError);
+      socket.on('connection_error', handleConnectionError);
+
+      socket.on('connect_error', (error: Error) => {
+        toast.error('Chat connection failed', {
+          description: error.message || 'Unable to connect to chat.',
+        });
       });
-    };
+    }
 
-    const handleUserTyping = ({ userId, senderName }: UserTypingEvent) => {
-      if (userId && userId === businessUserId) return;
-      const name = senderName?.trim() || requestClientName;
-      setTypingLabel(`${name} is typing`);
-      if (incomingTypingClearTimerRef.current) {
-        clearTimeout(incomingTypingClearTimerRef.current);
-      }
-      incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
-    };
-
-    const handleUserStoppedTyping = ({ userId }: UserTypingEvent) => {
-      if (userId && userId === businessUserId) return;
-      clearIncomingTypingLabel();
-    };
-
-    const handleClientTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
-      if (typingClientId !== clientId) return;
-      setTypingLabel(`${requestClientName} is typing`);
-      if (incomingTypingClearTimerRef.current) {
-        clearTimeout(incomingTypingClearTimerRef.current);
-      }
-      incomingTypingClearTimerRef.current = setTimeout(() => setTypingLabel(''), 4000);
-    };
-
-    const handleClientStoppedTyping = ({ clientId: typingClientId }: ClientTypingEvent) => {
-      if (typingClientId !== clientId) return;
-      clearIncomingTypingLabel();
-    };
-
-    const handleSocketError = ({ message }: SocketErrorEvent) => {
-      toast.error('Chat error', { description: message || 'Unable to complete chat action.' });
-    };
-
-    const handleConnectionError = ({ message }: SocketErrorEvent) => {
-      toast.error('Chat connection error', {
-        description: message || 'Chat disconnected. Please reconnect.',
-      });
-      socket.disconnect();
-    };
-
-    socket.on('connect', handleConnected);
-    socket.on('connected', handleServerConnected);
-    socket.on('room_joined', handleRoomJoined);
-    socket.on('message_received', handleMessageReceived);
-    socket.on('new_message', handleMessageReceived);
-    socket.on('message_delivered', handleMessageDelivered);
-    socket.on('message_read', handleMessageRead);
-    socket.on('user_typing', handleUserTyping);
-    socket.on('typing', handleUserTyping);
-    socket.on('is_typing', handleUserTyping);
-    socket.on('user_stopped_typing', handleUserStoppedTyping);
-    socket.on('typing_stop', handleUserStoppedTyping);
-    socket.on('client_typing', handleClientTyping);
-    socket.on('client_stopped_typing', handleClientStoppedTyping);
-    socket.on('user_online', handleClientOnline);
-    socket.on('client_online', handleClientOnline);
-    socket.on('user_offline', handleClientOffline);
-    socket.on('client_offline', handleClientOffline);
-    socket.on('error', handleSocketError);
-    socket.on('connection_error', handleConnectionError);
-
-    socket.on('connect_error', (error: Error) => {
-      toast.error('Chat connection failed', {
-        description: error.message || 'Unable to connect to chat.',
-      });
-    });
+    void connect();
 
     return () => {
+      active = false;
       emitTypingStop();
       clearIncomingTypingLabel();
       setIsClientOnline(false);
       hasJoinedRoomRef.current = false;
-      if (socket.connected) {
-        socket.emit('leave_room', { clientId });
-      }
-      socket.disconnect();
-      if (socketRef.current === socket) {
+      const socket = socketRef.current;
+      if (socket) {
+        if (socket.connected) {
+          socket.emit('leave_room', { clientId });
+        }
+        socket.disconnect();
         socketRef.current = null;
       }
     };
