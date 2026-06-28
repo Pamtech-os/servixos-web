@@ -1190,18 +1190,24 @@ const Signup = () => {
             </Label>
             <div className='flex gap-2'>
               <Input
-                placeholder='Add a service...'
+                placeholder='e.g. House Cleaning'
                 value={newService}
                 onChange={(e) => setNewService(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' && (e.preventDefault(), handleAddService())
-                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleAddService();
+                  }
+                }}
                 className='flex-1'
               />
               <Button size='sm' variant='outline' onClick={handleAddService}>
                 Add
               </Button>
             </div>
+            <p className='text-[10px] text-muted-foreground'>
+              Press <kbd className='rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px]'>Space</kbd> or <kbd className='rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px]'>Enter</kbd> after each service to add it, then type the next one.
+            </p>
             {services.length > 0 && (
               <div className='flex flex-wrap gap-1.5'>
                 {services.map((s) => (

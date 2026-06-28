@@ -84,6 +84,7 @@ interface InnerFormProps {
   clientSecret: string;
   amountCents?: number;
   currency?: string;
+  paymentMethodId?: string;
   onSuccess: (paymentMethodId?: string) => void;
   onClose: () => void;
 }
@@ -93,6 +94,7 @@ const InnerForm = ({
   clientSecret,
   amountCents,
   currency = 'usd',
+  paymentMethodId,
   onSuccess,
   onClose,
 }: InnerFormProps) => {
@@ -140,10 +142,15 @@ const InnerForm = ({
             );
           }
         } else {
-          // The backend already attempted the charge via stripe.invoices.pay().
-          // handleNextAction handles 3DS if required, and returns immediately
-          // with status 'succeeded' if the charge already went through.
-          const { error: stripeErr, paymentIntent } = await stripe.handleNextAction({ clientSecret });
+          // When paymentMethodId is provided (new card just set up), explicitly
+          // pass it so Stripe uses the new card instead of the PaymentIntent's
+          // original (potentially expired) payment method.
+          // Otherwise fall back to handleNextAction for valid-card-on-file charges
+          // where the backend already attempted the charge.
+          const confirmResult = paymentMethodId
+            ? await stripe.confirmCardPayment(clientSecret, { payment_method: paymentMethodId })
+            : await stripe.handleNextAction({ clientSecret });
+          const { error: stripeErr, paymentIntent } = confirmResult;
           if (stripeErr) {
             setError(stripeErr.message ?? 'Payment failed. Please try again.');
           } else if (paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'processing') {
@@ -154,7 +161,7 @@ const InnerForm = ({
         setIsPending(false);
       }
     },
-    [stripe, elements, mode, clientSecret, onSuccess]
+    [stripe, elements, mode, clientSecret, paymentMethodId, onSuccess]
   );
 
   return (
@@ -252,6 +259,7 @@ export interface StripeCardModalProps {
   clientSecret: string;
   amountCents?: number;
   currency?: string;
+  paymentMethodId?: string;
   onSuccess: (paymentMethodId?: string) => void;
 }
 
@@ -262,6 +270,7 @@ const StripeCardModal = ({
   clientSecret,
   amountCents,
   currency,
+  paymentMethodId,
   onSuccess,
 }: StripeCardModalProps) => {
   const elementsOptions: StripeElementsOptions = {
@@ -346,6 +355,7 @@ const StripeCardModal = ({
                       clientSecret={clientSecret}
                       amountCents={amountCents}
                       currency={currency}
+                      paymentMethodId={paymentMethodId}
                       onSuccess={onSuccess}
                       onClose={onClose}
                     />
