@@ -8,7 +8,7 @@ import type { PaginationMeta } from '@/lib/pagination';
 // Always the real external API URL — used for request signing path extraction.
 // The server validates the signature against the path it receives, which is the real API path.
 // NEXT_PUBLIC_API_BASE_URL must be a full URL (e.g. https://api-dev.servixos.com/api).
-const REAL_API_URL =
+export const REAL_API_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api-dev.servixos.com/api';
 
 // In the browser, route through the same-origin proxy so the browser stores and

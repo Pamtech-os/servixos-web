@@ -281,11 +281,14 @@ const MyWebsite = () => {
 
   const handleSaveDesign = async () => {
     try {
-      await saveDesign.mutateAsync({
+      const result = await saveDesign.mutateAsync({
         colorPrimary: primaryColor,
         colorSecondary: secondaryColor,
         font: fontFamily,
       });
+      setPrimaryColor(result.colorPrimary);
+      setSecondaryColor(result.colorSecondary);
+      setFontFamily(result.font);
       toast.success('Design saved!');
     } catch (err) {
       toast.error('Save failed', { description: getApiErrorMessage(err) });
@@ -650,6 +653,15 @@ const MyWebsite = () => {
 
         {/* Design Tab */}
         <TabsContent value='design' className='space-y-4'>
+          {!isPublished && !isLoading && (
+            <div className='flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400'>
+              <Globe size={15} className='mt-0.5 shrink-0' />
+              <span>
+                Design changes save immediately, but won&apos;t appear at your public URL until you
+                publish your website at least once. Click <strong>Publish</strong> above to go live.
+              </span>
+            </div>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className='text-base'>Brand Identity</CardTitle>

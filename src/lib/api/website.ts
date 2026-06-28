@@ -1,6 +1,7 @@
 import { HttpError, RequestTimeoutError } from '@/common/network/http-client';
 import {
   BASE_URL,
+  REAL_API_URL,
   buildCanonicalString,
   buildPathWithQuery,
   getClientToken,
@@ -67,6 +68,12 @@ export interface SaveDesignInput {
   font?: string;
 }
 
+export interface SaveDesignResult {
+  colorPrimary: string;
+  colorSecondary: string;
+  font: string;
+}
+
 export interface SaveContentInput {
   hero?: { headline: string; subheadline: string; ctaText: string };
   about?: { title: string; body: string };
@@ -81,17 +88,18 @@ async function protectedMultipartPatch<T>(
   businessId: string,
   formData: FormData
 ): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const fetchUrl = `${BASE_URL}${path}`;
+  const signUrl = `${REAL_API_URL}${path}`;
   const { token: clientToken } = await getClientToken();
   const timestamp = Date.now().toString();
-  const canonical = buildCanonicalString('PATCH', buildPathWithQuery(url), timestamp, '');
+  const canonical = buildCanonicalString('PATCH', buildPathWithQuery(signUrl), timestamp, '');
   const signature = await hmacSha256Hex(canonical, clientToken);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60_000);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(fetchUrl, {
       method: 'PATCH',
       body: formData,
       signal: controller.signal,
@@ -139,8 +147,8 @@ export const website = {
   saveBookingForm: (businessId: string, input: WebsiteBookingForm): Promise<null> =>
     protectedRequest<null>('PATCH', '/website/booking-form', businessId, input),
 
-  saveDesign: (businessId: string, input: SaveDesignInput): Promise<null> =>
-    protectedRequest<null>('PATCH', '/website/design', businessId, input),
+  saveDesign: (businessId: string, input: SaveDesignInput): Promise<SaveDesignResult> =>
+    protectedRequest<SaveDesignResult>('PATCH', '/website/design', businessId, input),
 
   saveContent: (businessId: string, input: SaveContentInput): Promise<null> =>
     protectedRequest<null>('PATCH', '/website/content', businessId, input),
