@@ -17,6 +17,7 @@ import {
   Receipt,
   Zap,
   ShieldAlert,
+  Loader2,
 } from 'lucide-react';
 
 export interface SubscriptionLockedModalProps {
@@ -27,6 +28,7 @@ export interface SubscriptionLockedModalProps {
   currency?: string;
   lockedSince?: string;
   fromTrial?: boolean;
+  isPending?: boolean;
   onPayNow?: () => void;
 }
 
@@ -38,6 +40,7 @@ const SubscriptionLockedModal = ({
   currency = 'USD',
   lockedSince,
   fromTrial = false,
+  isPending = false,
   onPayNow,
 }: SubscriptionLockedModalProps) => {
   const particles = useMemo(
@@ -308,21 +311,28 @@ const SubscriptionLockedModal = ({
                 >
                   <Button
                     onClick={() => onPayNow?.()}
-                    className='w-full relative overflow-hidden group gradient-bg text-white border-0 hover:scale-[1.01] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow h-11'
+                    disabled={isPending}
+                    className='w-full relative overflow-hidden group gradient-bg text-white border-0 hover:scale-[1.01] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow h-11 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100'
                   >
                     <span className='relative z-10 flex items-center justify-center gap-2 font-semibold'>
-                      <CreditCard className='w-4 h-4' />
-                      Pay {formattedAmount} to restore access
-                      <motion.span
-                        animate={{ x: [0, 4, 0] }}
-                        transition={{
-                          duration: 1.4,
-                          repeat: Infinity,
-                          ease: 'easeInOut',
-                        }}
-                      >
-                        <ArrowRight className='w-4 h-4' />
-                      </motion.span>
+                      {isPending ? (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      ) : (
+                        <CreditCard className='w-4 h-4' />
+                      )}
+                      {isPending ? 'Preparing payment...' : `Pay ${formattedAmount} to restore access`}
+                      {!isPending && (
+                        <motion.span
+                          animate={{ x: [0, 4, 0] }}
+                          transition={{
+                            duration: 1.4,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }}
+                        >
+                          <ArrowRight className='w-4 h-4' />
+                        </motion.span>
+                      )}
                     </span>
                     <motion.span
                       className='absolute inset-0 pointer-events-none'

@@ -362,19 +362,21 @@ const MyWebsite = () => {
           >
             <Eye size={14} /> Preview
           </Button>
-          <Button
-            size='sm'
-            className='gradient-bg gap-1.5 text-primary-foreground'
-            disabled={publishWebsite.isPending}
-            onClick={handlePublish}
-          >
-            {publishWebsite.isPending ? (
-              <Loader2 size={14} className='animate-spin' />
-            ) : (
-              <ExternalLink size={14} />
-            )}{' '}
-            Publish
-          </Button>
+          {!isPublished && (
+            <Button
+              size='sm'
+              className='gradient-bg gap-1.5 text-primary-foreground'
+              disabled={publishWebsite.isPending}
+              onClick={handlePublish}
+            >
+              {publishWebsite.isPending ? (
+                <Loader2 size={14} className='animate-spin' />
+              ) : (
+                <ExternalLink size={14} />
+              )}{' '}
+              Publish
+            </Button>
+          )}
         </div>
       </div>
 

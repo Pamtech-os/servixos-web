@@ -18,6 +18,7 @@ import {
   Calendar,
   Receipt,
   Zap,
+  Loader2,
 } from 'lucide-react';
 
 export interface GracePeriodModalProps {
@@ -29,6 +30,7 @@ export interface GracePeriodModalProps {
   currency?: string;
   daysRemaining?: number;
   dueDate?: string;
+  isPending?: boolean;
   onPayNow?: () => void;
   onCancel?: () => void;
 }
@@ -42,6 +44,7 @@ const GracePeriodModal = ({
   currency = 'USD',
   daysRemaining = 7,
   dueDate,
+  isPending = false,
   onPayNow,
   onCancel,
 }: GracePeriodModalProps) => {
@@ -331,21 +334,28 @@ const GracePeriodModal = ({
 
                   <Button
                     onClick={() => onPayNow?.()}
-                    className='sm:flex-1 relative overflow-hidden group gradient-bg text-white border-0 hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow'
+                    disabled={isPending}
+                    className='sm:flex-1 relative overflow-hidden group gradient-bg text-white border-0 hover:scale-[1.02] transition-all duration-300 shadow-lg hover:shadow-xl glow-shadow disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100'
                   >
                     <span className='relative z-10 flex items-center justify-center gap-2 font-semibold'>
-                      <CreditCard className='w-4 h-4' />
-                      Pay {formattedAmount} now
-                      <motion.span
-                        animate={{ x: [0, 4, 0] }}
-                        transition={{
-                          duration: 1.4,
-                          repeat: Infinity,
-                          ease: 'easeInOut',
-                        }}
-                      >
-                        <ArrowRight className='w-4 h-4' />
-                      </motion.span>
+                      {isPending ? (
+                        <Loader2 className='w-4 h-4 animate-spin' />
+                      ) : (
+                        <CreditCard className='w-4 h-4' />
+                      )}
+                      {isPending ? 'Preparing payment...' : `Pay ${formattedAmount} now`}
+                      {!isPending && (
+                        <motion.span
+                          animate={{ x: [0, 4, 0] }}
+                          transition={{
+                            duration: 1.4,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }}
+                        >
+                          <ArrowRight className='w-4 h-4' />
+                        </motion.span>
+                      )}
                     </span>
                     <motion.span
                       className='absolute inset-0 pointer-events-none'
