@@ -31,7 +31,6 @@ import type { NotificationPreferences } from '@/lib/api-client';
 
 interface BusinessForm {
   name: string;
-  phone: string;
   description: string;
 }
 
@@ -45,14 +44,13 @@ const BusinessTab = () => {
     reset,
     formState: { errors, isDirty },
   } = useForm<BusinessForm>({
-    defaultValues: { name: '', phone: '', description: '' },
+    defaultValues: { name: '', description: '' },
   });
 
   useEffect(() => {
     if (profileData) {
       reset({
         name: profileData.name ?? '',
-        phone: profileData.phone ?? '',
         description: profileData.description ?? '',
       });
     }
@@ -81,7 +79,6 @@ const BusinessTab = () => {
             <Skeleton className='h-10 w-full' />
             <Skeleton className='h-10 w-full' />
           </div>
-          <Skeleton className='h-10 w-full' />
           <Skeleton className='h-20 w-full' />
         </CardContent>
       </Card>
@@ -119,10 +116,6 @@ const BusinessTab = () => {
                 className='cursor-not-allowed opacity-60'
               />
             </div>
-          </div>
-          <div className='space-y-2'>
-            <Label htmlFor='biz-phone'>Phone</Label>
-            <Input id='biz-phone' {...register('phone')} />
           </div>
           <div className='space-y-2'>
             <Label htmlFor='biz-desc'>Description</Label>

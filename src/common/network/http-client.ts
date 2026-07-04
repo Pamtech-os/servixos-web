@@ -15,12 +15,14 @@ export class RequestTimeoutError extends Error {
 export class HttpError extends Error {
   status: number;
   statusText: string;
+  body: unknown;
 
-  constructor(status: number, statusText: string, message?: string) {
+  constructor(status: number, statusText: string, message?: string, body?: unknown) {
     super(message ?? `Request failed with status ${status}`);
     this.name = 'HttpError';
     this.status = status;
     this.statusText = statusText;
+    this.body = body;
   }
 }
 
@@ -30,6 +32,12 @@ function extractApiMessage(payload: unknown): string | undefined {
   const record = payload as Record<string, unknown>;
   const direct = record.message;
   if (typeof direct === 'string' && direct.trim()) return direct;
+
+  // Some 403s (e.g. SUBSCRIPTION_REQUIRED) nest a structured object under `message`.
+  if (direct && typeof direct === 'object') {
+    const nestedMessage = (direct as Record<string, unknown>).message;
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) return nestedMessage;
+  }
 
   const nestedError = record.error;
   if (typeof nestedError === 'string' && nestedError.trim()) return nestedError;
@@ -77,6 +85,31 @@ export function getApiErrorMessage(
   return fallback;
 }
 
+export interface SubscriptionRequiredInfo {
+  currentPlan: string;
+  requiredPlan: string;
+  upgradeUrl: string;
+  message: string;
+}
+
+export function getSubscriptionRequiredInfo(error: unknown): SubscriptionRequiredInfo | null {
+  if (!(error instanceof HttpError) || error.status !== 403) return null;
+  if (!error.body || typeof error.body !== 'object') return null;
+
+  const message = (error.body as Record<string, unknown>).message;
+  if (!message || typeof message !== 'object') return null;
+
+  const info = message as Record<string, unknown>;
+  if (info.code !== 'SUBSCRIPTION_REQUIRED') return null;
+
+  return {
+    currentPlan: typeof info.currentPlan === 'string' ? info.currentPlan : '',
+    requiredPlan: typeof info.requiredPlan === 'string' ? info.requiredPlan : '',
+    upgradeUrl: typeof info.upgradeUrl === 'string' ? info.upgradeUrl : '',
+    message: typeof info.message === 'string' ? info.message : '',
+  };
+}
+
 type JsonRequestOptions = {
   timeoutMs?: number;
 };
@@ -108,13 +141,14 @@ export async function fetchJson<T>(
 
     if (!response.ok) {
       let apiMessage: string | undefined;
+      let body: unknown;
       try {
-        const body = (await response.json()) as unknown;
+        body = (await response.json()) as unknown;
         apiMessage = extractApiMessage(body);
       } catch {
         // response body wasn't JSON — fall back to generic message
       }
-      throw new HttpError(response.status, response.statusText, apiMessage);
+      throw new HttpError(response.status, response.statusText, apiMessage, body);
     }
 
     return (await response.json()) as T;
