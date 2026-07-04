@@ -6,6 +6,17 @@ import type { PaginationMeta } from '@/lib/pagination';
 export type SubscriptionStatus = 'trialing' | 'active' | 'grace_period' | 'locked' | 'canceled';
 export type BillingInterval = 'monthly' | 'yearly';
 
+const PLAN_ORDER: Record<string, number> = { starter: 0, growth: 1, pro: 2 };
+
+export function planOrder(slug: string): number {
+  return PLAN_ORDER[slug] ?? 99;
+}
+
+export function isPlanAtLeast(currentSlug: string | undefined, requiredSlug: string): boolean {
+  if (!currentSlug) return false;
+  return planOrder(currentSlug) >= planOrder(requiredSlug);
+}
+
 export interface SubscriptionPlanLimits {
   maxClients: number;
   maxJobsPerMonth: number;

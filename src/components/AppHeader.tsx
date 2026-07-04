@@ -9,8 +9,10 @@ import {
   Circle,
   Users,
   Loader2,
+  Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useClock } from '@/contexts/ClockContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -47,10 +49,6 @@ const OnlineTeamSection = memo(
 
     return (
       <div className='flex items-center gap-2'>
-        <div className='hidden items-center gap-1 text-xs text-muted-foreground lg:flex'>
-          <Circle size={8} className='fill-emerald-500 text-emerald-500' />
-          <span>{isLoading ? 'Loading...' : `${members.length} Online`}</span>
-        </div>
         <div className='flex -space-x-2'>
           {visibleTeam.map((member) => (
             <Tooltip key={member.name}>
@@ -114,6 +112,97 @@ const OnlineTeamSection = memo(
   }
 );
 OnlineTeamSection.displayName = 'OnlineTeamSection';
+
+type NotificationItem = {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  read: boolean;
+};
+
+// TODO: replace with a real-time notifications query once the API endpoint exists.
+const DUMMY_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: '1',
+    title: 'New booking request',
+    description: 'Jane Doe booked a haircut for 3:00 PM today.',
+    time: '5m ago',
+    read: false,
+  },
+  {
+    id: '2',
+    title: 'Payment received',
+    description: '$45.00 payment confirmed for invoice #1042.',
+    time: '1h ago',
+    read: false,
+  },
+  {
+    id: '3',
+    title: 'Shift reminder',
+    description: 'Your shift starts in 30 minutes.',
+    time: '2h ago',
+    read: true,
+  },
+];
+
+const NotificationBell = memo(() => {
+  const notifications = DUMMY_NOTIFICATIONS;
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          aria-label='Notifications'
+          className='relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+        >
+          <Bell size={18} />
+          {unreadCount > 0 && (
+            <Badge
+              variant='destructive'
+              className='absolute -top-0.5 -right-0.5 h-4 min-w-4 items-center justify-center rounded-full p-0 px-1 text-[10px] leading-none'
+            >
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </Badge>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className='w-72 p-0' align='end'>
+        <div className='border-b border-border px-3 py-2'>
+          <p className='flex items-center gap-1.5 text-xs font-semibold'>
+            <Bell size={12} /> Notifications
+          </p>
+        </div>
+        <div className='max-h-[280px] overflow-y-auto'>
+          <div className='space-y-1 p-2'>
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className='flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50'
+              >
+                {!notification.read && (
+                  <Circle size={6} className='mt-1.5 shrink-0 fill-primary text-primary' />
+                )}
+                <div className={notification.read ? 'ml-3.5' : ''}>
+                  <p className='text-xs font-medium'>{notification.title}</p>
+                  <p className='text-xs text-muted-foreground'>{notification.description}</p>
+                  <p className='mt-0.5 text-[10px] text-muted-foreground'>{notification.time}</p>
+                </div>
+              </div>
+            ))}
+            {notifications.length === 0 && (
+              <p className='px-2 py-4 text-center text-xs text-muted-foreground'>
+                No notifications yet.
+              </p>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+});
+NotificationBell.displayName = 'NotificationBell';
 
 const AppHeader = () => {
   const {
@@ -279,6 +368,7 @@ const AppHeader = () => {
       </div>
 
       <div className='ml-2 flex shrink-0 items-center gap-2 sm:gap-3'>
+        <NotificationBell />
         <div className='hidden text-right sm:block'>
           <p className='text-sm font-semibold'>{displayName}</p>
           <p className='text-xs text-muted-foreground'>

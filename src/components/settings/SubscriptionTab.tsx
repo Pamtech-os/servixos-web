@@ -31,17 +31,13 @@ import { useSubscriptionPlans, useSubscriptionTransactions } from '@/hooks/queri
 import { useUpgradePlanMutation, useSetupIntentMutation, useSubscribeMutation } from '@/hooks/mutations/use-subscription';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import StripeCardModal from '@/components/StripeCardModal';
-import type { SubscriptionPlan, BillingInterval } from '@/lib/api-client';
+import { type SubscriptionPlan, type BillingInterval, planOrder } from '@/lib/api-client';
 import { getApiErrorMessage } from '@/common/network/http-client';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function centsToDisplay(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
-}
-
-function planOrder(slug: string): number {
-  return { starter: 0, growth: 1, pro: 2 }[slug] ?? 99;
 }
 
 function statusBadge(status: string) {

@@ -11,6 +11,7 @@ import TrialingBanner from '@/components/TrialingBanner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useAccess } from '@/hooks/permissions/use-access';
 import { useUiState } from '@/common/state/ui-context';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,7 @@ const AppLayout = ({ children }: PropsWithChildren) => {
   const { auth, isHydrated } = useAuth();
   const { isAiSuggestionsOpen } = useUiState();
   const { sub } = useSubscription();
+  const access = useAccess();
   const pathname = usePathname();
   const router = useRouter();
   const isAIAdvisorRoute = pathname === '/ai-advisor';
@@ -79,6 +81,15 @@ const AppLayout = ({ children }: PropsWithChildren) => {
       router.replace('/pin');
     }
   }, [auth.isLoggedIn, auth.isPinVerified, auth.user?.mustChangePassword, isHydrated, router]);
+
+  // AI Advisor requires the Pro plan — bounce anyone who lands here directly
+  // (e.g. a bookmarked or typed URL) straight to the upgrade flow.
+  useEffect(() => {
+    if (!isHydrated || access.isResolving) return;
+    if (isAIAdvisorRoute && !access.canViewAiAdvisor) {
+      router.replace('/settings?tab=subscription');
+    }
+  }, [isHydrated, access.isResolving, access.canViewAiAdvisor, isAIAdvisorRoute, router]);
 
   useEffect(() => {
     setIsRouteLoading(false);
@@ -120,6 +131,10 @@ const AppLayout = ({ children }: PropsWithChildren) => {
   }, [isRouteLoading]);
 
   if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified || auth.user?.mustChangePassword) {
+    return <AppLayoutSkeleton />;
+  }
+
+  if (isAIAdvisorRoute && (access.isResolving || !access.canViewAiAdvisor)) {
     return <AppLayoutSkeleton />;
   }
 

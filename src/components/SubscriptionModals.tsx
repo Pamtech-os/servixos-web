@@ -7,6 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import GracePeriodModal from '@/components/GracePeriodModal';
 import SubscriptionLockedModal from '@/components/SubscriptionLockedModal';
 import WelcomePlanModal from '@/components/WelcomePlanModal';
+import { subscription as subscriptionApi } from '@/lib/api-client';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
 
 // Lazy-load StripeCardModal so loadStripe() and Stripe's iframes only
 // initialize when a payment modal actually needs to open — not on every page.
@@ -43,6 +46,7 @@ const SubscriptionModals = () => {
     profile,
     triggerPayNow,
     payNowData,
+    payNowPaymentMethodId,
     isPaymentModalOpen,
     setIsPaymentModalOpen,
     isWelcomeModalOpen,
@@ -51,8 +55,36 @@ const SubscriptionModals = () => {
   } = useSubscription();
   const { auth } = useAuth();
 
+  const businessId = auth.user?.businessId ?? '';
+
   const [gracePeriodDismissed, setGracePeriodDismissed] = useState(false);
+  const [setupSecret, setSetupSecret] = useState<string | null>(null);
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [isSetupPending, setIsSetupPending] = useState(false);
   const prevPinVerifiedRef = useRef(auth.isPinVerified);
+
+  const handleLockedPayNow = async () => {
+    if (!sub?.hasPaymentMethod) {
+      setIsSetupPending(true);
+      try {
+        const data = await subscriptionApi.setupIntent(businessId);
+        setSetupSecret(data.clientSecret);
+        setIsSetupModalOpen(true);
+      } catch (err) {
+        toast.error('Failed to load payment form', { description: getApiErrorMessage(err) });
+      } finally {
+        setIsSetupPending(false);
+      }
+    } else {
+      void triggerPayNow();
+    }
+  };
+
+  const handleSetupSuccess = (paymentMethodId?: string) => {
+    setIsSetupModalOpen(false);
+    setSetupSecret(null);
+    void triggerPayNow(paymentMethodId);
+  };
 
   // Reset dismissed state on every new login (isPinVerified: false → true).
   // SubscriptionModals never unmounts, so local state survives logout/login.
@@ -77,7 +109,7 @@ const SubscriptionModals = () => {
     <>
       {/* Grace period modal */}
       <GracePeriodModal
-        open={isGracePeriod && !isPaymentModalOpen && !gracePeriodDismissed}
+        open={isGracePeriod && !isPaymentModalOpen && !isSetupModalOpen && !gracePeriodDismissed}
         onOpenChange={(open) => { if (!open) setGracePeriodDismissed(true); }}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
@@ -85,21 +117,34 @@ const SubscriptionModals = () => {
         currency={sub?.pendingCurrency ?? 'usd'}
         daysRemaining={daysRemaining(sub?.gracePeriodEndsAt ?? null)}
         dueDate={formatDate(sub?.gracePeriodEndsAt ?? null)}
-        onPayNow={() => { setGracePeriodDismissed(false); void triggerPayNow(); }}
+        isPending={isSetupPending}
+        onPayNow={() => { setGracePeriodDismissed(false); void handleLockedPayNow(); }}
         onCancel={() => setGracePeriodDismissed(true)}
       />
 
       {/* Locked modal */}
       <SubscriptionLockedModal
-        open={isLocked && !isPaymentModalOpen}
+        open={isLocked && !isPaymentModalOpen && !isSetupModalOpen}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
         renewalAmount={(sub?.pendingAmountDue ?? 0) / 100}
         currency={sub?.pendingCurrency ?? 'usd'}
         lockedSince={formatDate(sub?.currentPeriodEnd ?? null)}
         fromTrial={sub?.gracePeriodEndsAt === null}
-        onPayNow={() => void triggerPayNow()}
+        isPending={isSetupPending}
+        onPayNow={() => void handleLockedPayNow()}
       />
+
+      {/* Card collection modal (when no payment method is on file) */}
+      {isSetupModalOpen && setupSecret && (
+        <StripeCardModal
+          open={isSetupModalOpen}
+          onClose={() => { setIsSetupModalOpen(false); setSetupSecret(null); }}
+          mode='setup'
+          clientSecret={setupSecret}
+          onSuccess={handleSetupSuccess}
+        />
+      )}
 
       {/* Stripe payment modal (for pay-now) */}
       {isPaymentModalOpen && payNowData && (
@@ -110,6 +155,7 @@ const SubscriptionModals = () => {
           clientSecret={payNowData.clientSecret}
           amountCents={payNowData.amountDue}
           currency={payNowData.currency}
+          paymentMethodId={payNowPaymentMethodId ?? undefined}
           onSuccess={onPaymentSuccess}
         />
       )}

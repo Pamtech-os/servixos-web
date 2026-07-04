@@ -92,10 +92,11 @@ const AppSidebar = () => {
   const { setMobileSidebarOpen, toggleMobileSidebar } = useUiActions();
   const access = useAccess();
 
-  // While permissions are resolving show all items; once resolved hide gated ones.
+  // Hide gated items until access has resolved, so plan/permission-restricted
+  // items (e.g. AI Advisor) never flash into view before being hidden.
   const visibleNavItems = navItems.filter((item) => {
     if (!item.accessKey) return true;
-    if (access.isResolving) return true;
+    if (access.isResolving) return false;
     return !!access[item.accessKey];
   });
   const [dark, setDark] = useState(false);

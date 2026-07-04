@@ -20,6 +20,8 @@ import {
 } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { SUBSCRIPTION_ME_KEY } from '@/hooks/queries/use-subscription';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage } from '@/common/network/http-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,8 +31,9 @@ interface SubscriptionContextType {
   isLoading: boolean;
   refreshSubscription: () => Promise<BusinessProfile | undefined>;
   pollUntilPlanUpdated: (slug: string) => void;
-  triggerPayNow: () => void;
+  triggerPayNow: (paymentMethodId?: string) => void;
   payNowData: PayNowData | null;
+  payNowPaymentMethodId: string | null;
   isPaymentModalOpen: boolean;
   setIsPaymentModalOpen: (open: boolean) => void;
   isWelcomeModalOpen: boolean;
@@ -55,6 +58,7 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
   const [pollingTarget, setPollingTarget] = useState<PollingTarget | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [payNowData, setPayNowData] = useState<PayNowData | null>(null);
+  const [payNowPaymentMethodId, setPayNowPaymentMethodId] = useState<string | null>(null);
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   const pollAttemptsRef = useRef(0);
@@ -111,20 +115,22 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
     setPollingTarget({ type: 'active' });
   }, []);
 
-  const triggerPayNow = useCallback(async () => {
+  const triggerPayNow = useCallback(async (paymentMethodId?: string) => {
     if (!businessId) return;
     try {
       const data = await subscriptionApi.payNow(businessId);
       setPayNowData(data);
+      setPayNowPaymentMethodId(paymentMethodId ?? null);
       setIsPaymentModalOpen(true);
-    } catch {
-      // error surfaced via toast in the calling component
+    } catch (err) {
+      toast.error('Payment failed', { description: getApiErrorMessage(err) });
     }
   }, [businessId]);
 
   const onPaymentSuccess = useCallback(() => {
     setIsPaymentModalOpen(false);
     setPayNowData(null);
+    setPayNowPaymentMethodId(null);
     pollUntilActive();
   }, [pollUntilActive]);
 
@@ -137,6 +143,7 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
       pollUntilPlanUpdated,
       triggerPayNow,
       payNowData,
+      payNowPaymentMethodId,
       isPaymentModalOpen,
       setIsPaymentModalOpen,
       isWelcomeModalOpen,
@@ -150,6 +157,7 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
       pollUntilPlanUpdated,
       triggerPayNow,
       payNowData,
+      payNowPaymentMethodId,
       isPaymentModalOpen,
       isWelcomeModalOpen,
       onPaymentSuccess,
