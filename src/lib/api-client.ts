@@ -25,3 +25,6 @@ export * from './api/subscription';
 export * from './api/settings';
 export * from './api/activity-logs';
 export * from './api/socket';
+export * from './api/ai-insights';
+export * from './api/ai-advisor';
+export * from './api/ai-suggestions';

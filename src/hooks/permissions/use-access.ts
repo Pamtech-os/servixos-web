@@ -2,11 +2,15 @@
 
 import { hasPermission } from '@/common/auth/permissions';
 import { usePermissions } from '@/hooks/permissions/use-permissions';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { isPlanAtLeast } from '@/lib/api-client';
 
 export function useAccess() {
-  const { isOwner, permissions, isResolving } = usePermissions();
+  const { isOwner, permissions, isResolving: isResolvingPermissions } = usePermissions();
+  const { sub, isLoading: isResolvingSubscription } = useSubscription();
 
   const can = (perm: string) => isOwner || hasPermission(permissions, perm);
+  const isResolving = isResolvingPermissions || isResolvingSubscription;
 
   return {
     isOwner,
@@ -25,7 +29,7 @@ export function useAccess() {
     canViewMyWebsite: isOwner,
     canViewReviews: isOwner,
     canViewAiInsights: isOwner,
-    canViewAiAdvisor: isOwner,
+    canViewAiAdvisor: isOwner && isPlanAtLeast(sub?.plan, 'pro'),
     canViewActivityLogs: isOwner,
 
     // ── Teams tabs ────────────────────────────────────────────────────────────

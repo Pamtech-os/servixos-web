@@ -1,22 +1,38 @@
 'use client';
 
 import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Bot, User, DollarSign, Megaphone, Settings2, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { toast } from '@/components/ui/sonner';
+import { getApiErrorMessage, getSubscriptionRequiredInfo } from '@/common/network/http-client';
+import { useAskAdvisor } from '@/hooks/mutations/use-ai-advisor';
+import { useUpgradePlan } from '@/common/state/upgrade-plan-context';
+import type { AdvisorTopic } from '@/lib/api-client';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
+  title?: string;
   content: string;
   timestamp: string;
 }
 
-const quickTopics = [
+const quickTopics: {
+  label: string;
+  topic: AdvisorTopic;
+  icon: typeof DollarSign;
+  prompt: string;
+  iconGradient: string;
+  bg: string;
+  textColor: string;
+}[] = [
   {
     label: 'Pricing Strategy',
+    topic: 'pricing',
     icon: DollarSign,
     prompt:
       'Analyze my current pricing strategy and suggest improvements based on my business data.',
@@ -26,6 +42,7 @@ const quickTopics = [
   },
   {
     label: 'Marketing',
+    topic: 'marketing',
     icon: Megaphone,
     prompt:
       'Give me marketing recommendations to grow my client base based on my current business performance.',
@@ -35,6 +52,7 @@ const quickTopics = [
   },
   {
     label: 'Operations',
+    topic: 'operations',
     icon: Settings2,
     prompt: 'How can I optimize my business operations to improve efficiency and reduce costs?',
     iconGradient: 'linear-gradient(135deg, rgb(139 92 246), rgb(124 58 237))',
@@ -43,119 +61,74 @@ const quickTopics = [
   },
 ];
 
-const mockResponses: Record<string, string> = {
-  pricing: `## 💰 Pricing Analysis
+function timestamp() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-Based on your current data, here are my recommendations:
-
-**Current Average Project Value:** $4,125
-
-### Recommendations:
-1. **Increase base rates by 10-15%** — Your completion rate and client retention suggest strong demand. A modest increase would add ~$1,240/month.
-2. **Introduce tiered pricing** — Offer Basic, Standard, and Premium packages. Clients like Olivia Davis ($21,000 total spent) would benefit from a premium tier.
-3. **Add rush fees** — For urgent requests (like David Park's plumbing repair), charge a 25% premium.
-4. **Bundle services** — Combine related services (e.g., cleaning + carpet cleaning) at a 10% discount to increase average order value.
-
-**Projected Impact:** +18% revenue increase within 3 months.`,
-
-  marketing: `## 📣 Marketing Recommendations
-
-Based on your analytics and client data:
-
-**Current Metrics:** 3,020 visitors | 3.2% conversion rate
-
-### Recommendations:
-1. **Optimize your /services page** — It's your 2nd most visited page (3,240 views). Add clear CTAs and testimonials.
-2. **Re-engage dormant clients** — 3 clients haven't been contacted in 30+ days. A simple follow-up email could generate repeat business worth ~$8,000.
-3. **Leverage top clients for referrals** — Sarah Johnson and Olivia Davis are high-value clients. Offer a 10% referral bonus.
-4. **Improve conversion rate** — Your 3.2% rate is below industry average (5%). A/B test your landing page and add social proof.
-5. **Local SEO** — Most clients are in TX and CA. Focus Google My Business optimization in these areas.
-
-**Projected Impact:** +25% new client acquisition in 60 days.`,
-
-  operations: `## ⚙️ Operations Optimization
-
-Based on your job and scheduling data:
-
-**Current Job Completion Rate:** 40% (Target: 60%+)
-
-### Recommendations:
-1. **Prioritize in-progress jobs** — You have 3 jobs stuck in progress. Assign dedicated time blocks to complete them this week.
-2. **Group jobs by location** — Clients in TX (Houston, Dallas, Austin) could be grouped to save 3-5 hours/week in travel.
-3. **Automate invoice follow-ups** — 4 unpaid invoices ($11,600 outstanding). Set up automatic reminders at 7, 14, and 30 days.
-4. **Streamline onboarding** — Create templates for contracts and proposals. Currently each takes ~45 minutes manually.
-5. **Track employee performance** — Use activity logs to identify bottlenecks and reward top performers.
-
-**Projected Impact:** 30% improvement in operational efficiency within 4 weeks.`,
-};
+function capitalize(value: string) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
 
 const AIAdvisor = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { mutateAsync: askAdvisor, isPending } = useAskAdvisor();
+  const { showUpgradeModal } = useUpgradePlan();
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isTyping]);
+  }, [messages, isPending]);
 
-  const simulateResponse = (prompt: string) => {
-    setIsTyping(true);
-    const lowerPrompt = prompt.toLowerCase();
-    let response = mockResponses.operations;
-    if (lowerPrompt.includes('pricing') || lowerPrompt.includes('price')) {
-      response = mockResponses.pricing;
-    } else if (
-      lowerPrompt.includes('marketing') ||
-      lowerPrompt.includes('client base') ||
-      lowerPrompt.includes('grow')
-    ) {
-      response = mockResponses.marketing;
-    }
+  const handleSend = async (question: string, topic?: AdvisorTopic) => {
+    const trimmed = question.trim();
+    if (!trimmed || isPending) return;
 
-    setTimeout(() => {
+    setMessages((prev) => [
+      ...prev,
+      { id: `msg-${Date.now()}-user`, role: 'user', content: trimmed, timestamp: timestamp() },
+    ]);
+    setInput('');
+
+    try {
+      const result = await askAdvisor({ question: trimmed, topic });
       setMessages((prev) => [
         ...prev,
         {
-          id: `msg-${Date.now()}`,
+          id: `msg-${Date.now()}-assistant`,
           role: 'assistant',
-          content: response,
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          title: result.title,
+          content: result.answer,
+          timestamp: timestamp(),
         },
       ]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const handleSend = (content: string) => {
-    if (!content.trim()) return;
-    const userMsg: Message = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content: content.trim(),
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
-    simulateResponse(content);
+    } catch (err) {
+      const subscriptionInfo = getSubscriptionRequiredInfo(err);
+      if (subscriptionInfo) {
+        const upgradeUrl = subscriptionInfo.upgradeUrl || '/settings?tab=subscription';
+        showUpgradeModal({
+          featureName: 'AI Advisor',
+          currentPlan: capitalize(subscriptionInfo.currentPlan) || undefined,
+          requiredPlan: capitalize(subscriptionInfo.requiredPlan) || 'Pro',
+          onUpgrade: () => router.push(upgradeUrl),
+        });
+        return;
+      }
+      toast.error('Failed to get advice', { description: getApiErrorMessage(err) });
+    }
   };
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend(input);
+      void handleSend(input);
     }
   };
 
-  const showWelcome = messages.length === 0 && !isTyping;
+  const showWelcome = messages.length === 0 && !isPending;
 
   return (
     <div className='flex h-full min-h-0 flex-col overflow-hidden'>
@@ -195,7 +168,7 @@ const AIAdvisor = () => {
                     key={topic.label}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
-                    onClick={() => handleSend(topic.prompt)}
+                    onClick={() => void handleSend(topic.prompt, topic.topic)}
                     className={`flex items-center justify-start gap-3 rounded-xl border border-border p-3 text-left transition-all hover:shadow-md sm:flex-col sm:items-center sm:p-5 sm:text-center ${topic.bg}`}
                   >
                     <div
@@ -246,42 +219,18 @@ const AIAdvisor = () => {
                   >
                     {msg.role === 'assistant' ? (
                       <div className='prose prose-sm dark:prose-invert max-w-none'>
-                        {msg.content.split('\n').map((line, i) => {
-                          if (line.startsWith('## '))
-                            return (
-                              <h3 key={i} className='mt-2 mb-2 text-base font-bold'>
-                                {line.replace('## ', '')}
-                              </h3>
-                            );
-                          if (line.startsWith('### '))
-                            return (
-                              <h4 key={i} className='mt-2 mb-1 text-sm font-semibold'>
-                                {line.replace('### ', '')}
-                              </h4>
-                            );
-                          if (line.startsWith('**') && line.endsWith('**'))
-                            return (
-                              <p key={i} className='font-semibold my-1'>
-                                {line.replace(/\*\*/g, '')}
-                              </p>
-                            );
-                          if (line.match(/^\d+\.\s\*\*/)) {
-                            const parts = line.match(/^(\d+\.)\s\*\*(.+?)\*\*\s*—?\s*(.*)/);
-                            if (parts)
-                              return (
-                                <p key={i} className='my-0.5'>
-                                  {parts[1]} <strong>{parts[2]}</strong>{' '}
-                                  {parts[3] ? `— ${parts[3]}` : ''}
-                                </p>
-                              );
-                          }
-                          if (line.trim() === '') return <br key={i} />;
-                          return (
-                            <p key={i} className='my-0.5'>
-                              {line.replace(/\*\*/g, '')}
+                        {msg.title && (
+                          <h3 className='mt-0 mb-2 text-base font-bold'>{msg.title}</h3>
+                        )}
+                        {msg.content.split('\n').map((line, i) =>
+                          line.trim() === '' ? (
+                            <br key={i} />
+                          ) : (
+                            <p key={i} className='my-0.5 whitespace-pre-wrap'>
+                              {line}
                             </p>
-                          );
-                        })}
+                          )
+                        )}
                       </div>
                     ) : (
                       msg.content
@@ -292,7 +241,7 @@ const AIAdvisor = () => {
             ))}
           </AnimatePresence>
 
-          {isTyping && (
+          {isPending && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -319,8 +268,8 @@ const AIAdvisor = () => {
                   variant='outline'
                   size='sm'
                   className='gap-1.5 text-xs'
-                  onClick={() => handleSend(topic.prompt)}
-                  disabled={isTyping}
+                  onClick={() => void handleSend(topic.prompt, topic.topic)}
+                  disabled={isPending}
                 >
                   <topic.icon size={12} />
                   {topic.label}
@@ -335,13 +284,14 @@ const AIAdvisor = () => {
               onKeyDown={handleKeyDown}
               placeholder='Ask about your business...'
               className='flex-1'
-              disabled={isTyping}
+              maxLength={500}
+              disabled={isPending}
             />
             <motion.div whileTap={{ scale: 0.9 }}>
               <Button
                 size='icon'
-                onClick={() => handleSend(input)}
-                disabled={!input.trim() || isTyping}
+                onClick={() => void handleSend(input)}
+                disabled={!input.trim() || isPending}
                 className='gradient-bg h-10 w-10 rounded-full text-primary-foreground shadow-md'
               >
                 <Send size={16} />

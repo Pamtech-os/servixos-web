@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -16,84 +16,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-
-type InsightCategory = 'revenue' | 'clients' | 'operations' | 'growth';
-type InsightPriority = 'high' | 'medium' | 'low';
-
-interface Insight {
-  id: string;
-  title: string;
-  description: string;
-  category: InsightCategory;
-  priority: InsightPriority;
-  actionLabel?: string;
-  actionHref?: string;
-}
-
-const insights: Insight[] = [
-  {
-    id: 'i1',
-    title: 'Unpaid Invoices Alert',
-    description: 'You have 4 unpaid invoices totaling $11,600. Consider sending payment reminders.',
-    category: 'revenue',
-    priority: 'high',
-    actionLabel: 'View Invoices',
-    actionHref: '/invoices',
-  },
-  {
-    id: 'i2',
-    title: 'Average Project Value Up',
-    description: 'Your average project value is $4,125 — 15% higher than last quarter.',
-    category: 'revenue',
-    priority: 'medium',
-  },
-  {
-    id: 'i3',
-    title: 'Revenue Optimization',
-    description: 'Increasing pricing by 10% would boost monthly revenue by ~$1,240/month.',
-    category: 'growth',
-    priority: 'high',
-  },
-  {
-    id: 'i4',
-    title: 'Client Re-engagement',
-    description:
-      "3 completed clients haven't been contacted in 30+ days. Re-engaging could generate repeat business.",
-    category: 'clients',
-    priority: 'medium',
-    actionLabel: 'View Clients',
-    actionHref: '/clients',
-  },
-  {
-    id: 'i5',
-    title: 'Scheduling Efficiency',
-    description: 'Grouping jobs by location could save 3-5 hours per week in travel time.',
-    category: 'operations',
-    priority: 'medium',
-  },
-  {
-    id: 'i6',
-    title: 'Top Client at Risk',
-    description: 'Olivia Davis has a pending contract worth $12,000. Follow up to secure the deal.',
-    category: 'clients',
-    priority: 'high',
-  },
-  {
-    id: 'i7',
-    title: 'Cash Flow Forecast',
-    description:
-      "Based on current trends, next month's revenue is projected at $21,400 — a 8% increase.",
-    category: 'revenue',
-    priority: 'low',
-  },
-  {
-    id: 'i8',
-    title: 'Job Completion Rate',
-    description: 'Your job completion rate is 40%. Aim for 60%+ by prioritizing in-progress tasks.',
-    category: 'operations',
-    priority: 'high',
-  },
-];
+import { useAiInsights } from '@/hooks/queries/use-ai-insights';
+import type { InsightCategory, InsightSeverity } from '@/lib/api-client';
 
 const categoryConfig: Record<
   InsightCategory,
@@ -125,39 +49,31 @@ const categoryConfig: Record<
   },
 };
 
-const priorityStyles: Record<InsightPriority, string> = {
+const priorityStyles: Record<InsightSeverity, string> = {
   high: 'bg-destructive/10 text-destructive border-destructive/20',
   medium: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
   low: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
 };
 
 const AIInsights = () => {
-  const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<InsightCategory | 'all'>('all');
+  const { data, isLoading, isError, isFetching, refetch } = useAiInsights();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
+  const insights = useMemo(() => data?.insights ?? [], [data]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: insights.length };
-    insights.forEach((i) => {
-      counts[i.category] = (counts[i.category] || 0) + 1;
+    (data?.categories ?? []).forEach((c) => {
+      counts[c.key] = c.count;
     });
     return counts;
-  }, []);
+  }, [data, insights.length]);
 
   const filtered = useMemo(
     () =>
       activeCategory === 'all' ? insights : insights.filter((i) => i.category === activeCategory),
-    [activeCategory]
+    [insights, activeCategory]
   );
-
-  const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 1200);
-  };
 
   return (
     <div className='space-y-6'>
@@ -173,9 +89,10 @@ const AIInsights = () => {
           variant='outline'
           size='sm'
           className='w-full justify-center gap-2 sm:w-auto'
-          onClick={handleRefresh}
+          onClick={() => refetch()}
+          disabled={isFetching}
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} /> Refresh
         </Button>
       </div>
 
@@ -211,7 +128,7 @@ const AIInsights = () => {
       </div>
 
       {/* Insights List */}
-      {loading ? (
+      {isLoading ? (
         <div className='space-y-4'>
           {[...Array(4)].map((_, i) => (
             <Card key={i}>
@@ -227,6 +144,13 @@ const AIInsights = () => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      ) : isError ? (
+        <div className='py-12 text-center'>
+          <Sparkles className='mx-auto mb-3 h-10 w-10 text-muted-foreground dark:text-muted-foreground/60' />
+          <p className='text-sm text-muted-foreground'>
+            Unable to generate AI insights at this time. Please try again.
+          </p>
         </div>
       ) : (
         <div className='space-y-4'>
@@ -253,21 +177,21 @@ const AIInsights = () => {
                           <Badge
                             variant='outline'
                             className={`text-[10px] px-1.5 py-0 ${
-                              priorityStyles[insight.priority]
+                              priorityStyles[insight.severity]
                             }`}
                           >
-                            {insight.priority}
+                            {insight.severity}
                           </Badge>
                         </div>
                         <p className='text-sm text-muted-foreground leading-relaxed'>
                           {insight.description}
                         </p>
-                        {insight.actionHref && (
+                        {insight.action && (
                           <Link
-                            href={insight.actionHref}
+                            href={insight.action.link}
                             className='mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline'
                           >
-                            {insight.actionLabel} <ExternalLink size={10} />
+                            {insight.action.label} <ExternalLink size={10} />
                           </Link>
                         )}
                       </div>
