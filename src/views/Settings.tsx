@@ -31,9 +31,7 @@ import type { NotificationPreferences } from '@/lib/api-client';
 
 interface BusinessForm {
   name: string;
-  email: string;
   phone: string;
-  address: string;
   description: string;
 }
 
@@ -47,16 +45,14 @@ const BusinessTab = () => {
     reset,
     formState: { errors, isDirty },
   } = useForm<BusinessForm>({
-    defaultValues: { name: '', email: '', phone: '', address: '', description: '' },
+    defaultValues: { name: '', phone: '', description: '' },
   });
 
   useEffect(() => {
     if (profileData) {
       reset({
         name: profileData.name ?? '',
-        email: profileData.email ?? '',
         phone: profileData.phone ?? '',
-        address: profileData.address ?? '',
         description: profileData.description ?? '',
       });
     }
@@ -81,10 +77,6 @@ const BusinessTab = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>
-          <div className='grid gap-4 sm:grid-cols-2'>
-            <Skeleton className='h-10 w-full' />
-            <Skeleton className='h-10 w-full' />
-          </div>
           <div className='grid gap-4 sm:grid-cols-2'>
             <Skeleton className='h-10 w-full' />
             <Skeleton className='h-10 w-full' />
@@ -128,28 +120,9 @@ const BusinessTab = () => {
               />
             </div>
           </div>
-          <div className='grid gap-4 sm:grid-cols-2'>
-            <div className='space-y-2'>
-              <Label htmlFor='biz-email'>Email</Label>
-              <Input
-                id='biz-email'
-                type='email'
-                {...register('email', {
-                  pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
-                })}
-              />
-              {errors.email && (
-                <p className='text-xs text-destructive'>{errors.email.message}</p>
-              )}
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='biz-phone'>Phone</Label>
-              <Input id='biz-phone' {...register('phone')} />
-            </div>
-          </div>
           <div className='space-y-2'>
-            <Label htmlFor='biz-address'>Address</Label>
-            <Input id='biz-address' {...register('address')} />
+            <Label htmlFor='biz-phone'>Phone</Label>
+            <Input id='biz-phone' {...register('phone')} />
           </div>
           <div className='space-y-2'>
             <Label htmlFor='biz-desc'>Description</Label>
