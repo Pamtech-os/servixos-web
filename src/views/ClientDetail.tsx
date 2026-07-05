@@ -57,6 +57,12 @@ const jobStatusLabel = (s: JobStatus) => {
 const formatStatus = (s: string) =>
   s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+const formatDate = (value?: string | null) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : format(date, 'PP');
+};
+
 const ClientDetail = () => {
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === 'string' ? params.id : '';
@@ -325,7 +331,7 @@ const ClientDetail = () => {
                         <div>
                           <p className='font-medium'>{job.title}</p>
                           <p className='text-sm text-muted-foreground'>
-                            {format(new Date(job.scheduledDate), 'PP')}
+                            {formatDate(job.scheduledDate)}
                           </p>
                         </div>
                         <span
@@ -432,7 +438,7 @@ const ClientDetail = () => {
                           <p className='font-medium'>{file.filename}</p>
                           <p className='text-sm text-muted-foreground'>
                             {formatFileSize(file.filesizeBytes)} ·{' '}
-                            {format(new Date(file.createdAt), 'PP')}
+                            {formatDate(file.createdAt)}
                           </p>
                         </div>
                         <div className='flex items-center gap-2'>
@@ -494,7 +500,7 @@ const ClientDetail = () => {
                         <div>
                           <p className='font-medium'>{contract.title}</p>
                           <p className='text-sm text-muted-foreground'>
-                            {format(new Date(contract.createdAt), 'PP')}
+                            {formatDate(contract.createdAt)}
                           </p>
                         </div>
                         <div className='flex items-center gap-3'>
