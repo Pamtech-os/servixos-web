@@ -485,7 +485,7 @@ const Payments = () => {
                 <SelectContent>
                   {clientList.map((c) => (
                     <SelectItem key={c._id} value={c._id}>
-                      {c.name}
+                      {c.name} — {c.email}
                     </SelectItem>
                   ))}
                 </SelectContent>

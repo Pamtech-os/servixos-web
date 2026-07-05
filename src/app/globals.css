@@ -96,6 +96,14 @@
   }
 }
 
+.dark .app-toast {
+  background-color: hsl(220 20% 17%) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+}
+
 @layer base {
   * {
     @apply border-border;
