@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -28,10 +27,11 @@ import { useClientFiles } from '@/hooks/queries/use-client-files';
 import { useContracts } from '@/hooks/queries/use-contracts';
 import { useExportClient } from '@/hooks/mutations/use-clients';
 import { useUploadClientFile, useDeleteClientFile } from '@/hooks/mutations/use-files';
-import { mockInvoices, mockMessages } from '@/lib/mock-data';
+import { useClientChatSocket } from '@/hooks/use-client-chat-socket';
+import { mockInvoices } from '@/lib/mock-data';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import ChatUI, { type ChatMessage, type ChatSendPayload } from '@/components/ChatUI';
+import ChatUI from '@/components/ChatUI';
 import { format } from 'date-fns';
 import type { JobStatus } from '@/lib/api-client';
 
@@ -57,6 +57,30 @@ const jobStatusLabel = (s: JobStatus) => {
 const formatStatus = (s: string) =>
   s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+// Mounted only while the Messages tab is active (Radix unmounts inactive TabsContent),
+// so the chat socket connects/disconnects along with tab visibility.
+function ClientMessagesPanel({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const { chatMessages, isClientOnline, typingLabel, sendMessage, emitTypingStart, emitTypingStop } =
+    useClientChatSocket({
+      clientId,
+      peerName: clientName,
+      enabled: !!clientId,
+    });
+
+  return (
+    <ChatUI
+      messages={chatMessages}
+      onSendMessage={sendMessage}
+      clientName={clientName}
+      isClientOnline={isClientOnline}
+      onTypingStart={emitTypingStart}
+      onTypingStop={emitTypingStop}
+      typingIndicatorText={typingLabel}
+      className='h-full border-border/70'
+    />
+  );
+}
+
 const formatDate = (value?: string | null) => {
   if (!value) return '—';
   const date = new Date(value);
@@ -78,20 +102,6 @@ const ClientDetail = () => {
   const deleteFile = useDeleteClientFile(id);
 
   const jobList = jobsData?.data ?? [];
-
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const clientMessages = mockMessages.filter((m) => m.clientId === id);
-    return [...clientMessages].reverse().map((msg) => {
-      const isBusinessSender = /servix|team|business|support/i.test(msg.sender);
-      return {
-        id: `chat-${msg.id}`,
-        sender: isBusinessSender ? 'business' : ('client' as const),
-        senderName: msg.sender,
-        content: msg.content,
-        timestamp: msg.timeSent,
-      };
-    });
-  });
 
   const invoices = mockInvoices.filter((inv) => inv.clientId === id);
 
@@ -117,21 +127,6 @@ const ClientDetail = () => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const handleSendMessage = ({ content }: ChatSendPayload) => {
-    const text = content.trim();
-    if (!text) return;
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: `chat-${Date.now()}`,
-        sender: 'business',
-        senderName: 'Servix Team',
-        content: text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
   };
 
   const handleExport = () => {
@@ -536,12 +531,7 @@ const ClientDetail = () => {
             <Card>
               <CardContent className='p-0'>
                 <div className='h-[400px] px-4 pb-4 pt-2 sm:h-[440px] sm:px-6 sm:pb-6 sm:pt-3'>
-                  <ChatUI
-                    messages={chatMessages}
-                    onSendMessage={handleSendMessage}
-                    clientName={client?.name ?? 'Client'}
-                    className='h-full border-border/70'
-                  />
+                  <ClientMessagesPanel clientId={id} clientName={client?.name ?? 'Client'} />
                 </div>
               </CardContent>
             </Card>
