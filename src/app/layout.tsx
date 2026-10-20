@@ -78,10 +78,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
-  ],
+  // Light mode disabled — app is dark-only.
+  // themeColor: [
+  //   { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
+  //   { media: '(prefers-color-scheme: dark)', color: '#0b1220' },
+  // ],
+  themeColor: '#0b1220',
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -95,7 +98,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <html lang='en' suppressHydrationWarning>
+    <html lang='en' className='dark' style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <body
         suppressHydrationWarning
         className={`${dmSans.variable} ${spaceGrotesk.variable} min-h-screen bg-background text-foreground antialiased`}

@@ -13,8 +13,16 @@ import { AppQueryProvider } from '@/common/providers/query-provider';
 import SubscriptionModals from '@/components/SubscriptionModals';
 
 export function AppProviders({ children }: PropsWithChildren) {
+  // Light mode disabled — app is dark-only. Restore to re-enable theme switching:
+  // <ThemeProvider attribute='class' defaultTheme='system' enableSystem disableTransitionOnChange>
   return (
-    <ThemeProvider attribute='class' defaultTheme='system' enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute='class'
+      forcedTheme='dark'
+      defaultTheme='dark'
+      enableSystem={false}
+      disableTransitionOnChange
+    >
       <AppQueryProvider>
         <TooltipProvider>
           <AuthProvider>

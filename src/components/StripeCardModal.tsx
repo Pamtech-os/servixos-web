@@ -30,8 +30,8 @@ const stripePromise = loadStripe(
 // ─── Stripe element style helpers ────────────────────────────────────────────
 
 function useStripeElementStyle() {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
+  const { resolvedTheme, forcedTheme } = useTheme();
+  const isDark = (forcedTheme ?? resolvedTheme) === 'dark';
 
   return {
     style: {

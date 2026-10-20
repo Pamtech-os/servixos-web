@@ -15,7 +15,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLogin } from '@/hooks/mutations/use-auth';
 import { decodeJwt } from '@/lib/api-client';
 import servixLogo from '@/assets/servix-logo.png';
-import ThemeToggle from '@/components/ThemeToggle';
+// Light mode disabled — app is dark-only.
+// import ThemeToggle from '@/components/ThemeToggle';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -103,7 +104,7 @@ const Login = () => {
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
-      <ThemeToggle />
+      {/* <ThemeToggle /> */}
       {/* Animated background orbs */}
       {[...Array(5)].map((_, i) => (
         <motion.div

@@ -18,8 +18,8 @@ import { useTheme } from 'next-themes';
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY ?? '');
 
 function useStripeElementStyle() {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
+  const { resolvedTheme, forcedTheme } = useTheme();
+  const isDark = (forcedTheme ?? resolvedTheme) === 'dark';
   return {
     style: {
       base: {
