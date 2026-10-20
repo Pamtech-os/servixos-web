@@ -6,11 +6,11 @@ import { CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
 type ToasterProps = ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = 'system' } = useTheme();
+  const { theme = 'system', forcedTheme } = useTheme();
 
   return (
     <Sonner
-      theme={theme as ToasterProps['theme']}
+      theme={(forcedTheme ?? theme) as ToasterProps['theme']}
       className='toaster group'
       duration={6000}
       icons={{

@@ -1,47 +1,77 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronLeft, ChevronRight, X, Target, TrendingUp, Zap } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import ConfirmModal from '@/components/ConfirmModal';
+import { Sparkles, ChevronLeft, ChevronRight, X, CircleCheck } from 'lucide-react';
+import ReviewSuggestionDialog, {
+  CATEGORY_PILL_CLASS,
+  GRADIENT_BUTTON_CLASS,
+} from '@/components/ReviewSuggestionDialog';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from '@/components/ui/sonner';
-import { getApiErrorMessage, HttpError } from '@/common/network/http-client';
-import { useAiSuggestions } from '@/hooks/queries/use-ai-suggestions';
-import { useApplySuggestion, useDismissSuggestion } from '@/hooks/mutations/use-ai-suggestions';
-import type { SuggestionId, SuggestionTag } from '@/lib/api-client';
+import {
+  MOCK_SUGGESTIONS,
+  SUGGESTION_CATEGORY_LABELS,
+  type ReviewableSuggestion,
+  type TrackedSuggestion,
+} from '@/lib/mock/ai-suggestions';
 
 const HINT_STORAGE_KEY = 'ai_suggestions_hint_seen';
+const MOCK_EXECUTE_DELAY_MS = 900;
 
-const tagConfig: Record<SuggestionTag, { label: string; className: string; icon: typeof Zap }> = {
-  quick_win: {
-    label: 'Quick Win',
-    className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
-    icon: Target,
-  },
-  suggested: {
-    label: 'Suggested',
-    className: 'bg-muted text-muted-foreground border-border',
-    icon: Sparkles,
-  },
-  high_impact: {
-    label: 'High Impact',
-    className: 'bg-primary/10 text-primary border-primary/30',
-    icon: TrendingUp,
-  },
+const executedTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
+  const { suggestion, executedAt } = entry;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', damping: 20 }}
+      className='space-y-3 rounded-2xl border border-border bg-background p-4'
+    >
+      <div className='flex items-center justify-between gap-2'>
+        <span className={CATEGORY_PILL_CLASS}>
+          {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
+        </span>
+        <span className='inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-500 dark:text-blue-400'>
+          <CircleCheck size={12} />
+          Tracked
+        </span>
+      </div>
+      <div className='space-y-1.5'>
+        <h3 className='font-display text-[15px] font-semibold leading-snug'>{suggestion.title}</h3>
+        <p className='text-[13px] leading-relaxed text-muted-foreground'>
+          The outcome is tracked automatically: {suggestion.trackedOutcome}
+        </p>
+        <p className='text-[11px] text-muted-foreground'>
+          {suggestion.review.executeLabel} · {executedTimeFormatter.format(executedAt)}
+        </p>
+      </div>
+      <div
+        className={`flex h-10 w-full cursor-default items-center justify-center gap-1.5 text-sm font-medium opacity-60 ${GRADIENT_BUTTON_CLASS} hover:opacity-60`}
+      >
+        <CircleCheck size={16} />
+        Result tracked
+      </div>
+    </motion.div>
+  );
 };
 
 const AISuggestionsPanel = () => {
   const { isAiSuggestionsOpen: isOpen } = useUiState();
   const { setAiSuggestionsOpen } = useUiActions();
-  const { data, isLoading, isError } = useAiSuggestions();
-  const applySuggestion = useApplySuggestion();
-  const dismissSuggestion = useDismissSuggestion();
-  const [confirmAction, setConfirmAction] = useState<{ id: SuggestionId } | null>(null);
+  const [suggestions, setSuggestions] = useState<ReviewableSuggestion[]>(MOCK_SUGGESTIONS);
+  const [tracked, setTracked] = useState<TrackedSuggestion[]>([]);
+  const [reviewing, setReviewing] = useState<ReviewableSuggestion | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
-  const suggestions = data?.suggestions ?? [];
-  const count = data?.count ?? suggestions.length;
+  const count = suggestions.length;
 
   useEffect(() => {
     if (localStorage.getItem(HINT_STORAGE_KEY)) return;
@@ -54,33 +84,27 @@ const AISuggestionsPanel = () => {
     localStorage.setItem(HINT_STORAGE_KEY, 'true');
   };
 
-  const handleDismiss = (id: SuggestionId) => {
-    dismissSuggestion.mutate(id, {
-      onSuccess: () => toast.info('Suggestion dismissed.'),
-      onError: (err) => {
-        if (err instanceof HttpError && err.status === 404) {
-          toast.info('This suggestion is no longer available.');
-          return;
-        }
-        toast.error('Failed to dismiss suggestion', { description: getApiErrorMessage(err) });
-      },
-    });
+  const removeSuggestion = (id: string) =>
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+
+  const handleDismiss = (id: string) => {
+    removeSuggestion(id);
+    toast.info('Suggestion dismissed.');
   };
 
-  const handleApply = () => {
-    if (!confirmAction) return;
-    const { id } = confirmAction;
-    applySuggestion.mutate(id, {
-      onSuccess: (result) => toast.success(result.summary),
-      onError: (err) => {
-        if (err instanceof HttpError && err.status === 404) {
-          toast.info('This suggestion is no longer available.');
-          return;
-        }
-        toast.error('Failed to apply suggestion', { description: getApiErrorMessage(err) });
-      },
+  const handleExecute = async (
+    suggestion: ReviewableSuggestion,
+    executedDraft: string | undefined
+  ) => {
+    setIsExecuting(true);
+    await new Promise((resolve) => setTimeout(resolve, MOCK_EXECUTE_DELAY_MS));
+    setIsExecuting(false);
+    setReviewing(null);
+    removeSuggestion(suggestion.id);
+    setTracked((prev) => [{ suggestion, executedAt: Date.now(), executedDraft }, ...prev]);
+    toast.success(suggestion.review.successMessage, {
+      description: 'The outcome will be tracked automatically.',
     });
-    setConfirmAction(null);
   };
 
   return (
@@ -167,76 +191,67 @@ const AISuggestionsPanel = () => {
 
               {/* Suggestions list */}
               <div className='flex-1 space-y-3 overflow-y-auto p-3 md:p-4'>
-                {isLoading ? (
-                  <div className='space-y-3'>
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div key={i} className='space-y-3 rounded-xl border border-border p-3 md:p-4'>
-                        <div className='flex items-start gap-3'>
-                          <Skeleton className='h-8 w-8 shrink-0 rounded-lg' />
-                          <Skeleton className='h-10 flex-1' />
-                        </div>
-                        <Skeleton className='h-5 w-24 rounded-full' />
+                <AnimatePresence>
+                  {suggestions.map((suggestion) => (
+                    <motion.div
+                      key={suggestion.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
+                      transition={{ type: 'spring', damping: 20 }}
+                      className='space-y-3 rounded-2xl border border-border bg-background p-4'
+                    >
+                      <div className='flex items-start justify-between gap-2'>
+                        <span className={CATEGORY_PILL_CLASS}>
+                          {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
+                        </span>
+                        <button
+                          onClick={() => handleDismiss(suggestion.id)}
+                          aria-label='Dismiss suggestion'
+                          className='-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
+                      <div className='space-y-1.5'>
+                        <h3 className='font-display text-[15px] font-semibold leading-snug'>
+                          {suggestion.title}
+                        </h3>
+                        <p className='text-[13px] leading-relaxed text-muted-foreground'>
+                          {suggestion.description}
+                        </p>
+                      </div>
+                      <p className='text-[13px] leading-relaxed'>
+                        <span className='text-muted-foreground'>Recommended: </span>
+                        {suggestion.recommendation}
+                      </p>
+                      <button
+                        onClick={() => setReviewing(suggestion)}
+                        className={`h-10 w-full text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
+                      >
+                        Review &amp; Execute
+                      </button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {tracked.length > 0 && (
+                  <div className='space-y-3 pt-2'>
+                    <div className='flex items-center gap-2 px-1'>
+                      <CircleCheck size={14} className='text-blue-500 dark:text-blue-400' />
+                      <span className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'>
+                        Tracked
+                      </span>
+                      <span className='text-xs text-muted-foreground'>({tracked.length})</span>
+                    </div>
+                    {tracked.map((entry) => (
+                      <TrackedSuggestionCard key={entry.suggestion.id} entry={entry} />
                     ))}
                   </div>
-                ) : isError ? (
-                  <div className='flex flex-col items-center justify-center py-12 text-center'>
-                    <Sparkles size={32} className='mb-3 text-muted-foreground dark:text-muted-foreground/70' />
-                    <p className='text-sm text-muted-foreground'>
-                      Unable to load suggestions. Please try again.
-                    </p>
-                  </div>
-                ) : (
-                  <AnimatePresence>
-                    {suggestions.map((suggestion) => {
-                      const config = tagConfig[suggestion.tag];
-                      return (
-                        <motion.div
-                          key={suggestion.id}
-                          layout
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
-                          transition={{ type: 'spring', damping: 20 }}
-                          className='space-y-3 rounded-xl border border-border bg-background p-3 md:p-4'
-                        >
-                          <div className='flex items-start gap-3'>
-                            <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10'>
-                              <config.icon size={16} className='text-primary' />
-                            </div>
-                            <p className='text-sm leading-relaxed'>{suggestion.text}</p>
-                          </div>
-                          <div className='flex flex-wrap items-center justify-between gap-2'>
-                            <span
-                              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${config.className}`}
-                            >
-                              {config.label}
-                            </span>
-                            <div className='flex items-center gap-1.5'>
-                              <button
-                                onClick={() => handleDismiss(suggestion.id)}
-                                disabled={dismissSuggestion.isPending || applySuggestion.isPending}
-                                className='rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50'
-                              >
-                                <X size={14} />
-                              </button>
-                              <Button
-                                size='sm'
-                                className='h-7 gap-1 bg-emerald-600 hover:bg-emerald-700 text-primary-foreground text-xs px-3'
-                                onClick={() => setConfirmAction({ id: suggestion.id })}
-                                disabled={dismissSuggestion.isPending || applySuggestion.isPending}
-                              >
-                                Apply
-                              </Button>
-                            </div>
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
                 )}
 
-                {!isLoading && !isError && suggestions.length === 0 && (
+                {suggestions.length === 0 && tracked.length === 0 && (
                   <div className='flex flex-col items-center justify-center py-12 text-center'>
                     <Sparkles
                       size={32}
@@ -254,16 +269,11 @@ const AISuggestionsPanel = () => {
         )}
       </AnimatePresence>
 
-      {/* Confirm Modal */}
-      <ConfirmModal
-        open={!!confirmAction}
-        onOpenChange={(open) => !open && setConfirmAction(null)}
-        title='Apply this suggestion?'
-        description="This will automate the action based on AI recommendations. Choose 'Confirm' to apply or 'Cancel' to handle it manually."
-        confirmLabel='Apply Automatically'
-        cancelLabel="I'll Do It Manually"
-        variant='default'
-        onConfirm={handleApply}
+      <ReviewSuggestionDialog
+        suggestion={reviewing}
+        isExecuting={isExecuting}
+        onOpenChange={(open) => !open && setReviewing(null)}
+        onExecute={handleExecute}
       />
     </>
   );
