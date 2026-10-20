@@ -154,12 +154,13 @@ const Dashboard = () => {
         ].map((stat, i) => (
           <motion.div
             key={stat.title}
+            className='h-full'
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
           >
             {dashboardPending ? (
-              <Card>
+              <Card className='h-full'>
                 <CardContent className='p-6'>
                   <Skeleton className='mb-2 h-4 w-24' />
                   <Skeleton className='mb-1 h-8 w-20' />
@@ -167,7 +168,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             ) : (
-              <Card className={stat.muted ? 'overflow-hidden opacity-50' : 'overflow-hidden'}>
+              <Card className={stat.muted ? 'h-full overflow-hidden opacity-50' : 'h-full overflow-hidden'}>
                 <CardContent className='relative p-6'>
                   <div
                     className='absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground shadow-sm'
@@ -177,7 +178,7 @@ const Dashboard = () => {
                   </div>
                   <p className='text-sm font-medium text-muted-foreground'>{stat.title}</p>
                   <p className='mt-1 font-display text-2xl font-bold'>{stat.value}</p>
-                  <p className='mt-1 text-xs text-muted-foreground'>{stat.sub}</p>
+                  <p className='mt-1 min-h-4 text-xs text-muted-foreground'>{stat.sub}</p>
                 </CardContent>
               </Card>
             )}
