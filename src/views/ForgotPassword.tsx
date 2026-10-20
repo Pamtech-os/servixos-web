@@ -13,7 +13,8 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useForgotPassword, useResetPassword } from '@/hooks/mutations/use-auth';
 import servixLogo from '@/assets/servix-logo.png';
-import ThemeToggle from '@/components/ThemeToggle';
+// Light mode disabled — app is dark-only.
+// import ThemeToggle from '@/components/ThemeToggle';
 import OtpVerify from '@/components/OtpVerify';
 
 const ForgotPassword = () => {
@@ -124,7 +125,7 @@ const ForgotPassword = () => {
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
-      <ThemeToggle />
+      {/* <ThemeToggle /> */}
       <Orbs />
 
       {[...Array(8)].map((_, i) => (

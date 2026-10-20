@@ -48,7 +48,8 @@ const OnboardingCardStep = dynamic(() => import('@/components/OnboardingCardStep
 });
 import { getApiErrorMessage } from '@/common/network/http-client';
 import servixLogo from '@/assets/servix-logo.png';
-import ThemeToggle from '@/components/ThemeToggle';
+// Light mode disabled — app is dark-only.
+// import ThemeToggle from '@/components/ThemeToggle';
 import OtpVerify from '@/components/OtpVerify';
 import PhoneInput, {
   emptyPhone,
@@ -1400,7 +1401,7 @@ const Signup = () => {
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
-      <ThemeToggle />
+      {/* <ThemeToggle /> */}
 
       {[...Array(6)].map((_, i) => (
         <motion.div

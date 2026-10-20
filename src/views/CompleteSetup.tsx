@@ -14,7 +14,8 @@ import { getApiErrorMessage } from '@/common/network/http-client';
 import { useCompleteSetup } from '@/hooks/mutations/use-auth';
 import { useAuth } from '@/contexts/AuthContext';
 import servixLogo from '@/assets/servix-logo.png';
-import ThemeToggle from '@/components/ThemeToggle';
+// Light mode disabled — app is dark-only.
+// import ThemeToggle from '@/components/ThemeToggle';
 
 const PASSWORD_RULE = /^(?=.*[A-Z])(?=.*\d).{8,}$/;
 const PIN_RULE = /^\d{4}$/;
@@ -110,7 +111,7 @@ const CompleteSetup = () => {
 
   return (
     <div className='relative flex min-h-dvh items-center justify-center overflow-x-hidden overflow-y-auto bg-background px-3 py-2 sm:min-h-screen sm:px-4 sm:py-8'>
-      <ThemeToggle />
+      {/* <ThemeToggle /> */}
 
       {[...Array(4)].map((_, i) => (
         <motion.div
