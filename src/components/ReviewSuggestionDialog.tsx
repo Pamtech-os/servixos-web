@@ -12,10 +12,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  SUGGESTION_CATEGORY_LABELS,
-  type ReviewableSuggestion,
-} from '@/lib/ai-suggestions';
+import type { Suggestion, SuggestionCategory } from '@/lib/api-client';
+
+export const SUGGESTION_CATEGORY_LABELS: Record<SuggestionCategory, string> = {
+  cash_flow: 'Cash flow',
+  pricing: 'Pricing',
+  customer_retention: 'Customer retention',
+};
 
 export const GRADIENT_BUTTON_CLASS =
   'rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60';
@@ -24,15 +27,19 @@ export const CATEGORY_PILL_CLASS =
   'inline-flex rounded-full bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400';
 
 interface ReviewSuggestionDialogProps {
-  suggestion: ReviewableSuggestion | null;
+  suggestion: Suggestion | null;
   isExecuting?: boolean;
+  draftError?: string | null;
+  onDraftChange?: () => void;
   onOpenChange: (open: boolean) => void;
-  onExecute: (suggestion: ReviewableSuggestion, draftValue: string | undefined) => void;
+  onExecute: (suggestion: Suggestion, draftValue: string | undefined) => void;
 }
 
 const ReviewSuggestionDialog = ({
   suggestion,
   isExecuting = false,
+  draftError,
+  onDraftChange,
   onOpenChange,
   onExecute,
 }: ReviewSuggestionDialogProps) => {
@@ -44,6 +51,11 @@ const ReviewSuggestionDialog = ({
 
   const draft = suggestion?.review.draft;
   const isDraftEmpty = !!draft && draftValue.trim().length === 0;
+
+  const handleDraftChange = (value: string) => {
+    setDraftValue(value);
+    onDraftChange?.();
+  };
 
   return (
     <Dialog open={!!suggestion} onOpenChange={(open) => !isExecuting && onOpenChange(open)}>
@@ -95,20 +107,26 @@ const ReviewSuggestionDialog = ({
                     id='suggestion-draft'
                     rows={6}
                     value={draftValue}
-                    onChange={(e) => setDraftValue(e.target.value)}
+                    onChange={(e) => handleDraftChange(e.target.value)}
+                    aria-invalid={!!draftError}
                     disabled={isExecuting}
                   />
                 ) : (
                   <Input
                     id='suggestion-draft'
                     value={draftValue}
-                    onChange={(e) => setDraftValue(e.target.value)}
+                    onChange={(e) => handleDraftChange(e.target.value)}
+                    aria-invalid={!!draftError}
                     disabled={isExecuting}
                   />
                 )}
-                <p className='text-[11px] text-muted-foreground'>
-                  Edit before executing — nothing happens until you confirm.
-                </p>
+                {draftError ? (
+                  <p className='text-[11px] text-destructive'>{draftError}</p>
+                ) : (
+                  <p className='text-[11px] text-muted-foreground'>
+                    Edit before executing — nothing happens until you confirm.
+                  </p>
+                )}
               </div>
             )}
 
