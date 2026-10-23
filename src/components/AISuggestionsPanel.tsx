@@ -8,14 +8,12 @@ import ReviewSuggestionDialog, {
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from '@/components/ui/sonner';
 import {
-  MOCK_SUGGESTIONS,
   SUGGESTION_CATEGORY_LABELS,
   type ReviewableSuggestion,
   type TrackedSuggestion,
-} from '@/lib/mock/ai-suggestions';
+} from '@/lib/ai-suggestions';
 
 const HINT_STORAGE_KEY = 'ai_suggestions_hint_seen';
-const MOCK_EXECUTE_DELAY_MS = 900;
 
 const executedTimeFormatter = new Intl.DateTimeFormat(undefined, {
   month: 'short',
@@ -65,10 +63,9 @@ const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
 const AISuggestionsPanel = () => {
   const { isAiSuggestionsOpen: isOpen } = useUiState();
   const { setAiSuggestionsOpen } = useUiActions();
-  const [suggestions, setSuggestions] = useState<ReviewableSuggestion[]>(MOCK_SUGGESTIONS);
+  const [suggestions, setSuggestions] = useState<ReviewableSuggestion[]>([]);
   const [tracked, setTracked] = useState<TrackedSuggestion[]>([]);
   const [reviewing, setReviewing] = useState<ReviewableSuggestion | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
   const count = suggestions.length;
@@ -92,13 +89,7 @@ const AISuggestionsPanel = () => {
     toast.info('Suggestion dismissed.');
   };
 
-  const handleExecute = async (
-    suggestion: ReviewableSuggestion,
-    executedDraft: string | undefined
-  ) => {
-    setIsExecuting(true);
-    await new Promise((resolve) => setTimeout(resolve, MOCK_EXECUTE_DELAY_MS));
-    setIsExecuting(false);
+  const handleExecute = (suggestion: ReviewableSuggestion, executedDraft: string | undefined) => {
     setReviewing(null);
     removeSuggestion(suggestion.id);
     setTracked((prev) => [{ suggestion, executedAt: Date.now(), executedDraft }, ...prev]);
@@ -271,7 +262,6 @@ const AISuggestionsPanel = () => {
 
       <ReviewSuggestionDialog
         suggestion={reviewing}
-        isExecuting={isExecuting}
         onOpenChange={(open) => !open && setReviewing(null)}
         onExecute={handleExecute}
       />
