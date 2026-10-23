@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   SUGGESTION_CATEGORY_LABELS,
   type ReviewableSuggestion,
-} from '@/lib/mock/ai-suggestions';
+} from '@/lib/ai-suggestions';
 
 export const GRADIENT_BUTTON_CLASS =
   'rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60';
@@ -25,14 +25,14 @@ export const CATEGORY_PILL_CLASS =
 
 interface ReviewSuggestionDialogProps {
   suggestion: ReviewableSuggestion | null;
-  isExecuting: boolean;
+  isExecuting?: boolean;
   onOpenChange: (open: boolean) => void;
   onExecute: (suggestion: ReviewableSuggestion, draftValue: string | undefined) => void;
 }
 
 const ReviewSuggestionDialog = ({
   suggestion,
-  isExecuting,
+  isExecuting = false,
   onOpenChange,
   onExecute,
 }: ReviewSuggestionDialogProps) => {
