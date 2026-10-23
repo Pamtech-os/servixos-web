@@ -179,6 +179,7 @@ export type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   skipSigning?: boolean;
+  timeoutMs?: number;
 };
 
 export async function requestEnvelope<T>({
@@ -187,6 +188,7 @@ export async function requestEnvelope<T>({
   body,
   headers = {},
   skipSigning = false,
+  timeoutMs,
 }: RequestOptions): Promise<ApiEnvelope<T>> {
   // fetchUrl goes through the same-origin proxy (browser) so cookies are stored/sent.
   // signUrl uses the real external URL so the HMAC path matches what the server sees.
@@ -212,11 +214,11 @@ export async function requestEnvelope<T>({
       requestHeaders['x-signature'] = await hmacSha256Hex(canonical, token);
     }
 
-    return fetchJson<ApiEnvelope<T>>(fetchUrl, {
-      method,
-      body: bodyString,
-      headers: requestHeaders,
-    });
+    return fetchJson<ApiEnvelope<T>>(
+      fetchUrl,
+      { method, body: bodyString, headers: requestHeaders },
+      { timeoutMs }
+    );
   };
 
   try {
@@ -261,12 +263,17 @@ async function silentRefresh(): Promise<void> {
 
 // ─── Protected helpers ────────────────────────────────────────────────────────
 
-export async function protectedGet<T>(path: string, businessId: string): Promise<ApiEnvelope<T>> {
+export async function protectedGet<T>(
+  path: string,
+  businessId: string,
+  options: { timeoutMs?: number } = {}
+): Promise<ApiEnvelope<T>> {
   const make = () =>
     requestEnvelope<T>({
       method: 'GET',
       path,
       headers: { 'x-business-id': businessId },
+      timeoutMs: options.timeoutMs,
     });
 
   try {

@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronLeft, ChevronRight, X, CircleCheck } from 'lucide-react';
+import { Sparkles, ChevronLeft, ChevronRight, X, CircleCheck, Clock } from 'lucide-react';
 import ReviewSuggestionDialog, {
   CATEGORY_PILL_CLASS,
   GRADIENT_BUTTON_CLASS,
+  SUGGESTION_CATEGORY_LABELS,
 } from '@/components/ReviewSuggestionDialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from '@/components/ui/sonner';
-import {
-  SUGGESTION_CATEGORY_LABELS,
-  type ReviewableSuggestion,
-  type TrackedSuggestion,
-} from '@/lib/ai-suggestions';
+import { getApiErrorMessage, HttpError } from '@/common/network/http-client';
+import { useAiSuggestions, useTrackedSuggestions } from '@/hooks/queries/use-ai-suggestions';
+import { useApplySuggestion, useDismissSuggestion } from '@/hooks/mutations/use-ai-suggestions';
+import type { Suggestion, TrackedSuggestion } from '@/lib/api-client';
 
 const HINT_STORAGE_KEY = 'ai_suggestions_hint_seen';
 
@@ -23,7 +24,7 @@ const executedTimeFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
-  const { suggestion, executedAt } = entry;
+  const isPending = entry.outcome === null;
   return (
     <motion.div
       layout
@@ -33,42 +34,67 @@ const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
       className='space-y-3 rounded-2xl border border-border bg-background p-4'
     >
       <div className='flex items-center justify-between gap-2'>
-        <span className={CATEGORY_PILL_CLASS}>
-          {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
-        </span>
-        <span className='inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-500 dark:text-blue-400'>
-          <CircleCheck size={12} />
-          Tracked
-        </span>
+        <span className={CATEGORY_PILL_CLASS}>{SUGGESTION_CATEGORY_LABELS[entry.category]}</span>
+        {isPending ? (
+          <span className='inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400'>
+            <Clock size={12} />
+            Pending
+          </span>
+        ) : (
+          <span className='inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-500 dark:text-blue-400'>
+            <CircleCheck size={12} />
+            Tracked
+          </span>
+        )}
       </div>
       <div className='space-y-1.5'>
-        <h3 className='font-display text-[15px] font-semibold leading-snug'>{suggestion.title}</h3>
+        <h3 className='font-display text-[15px] font-semibold leading-snug'>{entry.title}</h3>
         <p className='text-[13px] leading-relaxed text-muted-foreground'>
-          The outcome is tracked automatically: {suggestion.trackedOutcome}
+          {isPending
+            ? 'Waiting for a result. The outcome is tracked automatically.'
+            : `The outcome is tracked automatically: ${entry.outcome}`}
         </p>
         <p className='text-[11px] text-muted-foreground'>
-          {suggestion.review.executeLabel} · {executedTimeFormatter.format(executedAt)}
+          {entry.executeLabel} · {executedTimeFormatter.format(new Date(entry.executedAt))}
         </p>
       </div>
       <div
         className={`flex h-10 w-full cursor-default items-center justify-center gap-1.5 text-sm font-medium opacity-60 ${GRADIENT_BUTTON_CLASS} hover:opacity-60`}
       >
-        <CircleCheck size={16} />
-        Result tracked
+        {isPending ? <Clock size={16} /> : <CircleCheck size={16} />}
+        {isPending ? 'Tracking result' : 'Result tracked'}
       </div>
     </motion.div>
   );
 };
 
+const SuggestionSkeleton = () => (
+  <div className='space-y-3 rounded-2xl border border-border bg-background p-4'>
+    <Skeleton className='h-5 w-24 rounded-full' />
+    <div className='space-y-2'>
+      <Skeleton className='h-4 w-4/5' />
+      <Skeleton className='h-3 w-full' />
+      <Skeleton className='h-3 w-2/3' />
+    </div>
+    <Skeleton className='h-10 w-full rounded-full' />
+  </div>
+);
+
 const AISuggestionsPanel = () => {
   const { isAiSuggestionsOpen: isOpen } = useUiState();
   const { setAiSuggestionsOpen } = useUiActions();
-  const [suggestions, setSuggestions] = useState<ReviewableSuggestion[]>([]);
-  const [tracked, setTracked] = useState<TrackedSuggestion[]>([]);
-  const [reviewing, setReviewing] = useState<ReviewableSuggestion | null>(null);
+  const { data, isLoading, isError } = useAiSuggestions();
+  const { data: trackedData } = useTrackedSuggestions(isOpen);
+  const applySuggestion = useApplySuggestion();
+  const dismissSuggestion = useDismissSuggestion();
+  const [reviewing, setReviewing] = useState<Suggestion | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
 
-  const count = suggestions.length;
+  const suggestions = data?.suggestions ?? [];
+  const count = data?.count ?? suggestions.length;
+  const tracked = trackedData?.tracked ?? [];
+  const isMutating = applySuggestion.isPending || dismissSuggestion.isPending;
 
   useEffect(() => {
     if (localStorage.getItem(HINT_STORAGE_KEY)) return;
@@ -81,21 +107,50 @@ const AISuggestionsPanel = () => {
     localStorage.setItem(HINT_STORAGE_KEY, 'true');
   };
 
-  const removeSuggestion = (id: string) =>
-    setSuggestions((prev) => prev.filter((s) => s.id !== id));
-
-  const handleDismiss = (id: string) => {
-    removeSuggestion(id);
-    toast.info('Suggestion dismissed.');
+  const openReview = (suggestion: Suggestion) => {
+    setDraftError(null);
+    setReviewing(suggestion);
   };
 
-  const handleExecute = (suggestion: ReviewableSuggestion, executedDraft: string | undefined) => {
-    setReviewing(null);
-    removeSuggestion(suggestion.id);
-    setTracked((prev) => [{ suggestion, executedAt: Date.now(), executedDraft }, ...prev]);
-    toast.success(suggestion.review.successMessage, {
-      description: 'The outcome will be tracked automatically.',
+  const handleDismiss = (id: string) => {
+    dismissSuggestion.mutate(id, {
+      onSuccess: () => toast.info('Suggestion dismissed.'),
+      onError: (err) => {
+        if (err instanceof HttpError && err.status === 404) {
+          toast.info('This suggestion is no longer available.');
+          return;
+        }
+        toast.error('Failed to dismiss suggestion', { description: getApiErrorMessage(err) });
+      },
     });
+  };
+
+  const handleExecute = (suggestion: Suggestion, draftValue: string | undefined) => {
+    setDraftError(null);
+    applySuggestion.mutate(
+      { suggestion, draftValue },
+      {
+        onSuccess: () => {
+          setReviewing(null);
+          toast.success(suggestion.review.successMessage, {
+            description: 'The outcome will be tracked automatically.',
+          });
+        },
+        onError: (err) => {
+          if (err instanceof HttpError && err.status === 404) {
+            setReviewing(null);
+            toast.info('This suggestion is no longer available.');
+            return;
+          }
+          // Validation errors on the draft are shown inline; the dialog keeps the user's edits.
+          if (err instanceof HttpError && err.status === 400 && suggestion.review.draft) {
+            setDraftError(getApiErrorMessage(err));
+            return;
+          }
+          toast.error('Failed to execute suggestion', { description: getApiErrorMessage(err) });
+        },
+      }
+    );
   };
 
   return (
@@ -182,6 +237,26 @@ const AISuggestionsPanel = () => {
 
               {/* Suggestions list */}
               <div className='flex-1 space-y-3 overflow-y-auto p-3 md:p-4'>
+                {isLoading && (
+                  <div className='space-y-3'>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <SuggestionSkeleton key={i} />
+                    ))}
+                  </div>
+                )}
+
+                {isError && (
+                  <div className='flex flex-col items-center justify-center py-12 text-center'>
+                    <Sparkles
+                      size={32}
+                      className='mb-3 text-muted-foreground dark:text-muted-foreground/70'
+                    />
+                    <p className='text-sm text-muted-foreground'>
+                      Unable to load suggestions. Please try again.
+                    </p>
+                  </div>
+                )}
+
                 <AnimatePresence>
                   {suggestions.map((suggestion) => (
                     <motion.div
@@ -199,8 +274,9 @@ const AISuggestionsPanel = () => {
                         </span>
                         <button
                           onClick={() => handleDismiss(suggestion.id)}
+                          disabled={isMutating}
                           aria-label='Dismiss suggestion'
-                          className='-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
+                          className='-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50'
                         >
                           <X size={14} />
                         </button>
@@ -218,7 +294,8 @@ const AISuggestionsPanel = () => {
                         {suggestion.recommendation}
                       </p>
                       <button
-                        onClick={() => setReviewing(suggestion)}
+                        onClick={() => openReview(suggestion)}
+                        disabled={isMutating}
                         className={`h-10 w-full text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
                       >
                         Review &amp; Execute
@@ -237,12 +314,12 @@ const AISuggestionsPanel = () => {
                       <span className='text-xs text-muted-foreground'>({tracked.length})</span>
                     </div>
                     {tracked.map((entry) => (
-                      <TrackedSuggestionCard key={entry.suggestion.id} entry={entry} />
+                      <TrackedSuggestionCard key={entry.id} entry={entry} />
                     ))}
                   </div>
                 )}
 
-                {suggestions.length === 0 && tracked.length === 0 && (
+                {!isLoading && !isError && suggestions.length === 0 && tracked.length === 0 && (
                   <div className='flex flex-col items-center justify-center py-12 text-center'>
                     <Sparkles
                       size={32}
@@ -262,6 +339,9 @@ const AISuggestionsPanel = () => {
 
       <ReviewSuggestionDialog
         suggestion={reviewing}
+        isExecuting={applySuggestion.isPending}
+        draftError={draftError}
+        onDraftChange={() => setDraftError(null)}
         onOpenChange={(open) => !open && setReviewing(null)}
         onExecute={handleExecute}
       />
