@@ -1,14 +1,20 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   onboarding,
-  website,
+  onboardingWorkspace,
+  type ApproveSetupInput,
   type CreateAccountInput,
-  type CreateBusinessInput,
+  type OnboardingProfile,
+  type OnboardingSession,
+  type ProfileSectionKey,
+  type ProfileSectionMap,
   type SetPinInput,
   type VerifyEmailInput,
+  type WebsitePreview,
 } from '@/lib/api-client';
+import { ONBOARDING_PREVIEW_KEY, ONBOARDING_SESSION_KEY } from '@/hooks/queries/use-onboarding';
 
 export function useCreateAccount() {
   return useMutation({
@@ -34,14 +40,47 @@ export function useSetPin() {
   });
 }
 
-export function useCreateBusiness() {
+function useWriteSection() {
+  const queryClient = useQueryClient();
+  return (section: ProfileSectionKey, data: OnboardingProfile[ProfileSectionKey]) => {
+    queryClient.setQueryData<OnboardingSession>([ONBOARDING_SESSION_KEY], (prev) =>
+      prev ? { ...prev, profile: { ...prev.profile, [section]: data } } : prev
+    );
+  };
+}
+
+export function useUpdateProfileSection() {
+  const writeSection = useWriteSection();
   return useMutation({
-    mutationFn: (input: CreateBusinessInput) => onboarding.createBusiness(input),
+    mutationFn: ({
+      section,
+      data,
+    }: {
+      section: ProfileSectionKey;
+      data: ProfileSectionMap[ProfileSectionKey];
+    }) => onboardingWorkspace.updateSection(section, data),
+    onSuccess: (stored, { section }) => writeSection(section, stored),
   });
 }
 
-export function useGenerateWebsite() {
+export function useApproveProfileSection() {
+  const writeSection = useWriteSection();
   return useMutation({
-    mutationFn: (businessId: string) => website.generate(businessId),
+    mutationFn: (section: ProfileSectionKey) => onboardingWorkspace.approveSection(section),
+    onSuccess: (stored, section) => writeSection(section, stored),
+  });
+}
+
+export function useRegeneratePreview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (instructions?: string) => onboardingWorkspace.regeneratePreview(instructions),
+    onSuccess: (preview) => queryClient.setQueryData<WebsitePreview>([ONBOARDING_PREVIEW_KEY], preview),
+  });
+}
+
+export function useApproveSetup() {
+  return useMutation({
+    mutationFn: (input: ApproveSetupInput) => onboardingWorkspace.approve(input),
   });
 }

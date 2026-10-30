@@ -112,7 +112,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { pinVerified, userRole } = (() => {
       try {
         const decoded = decodeJwt(data.accessToken);
-        return { pinVerified: decoded.pinVerified, userRole: decoded.userRole };
+        // Onboarding-session tokens may omit these claims.
+        return { pinVerified: decoded.pinVerified ?? false, userRole: decoded.userRole ?? 'owner' };
       } catch {
         return { pinVerified: false, userRole: 'owner' as const };
       }

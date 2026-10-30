@@ -85,6 +85,32 @@ export function getApiErrorMessage(
   return fallback;
 }
 
+export type ApiErrorCode =
+  | 'ONBOARDING_INCOMPLETE'
+  | 'PAYMENT_METHOD_REQUIRED'
+  | 'SETUP_NOT_APPROVED'
+  | 'SUBSCRIPTION_REQUIRED';
+
+/** Reads the machine-readable `code` from an API error. Branch on this, never on message text. */
+export function getApiErrorCode(error: unknown): ApiErrorCode | null {
+  if (!(error instanceof HttpError) || !error.body || typeof error.body !== 'object') return null;
+  const record = error.body as Record<string, unknown>;
+  if (typeof record.code === 'string') return record.code as ApiErrorCode;
+  // Legacy shape: SUBSCRIPTION_REQUIRED nested its code under `message`.
+  const nested = record.message;
+  if (nested && typeof nested === 'object') {
+    const code = (nested as Record<string, unknown>).code;
+    if (typeof code === 'string') return code as ApiErrorCode;
+  }
+  return null;
+}
+
+export function getApiErrorDetails<T = Record<string, unknown>>(error: unknown): T | null {
+  if (!(error instanceof HttpError) || !error.body || typeof error.body !== 'object') return null;
+  const details = (error.body as Record<string, unknown>).details;
+  return details && typeof details === 'object' ? (details as T) : null;
+}
+
 export interface SubscriptionRequiredInfo {
   currentPlan: string;
   requiredPlan: string;
@@ -94,13 +120,12 @@ export interface SubscriptionRequiredInfo {
 
 export function getSubscriptionRequiredInfo(error: unknown): SubscriptionRequiredInfo | null {
   if (!(error instanceof HttpError) || error.status !== 403) return null;
-  if (!error.body || typeof error.body !== 'object') return null;
+  if (getApiErrorCode(error) !== 'SUBSCRIPTION_REQUIRED') return null;
 
-  const message = (error.body as Record<string, unknown>).message;
-  if (!message || typeof message !== 'object') return null;
-
-  const info = message as Record<string, unknown>;
-  if (info.code !== 'SUBSCRIPTION_REQUIRED') return null;
+  const body = error.body as Record<string, unknown>;
+  const source =
+    body.message && typeof body.message === 'object' ? body.message : (body.details ?? body);
+  const info = source as Record<string, unknown>;
 
   return {
     currentPlan: typeof info.currentPlan === 'string' ? info.currentPlan : '',

@@ -1,7 +1,8 @@
 // This module uses browser-only APIs (SubtleCrypto, navigator.onLine, sessionStorage).
 // Only call these functions from client-side code ('use client' components or hooks).
 
-import { fetchJson, HttpError } from '@/common/network/http-client';
+import { fetchJson, getApiErrorCode, HttpError } from '@/common/network/http-client';
+import { apiEvents } from '@/lib/api-events';
 import { tokenStore } from '@/lib/token-store';
 import type { PaginationMeta } from '@/lib/pagination';
 
@@ -49,9 +50,10 @@ export interface PaginatedListResponse<T> {
 
 export interface JwtPayload {
   sub: string;
-  businessId: string;
-  userRole: 'owner' | 'employee' | 'client';
-  pinVerified: boolean;
+  // Onboarding-session tokens carry no business and may omit role/PIN claims.
+  businessId: string | null;
+  userRole?: 'owner' | 'employee' | 'client';
+  pinVerified?: boolean;
   iat: number;
   exp: number;
 }
@@ -182,6 +184,29 @@ export type RequestOptions = {
   timeoutMs?: number;
 };
 
+export async function buildSignedHeaders(
+  method: RequestOptions['method'],
+  path: string,
+  body: unknown,
+  forceRefreshClientToken = false
+): Promise<Record<string, string>> {
+  // Sign against the real external URL so the HMAC path matches what the server sees.
+  const { token } = await getClientToken(forceRefreshClientToken);
+  const timestamp = Date.now().toString();
+  const canonical = buildCanonicalString(
+    method,
+    buildPathWithQuery(`${REAL_API_URL}${path}`),
+    timestamp,
+    buildCanonicalBody(body)
+  );
+
+  return {
+    'x-client-token': token,
+    'x-timestamp': timestamp,
+    'x-signature': await hmacSha256Hex(canonical, token),
+  };
+}
+
 export async function requestEnvelope<T>({
   method,
   path,
@@ -190,29 +215,14 @@ export async function requestEnvelope<T>({
   skipSigning = false,
   timeoutMs,
 }: RequestOptions): Promise<ApiEnvelope<T>> {
-  // fetchUrl goes through the same-origin proxy (browser) so cookies are stored/sent.
-  // signUrl uses the real external URL so the HMAC path matches what the server sees.
+  // Goes through the same-origin proxy (browser) so cookies are stored/sent.
   const fetchUrl = `${BASE_URL}${path}`;
-  const signUrl = `${REAL_API_URL}${path}`;
   const bodyString = body === undefined ? undefined : JSON.stringify(body);
 
   const send = async (forceRefreshClientToken = false): Promise<ApiEnvelope<T>> => {
-    const requestHeaders: Record<string, string> = { ...headers };
-
-    if (!skipSigning) {
-      const { token } = await getClientToken(forceRefreshClientToken);
-      const timestamp = Date.now().toString();
-      const canonical = buildCanonicalString(
-        method,
-        buildPathWithQuery(signUrl),
-        timestamp,
-        buildCanonicalBody(body)
-      );
-
-      requestHeaders['x-client-token'] = token;
-      requestHeaders['x-timestamp'] = timestamp;
-      requestHeaders['x-signature'] = await hmacSha256Hex(canonical, token);
-    }
+    const requestHeaders: Record<string, string> = skipSigning
+      ? { ...headers }
+      : { ...headers, ...(await buildSignedHeaders(method, path, body, forceRefreshClientToken)) };
 
     return fetchJson<ApiEnvelope<T>>(
       fetchUrl,
@@ -227,6 +237,8 @@ export async function requestEnvelope<T>({
     if (!skipSigning && err instanceof HttpError && isSignatureTokenError(err)) {
       return send(true);
     }
+    const code = getApiErrorCode(err);
+    if (code) apiEvents.emit(code);
     throw err;
   }
 }
@@ -263,19 +275,8 @@ async function silentRefresh(): Promise<void> {
 
 // ─── Protected helpers ────────────────────────────────────────────────────────
 
-export async function protectedGet<T>(
-  path: string,
-  businessId: string,
-  options: { timeoutMs?: number } = {}
-): Promise<ApiEnvelope<T>> {
-  const make = () =>
-    requestEnvelope<T>({
-      method: 'GET',
-      path,
-      headers: { 'x-business-id': businessId },
-      timeoutMs: options.timeoutMs,
-    });
-
+/** Runs `make`, and on a 401 refreshes the session once and retries. */
+export async function withSessionRefresh<T>(make: () => Promise<T>): Promise<T> {
   try {
     return await make();
   } catch (err) {
@@ -297,39 +298,53 @@ export async function protectedGet<T>(
   }
 }
 
+export async function protectedGet<T>(
+  path: string,
+  businessId: string,
+  options: { timeoutMs?: number } = {}
+): Promise<ApiEnvelope<T>> {
+  return withSessionRefresh(() =>
+    requestEnvelope<T>({
+      method: 'GET',
+      path,
+      headers: { 'x-business-id': businessId },
+      timeoutMs: options.timeoutMs,
+    })
+  );
+}
+
 export async function protectedRequest<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
   businessId: string,
   body?: unknown
 ): Promise<T> {
-  const make = () =>
+  const envelope = await withSessionRefresh(() =>
     requestEnvelope<T>({
       method,
       path,
       body,
       headers: { 'x-business-id': businessId },
-    });
+    })
+  );
+  return envelope.data;
+}
 
-  try {
-    const envelope = await make();
-    return envelope.data;
-  } catch (err) {
-    if (!(err instanceof HttpError) || err.status !== 401) throw err;
+// Onboarding sessions have no business yet, so these omit x-business-id.
 
-    try {
-      await silentRefresh();
-    } catch {
-      tokenStore.notifyExpired();
-      throw err;
-    }
+export async function sessionGet<T>(path: string): Promise<T> {
+  const envelope = await withSessionRefresh(() => requestEnvelope<T>({ method: 'GET', path }));
+  return envelope.data;
+}
 
-    try {
-      const envelope = await make();
-      return envelope.data;
-    } catch (retryErr) {
-      if (retryErr instanceof HttpError && retryErr.status === 401) tokenStore.notifyExpired();
-      throw retryErr;
-    }
-  }
+export async function sessionRequest<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  options: { timeoutMs?: number } = {}
+): Promise<T> {
+  const envelope = await withSessionRefresh(() =>
+    requestEnvelope<T>({ method, path, body, timeoutMs: options.timeoutMs })
+  );
+  return envelope.data;
 }

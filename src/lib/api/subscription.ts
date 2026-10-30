@@ -3,7 +3,13 @@ import type { PaginationMeta } from '@/lib/pagination';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SubscriptionStatus = 'trialing' | 'active' | 'grace_period' | 'locked' | 'canceled';
+export type SubscriptionStatus =
+  | 'incomplete'
+  | 'trialing'
+  | 'active'
+  | 'grace_period'
+  | 'locked'
+  | 'canceled';
 export type BillingInterval = 'monthly' | 'yearly';
 
 const PLAN_ORDER: Record<string, number> = { starter: 0, growth: 1, pro: 2 };
@@ -63,7 +69,36 @@ export interface BusinessProfile {
 export interface SubscribeInput {
   plan: string;
   billingInterval: BillingInterval;
-  paymentMethodId?: string;
+  paymentMethodId: string;
+  acceptTerms: true;
+  /** The termsVersion from the trial quote the user actually saw. */
+  termsVersion: string;
+}
+
+export interface SubscribeResult {
+  trialEndsAt: string;
+  firstChargeAt: string;
+}
+
+export interface TrialQuote {
+  plan: string;
+  planName: string;
+  billingInterval: BillingInterval;
+  /** Minor units (pence, cents, kobo). Display `formattedAmount` instead. */
+  amount: number;
+  currency: string;
+  formattedAmount: string;
+  trialDays: number;
+  trialEndsAt: string;
+  firstChargeAt: string;
+  taxMode: 'none' | 'exclusive' | 'inclusive';
+  terms: {
+    trial: string;
+    cancellation: string;
+    reminder: string;
+    tax: string;
+  };
+  termsVersion: string;
 }
 
 export interface UpgradePlanInput {
@@ -119,8 +154,20 @@ export const subscription = {
   setupIntent: (businessId: string): Promise<SetupIntentData> =>
     protectedRequest<SetupIntentData>('POST', '/subscription/setup-intent', businessId),
 
-  subscribe: (businessId: string, input: SubscribeInput): Promise<{ trialEndsAt: string }> =>
-    protectedRequest<{ trialEndsAt: string }>('POST', '/subscription/subscribe', businessId, input),
+  trialQuote: async (
+    businessId: string,
+    query: { plan: string; billingInterval: BillingInterval }
+  ): Promise<TrialQuote> => {
+    const params = new URLSearchParams(query);
+    const envelope = await protectedGet<TrialQuote>(
+      `/subscription/trial-quote?${params.toString()}`,
+      businessId
+    );
+    return envelope.data;
+  },
+
+  subscribe: (businessId: string, input: SubscribeInput): Promise<SubscribeResult> =>
+    protectedRequest<SubscribeResult>('POST', '/subscription/subscribe', businessId, input),
 
   upgrade: (businessId: string, input: UpgradePlanInput): Promise<null> =>
     protectedRequest<null>('POST', '/subscription/upgrade', businessId, input),
