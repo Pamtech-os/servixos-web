@@ -168,15 +168,30 @@ interface PhoneInputProps {
   onChange: (v: PhoneValue) => void;
   error?: string;
   id?: string;
+  /** Restricts the picker to these countries (no "Popular" section). */
+  allowedCountries?: readonly CountryCode[];
 }
 
-const PhoneInput = ({ value, onChange, error, id = 'phone-input' }: PhoneInputProps) => {
+const PhoneInput = ({
+  value,
+  onChange,
+  error,
+  id = 'phone-input',
+  allowedCountries,
+}: PhoneInputProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const selected = ALL_COUNTRIES.find((c) => c.code === value.country) ?? ALL_COUNTRIES[0];
+  const countries = useMemo(
+    () =>
+      allowedCountries
+        ? ALL_COUNTRIES.filter((c) => allowedCountries.includes(c.code))
+        : ALL_COUNTRIES,
+    [allowedCountries]
+  );
+  const selected = countries.find((c) => c.code === value.country) ?? countries[0];
 
   // Auto-focus search when dropdown opens
   useEffect(() => {
@@ -198,13 +213,13 @@ const PhoneInput = ({ value, onChange, error, id = 'phone-input' }: PhoneInputPr
   const filtered = useMemo(() => {
     if (!search) return null;
     const q = search.toLowerCase().replace(/^\+/, '');
-    return ALL_COUNTRIES.filter(
+    return countries.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.callingCode.startsWith(q) ||
         c.code.toLowerCase() === q
     );
-  }, [search]);
+  }, [search, countries]);
 
   const emit = useCallback(
     (nationalNumber: string, country: CountryCode) => {
@@ -309,6 +324,16 @@ const PhoneInput = ({ value, onChange, error, id = 'phone-input' }: PhoneInputPr
                     )
                   ) : (
                     /* ── Default: popular + all ── */
+                    allowedCountries ? (
+                      countries.map((c) => (
+                        <CountryRow
+                          key={c.code}
+                          country={c}
+                          selected={value.country === c.code}
+                          onSelect={handleCountrySelect}
+                        />
+                      ))
+                    ) : (
                     <>
                       <SectionLabel>Popular</SectionLabel>
                       {POPULAR_COUNTRIES.map((c) => (
@@ -330,6 +355,7 @@ const PhoneInput = ({ value, onChange, error, id = 'phone-input' }: PhoneInputPr
                         />
                       ))}
                     </>
+                    )
                   )}
                 </div>
               </motion.div>

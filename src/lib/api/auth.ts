@@ -1,15 +1,25 @@
-import { publicCall, publicGet, requestEnvelope } from './core';
+import { publicCall, publicGet, requestEnvelope, sessionGet, sessionRequest } from './core';
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
+
+export type OnboardingStage =
+  | 'registered'
+  | 'email_verified'
+  | 'pin_set'
+  | 'business_created'
+  | 'payment_method_added'
+  | 'complete';
 
 export interface SessionUser {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
-  businessId: string;
+  /** null while the owner holds an onboarding session (no business yet). */
+  businessId: string | null;
   mustChangePassword?: boolean;
   subdomain?: string;
+  onboardingStage?: OnboardingStage;
 }
 
 export interface SessionData {
@@ -26,13 +36,18 @@ export interface BusinessCategory {
 
 // ─── Onboarding input types ───────────────────────────────────────────────────
 
+export const LAUNCH_COUNTRIES = ['NG', 'GB', 'US', 'CA'] as const;
+export type LaunchCountry = (typeof LAUNCH_COUNTRIES)[number];
+
 export interface CreateAccountInput {
   firstName: string;
   lastName: string;
   email: string;
+  country: LaunchCountry;
   phone: string;
   password: string;
   confirmPassword: string;
+  businessRegistrationNumber?: string;
 }
 
 export interface VerifyEmailInput {
@@ -41,13 +56,35 @@ export interface VerifyEmailInput {
 }
 
 export interface SetPinInput {
-  email: string;
   pin: string;
   confirmPin: string;
 }
 
-export interface CreateBusinessInput {
+export type OnboardingNextStep =
+  | 'verify_email'
+  | 'set_pin'
+  | 'business_discovery'
+  | 'payment_method'
+  | 'dashboard';
+
+export type BusinessRegistrationStatus = 'pending' | 'verified' | 'not_found' | 'unavailable';
+
+export interface OnboardingStatus {
+  stage: OnboardingStage;
+  nextStep: OnboardingNextStep;
+  firstName: string;
   email: string;
+  country: LaunchCountry;
+  hasPin: boolean;
+  businessId: string | null;
+  businessRegistration: {
+    number: string;
+    status: BusinessRegistrationStatus;
+    registeredName: string | null;
+  } | null;
+}
+
+export interface CreateBusinessInput {
   businessName: string;
   businessCategory: string;
   businessDescription: string;
@@ -82,15 +119,19 @@ export interface CompleteSetupInput {
 export const onboarding = {
   createAccount: (input: CreateAccountInput) => publicCall<null>('/auth/onboarding/account', input),
 
+  /** Signs the user in with an onboarding session (cookies set on web). */
   verifyEmail: (input: VerifyEmailInput) =>
-    publicCall<null>('/auth/onboarding/verify-email', input),
+    publicCall<SessionData>('/auth/onboarding/verify-email', input),
 
   resendOtp: (email: string) => publicCall<null>('/auth/onboarding/resend-otp', { email }),
 
-  setPin: (input: SetPinInput) => publicCall<null>('/auth/onboarding/set-pin', input),
+  setPin: (input: SetPinInput) => sessionRequest<null>('POST', '/auth/onboarding/set-pin', input),
 
+  status: () => sessionGet<OnboardingStatus>('/auth/onboarding/status'),
+
+  /** Legacy form-based setup; the AI flow uses `onboardingWorkspace.approve` instead. */
   createBusiness: (input: CreateBusinessInput) =>
-    publicCall<SessionData>('/auth/onboarding/business', input),
+    sessionRequest<SessionData>('POST', '/auth/onboarding/business', input),
 };
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────

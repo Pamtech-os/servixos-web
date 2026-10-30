@@ -8,12 +8,16 @@ import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
 import TrialingBanner from '@/components/TrialingBanner';
+import TrialPaymentStep from '@/components/onboarding/TrialPaymentStep';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAccess } from '@/hooks/permissions/use-access';
 import { useUiState } from '@/common/state/ui-context';
 import { cn } from '@/lib/utils';
+import { apiEvents } from '@/lib/api-events';
+import { onboarding } from '@/lib/api-client';
+import { pathForOnboardingStep } from '@/lib/onboarding-route';
 
 function AppLayoutSkeleton() {
   return (
@@ -58,7 +62,7 @@ function AppLayoutSkeleton() {
 const AppLayout = ({ children }: PropsWithChildren) => {
   const { auth, isHydrated } = useAuth();
   const { isAiSuggestionsOpen } = useUiState();
-  const { sub } = useSubscription();
+  const { sub, isLoading: isSubscriptionLoading } = useSubscription();
   const access = useAccess();
   const pathname = usePathname();
   const router = useRouter();
@@ -77,10 +81,33 @@ const AppLayout = ({ children }: PropsWithChildren) => {
       router.replace('/complete-setup');
       return;
     }
+    // Onboarding session: the owner has no business yet.
+    if (!auth.user?.businessId) {
+      router.replace('/onboarding');
+      return;
+    }
     if (!auth.isPinVerified) {
       router.replace('/pin');
     }
-  }, [auth.isLoggedIn, auth.isPinVerified, auth.user?.mustChangePassword, isHydrated, router]);
+  }, [
+    auth.isLoggedIn,
+    auth.isPinVerified,
+    auth.user?.mustChangePassword,
+    auth.user?.businessId,
+    isHydrated,
+    router,
+  ]);
+
+  useEffect(
+    () =>
+      apiEvents.on('ONBOARDING_INCOMPLETE', () => {
+        onboarding
+          .status()
+          .then((status) => router.replace(pathForOnboardingStep(status.nextStep)))
+          .catch(() => router.replace('/onboarding'));
+      }),
+    [router]
+  );
 
   // AI Advisor requires the Pro plan — bounce anyone who lands here directly
   // (e.g. a bookmarked or typed URL) straight to the upgrade flow.
@@ -130,8 +157,24 @@ const AppLayout = ({ children }: PropsWithChildren) => {
     return () => window.clearTimeout(timeout);
   }, [isRouteLoading]);
 
-  if (!isHydrated || !auth.isLoggedIn || !auth.isPinVerified || auth.user?.mustChangePassword) {
+  if (
+    !isHydrated ||
+    !auth.isLoggedIn ||
+    !auth.isPinVerified ||
+    auth.user?.mustChangePassword ||
+    !auth.user?.businessId
+  ) {
     return <AppLayoutSkeleton />;
+  }
+
+  // Wait for /me before mounting pages, so a business that still needs its payment
+  // step doesn't fire a burst of requests that would all be refused.
+  if (isSubscriptionLoading) {
+    return <AppLayoutSkeleton />;
+  }
+
+  if (sub?.status === 'incomplete') {
+    return <TrialPaymentStep />;
   }
 
   if (isAIAdvisorRoute && (access.isResolving || !access.canViewAiAdvisor)) {

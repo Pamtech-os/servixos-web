@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SUBSCRIPTION_ME_KEY } from '@/hooks/queries/use-subscription';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { apiEvents } from '@/lib/api-events';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,13 @@ export function SubscriptionProvider({ children }: PropsWithChildren) {
   });
 
   const profile = data ?? null;
+
+  // A business route refusing with PAYMENT_METHOD_REQUIRED means /me is stale: reload it so
+  // the blocking payment step (shown while status is `incomplete`) opens wherever the user is.
+  useEffect(
+    () => apiEvents.on('PAYMENT_METHOD_REQUIRED', () => void refetch()),
+    [refetch]
+  );
 
   // Stop polling when the target condition is satisfied
   useEffect(() => {

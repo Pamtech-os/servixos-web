@@ -28,9 +28,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useSubscriptionPlans, useSubscriptionTransactions } from '@/hooks/queries/use-subscription';
-import { useUpgradePlanMutation, useSetupIntentMutation, useSubscribeMutation } from '@/hooks/mutations/use-subscription';
+import { useUpgradePlanMutation } from '@/hooks/mutations/use-subscription';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import StripeCardModal from '@/components/StripeCardModal';
 import { type SubscriptionPlan, type BillingInterval, planOrder } from '@/lib/api-client';
 import { getApiErrorMessage } from '@/common/network/http-client';
 
@@ -42,6 +41,7 @@ function centsToDisplay(cents: number): string {
 
 function statusBadge(status: string) {
   const map: Record<string, { label: string; className: string }> = {
+    incomplete:   { label: 'Setup needed', className: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
     trialing:     { label: 'Trial',       className: 'bg-blue-500/10 text-blue-600 border-blue-500/20' },
     active:       { label: 'Active',      className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' },
     grace_period: { label: 'Grace',       className: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
@@ -275,22 +275,15 @@ const TransactionHistory = () => {
 const SubscriptionTab = () => {
   const [isYearly, setIsYearly] = useState(false);
   const [actingSlug, setActingSlug] = useState<string | null>(null);
-  const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null);
-  const [pendingSubscribe, setPendingSubscribe] = useState<{
-    plan: string;
-    billingInterval: BillingInterval;
-  } | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     plan: SubscriptionPlan;
     interval: BillingInterval;
   } | null>(null);
 
   const { data: plans, isLoading: plansLoading } = useSubscriptionPlans();
-  const { sub, refreshSubscription, pollUntilPlanUpdated } = useSubscription();
+  const { sub, pollUntilPlanUpdated } = useSubscription();
 
   const upgradeMutation = useUpgradePlanMutation();
-  const setupIntentMutation = useSetupIntentMutation();
-  const subscribeMutation = useSubscribeMutation();
 
   const handleAction = async (plan: SubscriptionPlan, interval: BillingInterval) => {
     setActingSlug(plan.slug);
@@ -304,16 +297,10 @@ const SubscriptionTab = () => {
         toast.success(`Upgrading to ${plan.name}… features will update shortly.`);
         pollUntilPlanUpdated(plan.slug);
       } else {
-        // Subscribe flow — may need card
-        if (!sub?.hasPaymentMethod) {
-          const { clientSecret } = await setupIntentMutation.mutateAsync();
-          setSetupClientSecret(clientSecret);
-          setPendingSubscribe({ plan: plan.slug, billingInterval: interval });
-        } else {
-          await subscribeMutation.mutateAsync({ plan: plan.slug, billingInterval: interval });
-          toast.success(`Your ${plan.name} trial has started!`);
-          await refreshSubscription();
-        }
+        // A canceled account can't restart billing yet (backend decision pending).
+        toast.info('Contact support to restart your subscription.', {
+          description: 'Reach us from the Support page and we will reactivate your account.',
+        });
       }
     } catch (err) {
       toast.error(getApiErrorMessage(err));
@@ -322,25 +309,7 @@ const SubscriptionTab = () => {
     }
   };
 
-  const handleCardSaved = async (paymentMethodId?: string) => {
-    if (!pendingSubscribe) return;
-    setSetupClientSecret(null);
-    try {
-      await subscribeMutation.mutateAsync({
-        ...pendingSubscribe,
-        paymentMethodId,
-      });
-      toast.success('Trial started! Your card has been saved for renewal.');
-      await refreshSubscription();
-    } catch (err) {
-      toast.error(getApiErrorMessage(err));
-    } finally {
-      setPendingSubscribe(null);
-    }
-  };
-
-  const isActing =
-    upgradeMutation.isPending || setupIntentMutation.isPending || subscribeMutation.isPending;
+  const isActing = upgradeMutation.isPending;
 
   const sortedPlans = [...(plans ?? [])].sort((a, b) => a.displayOrder - b.displayOrder);
 
@@ -501,19 +470,6 @@ const SubscriptionTab = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Stripe setup-intent card modal */}
-      {setupClientSecret && (
-        <StripeCardModal
-          open={!!setupClientSecret}
-          onClose={() => {
-            setSetupClientSecret(null);
-            setPendingSubscribe(null);
-          }}
-          mode='setup'
-          clientSecret={setupClientSecret}
-          onSuccess={(pmId) => void handleCardSaved(pmId)}
-        />
-      )}
     </div>
   );
 };
