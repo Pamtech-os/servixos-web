@@ -2,11 +2,24 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUp, Building2, Lightbulb, Loader2, Sparkles, Square, Compass } from 'lucide-react';
+import {
+  ArrowUp,
+  Building2,
+  Compass,
+  Lightbulb,
+  Loader2,
+  Mic,
+  Sparkles,
+  Square,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import type { ChatMessage, StartingPoint } from '@/lib/api-client';
 import { MAX_CHAT_MESSAGE_LENGTH } from '@/hooks/use-onboarding-chat';
+import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
+import { useSpeechSynthesis } from '@/hooks/use-speech-synthesis';
 import { cn } from '@/lib/utils';
 
 const STARTERS: Array<{ id: StartingPoint; label: string; message: string; icon: typeof Compass }> = [
@@ -40,8 +53,16 @@ interface OnboardingChatProps {
   onStop: () => void;
 }
 
-const Bubble = ({ role, children }: { role: ChatMessage['role']; children: React.ReactNode }) => (
-  <div className={cn('flex', role === 'user' ? 'justify-end' : 'justify-start')}>
+const Bubble = ({
+  role,
+  children,
+  action,
+}: {
+  role: ChatMessage['role'];
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}) => (
+  <div className={cn('flex items-end gap-1', role === 'user' ? 'justify-end' : 'justify-start')}>
     <div
       className={cn(
         'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
@@ -52,8 +73,11 @@ const Bubble = ({ role, children }: { role: ChatMessage['role']; children: React
     >
       {children}
     </div>
+    {action}
   </div>
 );
+
+const messageId = (m: ChatMessage, index: number) => `${m.createdAt}-${index}`;
 
 const OnboardingChat = ({
   firstName,
@@ -66,6 +90,43 @@ const OnboardingChat = ({
 }: OnboardingChatProps) => {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const tts = useSpeechSynthesis();
+  const { speak } = tts;
+  // Replies to spoken messages are read aloud, so voice users never have to read the screen.
+  const readNextReplyRef = useRef(false);
+  const lastSeenCountRef = useRef(messages.length);
+
+  const voice = useSpeechRecognition({
+    onFinish: (transcript) => {
+      const message = `${draft.trim()} ${transcript}`.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
+      readNextReplyRef.current = true;
+      onSend(message);
+      setDraft('');
+    },
+  });
+
+  useEffect(() => {
+    const grew = messages.length > lastSeenCountRef.current;
+    lastSeenCountRef.current = messages.length;
+    const last = messages[messages.length - 1];
+    if (!grew || last?.role !== 'assistant' || !readNextReplyRef.current) return;
+    readNextReplyRef.current = false;
+    speak(messageId(last, messages.length - 1), last.content);
+  }, [messages, speak]);
+
+  const toggleListening = () => {
+    if (voice.isListening) {
+      voice.stop();
+      return;
+    }
+    tts.stop();
+    voice.start();
+  };
+
+  const toggleSpeaking = (id: string, text: string) => {
+    if (tts.speakingId === id) tts.stop();
+    else tts.speak(id, text);
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -74,6 +135,7 @@ const OnboardingChat = ({
   const submit = () => {
     const message = draft.trim();
     if (!message || isStreaming || message.length > MAX_CHAT_MESSAGE_LENGTH) return;
+    readNextReplyRef.current = false;
     onSend(message);
     setDraft('');
   };
@@ -125,11 +187,36 @@ const OnboardingChat = ({
           </motion.div>
         ) : (
           <>
-            {messages.map((m, i) => (
-              <Bubble key={`${m.createdAt}-${i}`} role={m.role}>
-                {m.content}
-              </Bubble>
-            ))}
+            {messages.map((m, i) => {
+              const id = messageId(m, i);
+              const isSpeaking = tts.speakingId === id;
+              return (
+                <Bubble
+                  key={id}
+                  role={m.role}
+                  action={
+                    m.role === 'assistant' &&
+                    tts.isSupported && (
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='ghost'
+                        onClick={() => toggleSpeaking(id, m.content)}
+                        aria-label={isSpeaking ? 'Stop reading aloud' : 'Read aloud'}
+                        className={cn(
+                          'h-7 w-7 shrink-0 text-muted-foreground',
+                          isSpeaking && 'text-primary'
+                        )}
+                      >
+                        {isSpeaking ? <VolumeX className='h-3.5 w-3.5' /> : <Volume2 className='h-3.5 w-3.5' />}
+                      </Button>
+                    )
+                  }
+                >
+                  {m.content}
+                </Bubble>
+              );
+            })}
             {isStreaming && (
               <Bubble role='assistant'>
                 {streamingText || (
@@ -141,9 +228,9 @@ const OnboardingChat = ({
             )}
           </>
         )}
-        {error && (
+        {(error || voice.error) && (
           <p className='rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
-            {error}
+            {error || voice.error}
           </p>
         )}
       </div>
@@ -151,13 +238,34 @@ const OnboardingChat = ({
       <div className='border-t border-border p-3'>
         <div className='flex items-end gap-2 rounded-2xl border border-border bg-background p-2 focus-within:border-primary/50'>
           <Textarea
-            value={draft}
+            value={voice.isListening ? `${draft} ${voice.interimTranscript}`.trim() : draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isStreaming ? 'Waiting for the reply…' : 'Message your AI business advisor…'}
+            readOnly={voice.isListening}
+            placeholder={
+              voice.isListening
+                ? 'Listening… tap the mic again when you’re done'
+                : isStreaming
+                  ? 'Waiting for the reply…'
+                  : 'Message your AI business advisor…'
+            }
             rows={1}
             className='max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent p-2 shadow-none focus-visible:ring-0'
           />
+          {voice.isSupported && (
+            <Button
+              type='button'
+              size='icon'
+              variant={voice.isListening ? 'destructive' : 'ghost'}
+              onClick={toggleListening}
+              disabled={isStreaming && !voice.isListening}
+              aria-label={voice.isListening ? 'Stop recording and send' : 'Speak your message'}
+              aria-pressed={voice.isListening}
+              className={cn('shrink-0', voice.isListening && 'animate-pulse')}
+            >
+              {voice.isListening ? <Square className='h-4 w-4' /> : <Mic className='h-4 w-4' />}
+            </Button>
+          )}
           {isStreaming ? (
             <Button type='button' size='icon' variant='outline' onClick={onStop} aria-label='Stop reply'>
               <Square className='h-4 w-4' />
@@ -167,7 +275,7 @@ const OnboardingChat = ({
               type='button'
               size='icon'
               onClick={submit}
-              disabled={!draft.trim() || overLimit}
+              disabled={!draft.trim() || overLimit || voice.isListening}
               aria-label='Send message'
               className='gradient-bg text-primary-foreground'
             >
