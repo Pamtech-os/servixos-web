@@ -8,13 +8,19 @@ import {
   type CreateAccountInput,
   type OnboardingProfile,
   type OnboardingSession,
+  type OnboardingStatus,
   type ProfileSectionKey,
   type ProfileSectionMap,
   type SetPinInput,
   type VerifyEmailInput,
   type WebsitePreview,
 } from '@/lib/api-client';
-import { ONBOARDING_PREVIEW_KEY, ONBOARDING_SESSION_KEY } from '@/hooks/queries/use-onboarding';
+import {
+  ONBOARDING_PREVIEW_KEY,
+  ONBOARDING_SESSION_KEY,
+  ONBOARDING_STATUS_KEY,
+} from '@/hooks/queries/use-onboarding';
+import { HttpError } from '@/common/network/http-client';
 
 export function useCreateAccount() {
   return useMutation({
@@ -76,6 +82,24 @@ export function useRegeneratePreview() {
   return useMutation({
     mutationFn: (instructions?: string) => onboardingWorkspace.regeneratePreview(instructions),
     onSuccess: (preview) => queryClient.setQueryData<WebsitePreview>([ONBOARDING_PREVIEW_KEY], preview),
+  });
+}
+
+export function useSubmitRegistration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (registrationNumber: string) => onboardingWorkspace.submitRegistration(registrationNumber),
+    // Seeding `pending` starts the status poll straight away.
+    onSuccess: ({ number, status }) =>
+      queryClient.setQueriesData<OnboardingStatus>({ queryKey: [ONBOARDING_STATUS_KEY] }, (prev) =>
+        prev ? { ...prev, businessRegistration: { number, status, registeredName: null } } : prev
+      ),
+    onError: (err) => {
+      // Already submitted elsewhere: pull the real state instead of showing the form.
+      if (err instanceof HttpError && err.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: [ONBOARDING_STATUS_KEY] });
+      }
+    },
   });
 }
 

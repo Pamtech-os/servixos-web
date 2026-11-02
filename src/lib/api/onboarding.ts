@@ -1,6 +1,7 @@
+import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
 import { HttpError, NetworkOfflineError } from '@/common/network/http-client';
 import { BASE_URL, buildSignedHeaders, sessionGet, sessionRequest, withSessionRefresh } from './core';
-import type { SessionData } from './auth';
+import type { BusinessRegistrationStatus, SessionData } from './auth';
 
 // ─── Profile sections ─────────────────────────────────────────────────────────
 
@@ -137,9 +138,13 @@ export interface WebsitePreview {
       services: Array<{ name: string; description: string }>;
       testimonialPlaceholder: { quote: string; author: string; isPlaceholder?: boolean };
       contact: { callToAction: string };
+      illustrations?: SiteIllustrations;
     };
+    profile?: SiteProfile;
   };
   generatedAt: string | null;
+  /** `pending` while Claude draws the illustrations in the background. */
+  illustrationStatus: 'pending' | 'ready' | null;
 }
 
 export interface ApproveSetupInput {
@@ -269,6 +274,14 @@ export const onboardingWorkspace = {
       '/onboarding/preview/website',
       instructions ? { instructions } : undefined,
       { timeoutMs: 60_000 }
+    ),
+
+  /** Queues the one billed registry lookup; the result arrives on the onboarding status. */
+  submitRegistration: (registrationNumber: string) =>
+    sessionRequest<{ number: string; status: BusinessRegistrationStatus }>(
+      'POST',
+      '/onboarding/registration',
+      { registrationNumber }
     ),
 
   /** Turns the approved profile into a business and returns a full session. */

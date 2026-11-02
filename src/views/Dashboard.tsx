@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import AIGuidanceCard from '@/components/dashboard/AIGuidanceCard';
 
 const RevenueChart = dynamic(() => import('@/components/charts/RevenueChart'), { ssr: false });
 const JobsStatusChart = dynamic(() => import('@/components/charts/JobsStatusChart'), { ssr: false });
@@ -114,6 +115,8 @@ const Dashboard = () => {
           Welcome back! Here is your business overview.
         </p>
       </div>
+
+      <AIGuidanceCard />
 
       {/* Stat Cards */}
       <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>

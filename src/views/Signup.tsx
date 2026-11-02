@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   Delete,
   Globe2,
-  BadgeCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,10 +54,10 @@ import type { PhoneValue } from '@/components/PhoneInput';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ONBOARDING_KEY = 'servixos-onboarding';
-const REG_NUMBER_PATTERN = /^[A-Za-z0-9-]{1,30}$/;
 
 const COUNTRY_LABELS: Record<LaunchCountry, { name: string; flag: string }> = {
   NG: { name: 'Nigeria', flag: '🇳🇬' },
+  GH: { name: 'Ghana', flag: '🇬🇭' },
   GB: { name: 'United Kingdom', flag: '🇬🇧' },
   US: { name: 'United States', flag: '🇺🇸' },
   CA: { name: 'Canada', flag: '🇨🇦' },
@@ -101,8 +100,6 @@ const clearProgress = () => {
 const isLaunchCountry = (code: string): code is LaunchCountry =>
   (LAUNCH_COUNTRIES as readonly string[]).includes(code);
 
-const normalizeRegNumber = (value: string) => value.replace(/\s+/g, '');
-
 const shuffleArray = (arr: number[]) => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -129,7 +126,6 @@ const Signup = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    businessRegistrationNumber: '',
   });
   const [country, setCountry] = useState<LaunchCountry>('US');
   const [phone, setPhone] = useState<PhoneValue>(() => emptyPhone('US'));
@@ -306,9 +302,6 @@ const Signup = () => {
       errs.password = 'Must contain at least one uppercase letter';
     else if (!/\d/.test(reg.password)) errs.password = 'Must contain at least one number';
     if (reg.password !== reg.confirmPassword) errs.confirmPassword = 'Passwords do not match';
-    const regNumber = normalizeRegNumber(reg.businessRegistrationNumber);
-    if (regNumber && !REG_NUMBER_PATTERN.test(regNumber))
-      errs.businessRegistrationNumber = 'Use letters, numbers and hyphens only (max 30)';
     setRegErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -323,7 +316,6 @@ const Signup = () => {
   const handleRegistrationNext = async () => {
     if (!validateRegistration()) return;
 
-    const regNumber = normalizeRegNumber(reg.businessRegistrationNumber);
     try {
       await createAccountMutation.mutateAsync({
         firstName: reg.firstName.trim(),
@@ -333,7 +325,6 @@ const Signup = () => {
         phone: phone.e164,
         password: reg.password,
         confirmPassword: reg.confirmPassword,
-        ...(regNumber && { businessRegistrationNumber: regNumber }),
       });
       toast.success('Check your email for a verification code.');
       saveProgress({ email: reg.email.trim(), firstName: reg.firstName, lastName: reg.lastName });
@@ -491,34 +482,6 @@ const Signup = () => {
             <p className='text-[10px] text-destructive'>{regErrors.confirmPassword}</p>
           )}
         </div>
-      </div>
-
-      <div className='space-y-1.5 rounded-xl border border-dashed border-border p-3'>
-        <Label htmlFor='regNumber' className='flex items-center gap-1.5 text-xs'>
-          <BadgeCheck size={12} /> Business Registration Number
-          <span className='font-normal text-muted-foreground'>(optional)</span>
-        </Label>
-        <Input
-          id='regNumber'
-          placeholder={country === 'NG' ? 'e.g. RC123456' : 'e.g. 12345678'}
-          value={reg.businessRegistrationNumber}
-          maxLength={40}
-          onChange={(e) => {
-            setReg((p) => ({ ...p, businessRegistrationNumber: e.target.value }));
-            if (regErrors.businessRegistrationNumber)
-              setRegErrors((er) => ({ ...er, businessRegistrationNumber: '' }));
-          }}
-          className={regErrors.businessRegistrationNumber ? 'border-destructive' : ''}
-        />
-        {regErrors.businessRegistrationNumber ? (
-          <p className='text-[10px] text-destructive'>{regErrors.businessRegistrationNumber}</p>
-        ) : (
-          <p className='text-[10px] text-muted-foreground'>
-            Already registered? We&apos;ll check it with{' '}
-            {country === 'NG' ? 'the CAC' : 'the company registry'} in the background. It
-            won&apos;t hold up your signup.
-          </p>
-        )}
       </div>
 
       <motion.div whileTap={{ scale: 0.97 }}>

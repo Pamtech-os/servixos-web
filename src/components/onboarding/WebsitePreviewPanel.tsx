@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Globe, Loader2, MessageSquarePlus, RefreshCw, Wand2 } from 'lucide-react';
+import { Globe, Loader2, MessageSquarePlus, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/sonner';
 import type { WebsitePreview } from '@/lib/api-client';
 import { useRegeneratePreview } from '@/hooks/mutations/use-onboarding';
 import { HttpError, getApiErrorMessage } from '@/common/network/http-client';
+import { serviceIllustration, servicePrice } from '@/lib/website/site-content';
 
 const MAX_INSTRUCTIONS_LENGTH = 1000;
 
@@ -28,6 +29,8 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
     ? content.services
     : business.services.map((name) => ({ name, description: '' }));
   const testimonial = content?.testimonialPlaceholder;
+  const illustrations = content?.illustrations;
+  const profile = website.profile;
 
   return (
     <div
@@ -56,12 +59,43 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
         <span className='mt-4 inline-block rounded-full bg-white px-4 py-2 text-xs font-semibold' style={{ color: primary }}>
           {content?.hero.ctaText ?? 'Book a Service'}
         </span>
+        {illustrations?.hero && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={illustrations.hero.url}
+            alt=''
+            className='mt-6 w-full rounded-lg bg-white/90 shadow-lg animate-in fade-in duration-700'
+          />
+        )}
       </section>
+
+      {(profile?.valueProposition || (profile?.targetCustomers.length ?? 0) > 0) && (
+        <section className='space-y-3 px-6 pt-6'>
+          {profile?.valueProposition && (
+            <p className='text-sm font-semibold' style={{ color: primary }}>
+              {profile.valueProposition}
+            </p>
+          )}
+          {(profile?.targetCustomers.length ?? 0) > 0 && (
+            <div className='flex flex-wrap gap-1.5'>
+              {profile!.targetCustomers.map((c) => (
+                <span key={c} className='rounded-full px-2.5 py-0.5 text-[11px] font-medium' style={{ color: primary, background: `${primary}14` }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {content?.about && (
         <section className='px-6 py-6'>
           <h4 className='text-base font-bold'>{content.about.title}</h4>
           <p className='mt-1 text-sm text-slate-600'>{content.about.body}</p>
+          {illustrations?.about && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={illustrations.about.url} alt='' className='mt-3 w-full rounded-lg border border-slate-100 animate-in fade-in duration-700' />
+          )}
         </section>
       )}
 
@@ -69,14 +103,27 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
         <section className='bg-slate-50 px-6 py-6'>
           <h4 className='text-base font-bold'>Services</h4>
           <div className='mt-3 grid gap-2 sm:grid-cols-2'>
-            {services.map((s) => (
-              <div key={s.name} className='rounded-lg border border-slate-200 bg-white p-3'>
-                <p className='text-sm font-semibold' style={{ color: primary }}>
-                  {s.name}
-                </p>
-                {s.description && <p className='mt-1 text-xs text-slate-600'>{s.description}</p>}
-              </div>
-            ))}
+            {services.map((s) => {
+              const image = serviceIllustration(illustrations, s.name);
+              const price = servicePrice(profile, s.name);
+              return (
+                <div key={s.name} className='overflow-hidden rounded-lg border border-slate-200 bg-white'>
+                  {image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={image} alt='' className='aspect-[4/3] w-full object-cover animate-in fade-in duration-700' />
+                  )}
+                  <div className='p-3'>
+                    <div className='flex items-start justify-between gap-2'>
+                      <p className='text-sm font-semibold' style={{ color: primary }}>
+                        {s.name}
+                      </p>
+                      {price && <span className='shrink-0 text-xs font-semibold text-slate-700'>{price}</span>}
+                    </div>
+                    {s.description && <p className='mt-1 text-xs text-slate-600'>{s.description}</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -160,6 +207,13 @@ const WebsitePreviewPanel = ({ preview, isLoading, canGenerate }: WebsitePreview
       {!canGenerate && (
         <p className='text-xs text-muted-foreground'>
           Your website preview unlocks once the AI has drafted your concept and brand.
+        </p>
+      )}
+
+      {preview?.illustrationStatus === 'pending' && !regenerate.isPending && (
+        <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+          <Sparkles className='h-3.5 w-3.5 animate-pulse' />
+          Drawing custom illustrations for your site. They&apos;ll appear here in a minute or two.
         </p>
       )}
 
