@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getWebsiteData } from './get-website-data';
+import { Reveal, RevealGroup, RevealItem } from './reveal';
+import { serviceIllustration, servicePrice, startingPrice } from '@/lib/website/site-content';
 
 export default async function SiteLandingPage({
   params,
@@ -11,7 +13,10 @@ export default async function SiteLandingPage({
   if (!data) notFound();
 
   const { business, website } = data;
-  const { aiContent, colorPrimary, colorSecondary } = website;
+  const { aiContent, colorPrimary, colorSecondary, profile } = website;
+  const illustrations = aiContent?.illustrations;
+  const fromPrice = startingPrice(profile);
+  const audience = profile?.targetCustomers ?? [];
 
   const heroHeadline = aiContent?.hero.headline ?? `Welcome to ${business.name}`;
   const heroSub = aiContent?.hero.subheadline ?? business.description ?? business.categoryName;
@@ -111,8 +116,38 @@ export default async function SiteLandingPage({
             linear-gradient(90deg, ${colorPrimary}08 1px, transparent 1px);
           background-size: 64px 64px;
         }
+        @keyframes float-y {
+          0%,100% { transform: translateY(0) rotate(0deg); }
+          50%     { transform: translateY(-14px) rotate(.6deg); }
+        }
+        @keyframes shine {
+          0%   { transform: translateX(-120%) skewX(-20deg); }
+          60%,100% { transform: translateX(220%) skewX(-20deg); }
+        }
+        @keyframes pulse-ring {
+          0%   { box-shadow: 0 0 0 0 ${colorPrimary}55; }
+          70%  { box-shadow: 0 0 0 14px ${colorPrimary}00; }
+          100% { box-shadow: 0 0 0 0 ${colorPrimary}00; }
+        }
+        .float { animation: float-y 6s ease-in-out infinite; }
+        .btn-primary { position: relative; overflow: hidden; }
+        .btn-primary::after {
+          content: ''; position: absolute; inset: 0; width: 40%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+          animation: shine 3.6s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .pulse-dot { animation: pulse-ring 2.2s ease-out infinite; }
+        .svc-media img { transition: transform .5s ease; }
+        .svc-card:hover .svc-media img { transform: scale(1.06); }
+        .chip { transition: transform .2s ease, background .2s ease; }
+        .chip:hover { transform: translateY(-2px); background: ${colorPrimary}18; }
         @media (max-width: 640px) {
           .hero-headline { font-size: 2.4rem !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .blob-a, .blob-b, .blob-c, .float, .scroll-hint, .pulse-dot,
+          .btn-primary::after, .fu1, .fu2, .fu3, .fu4 { animation: none !important; }
         }
       `}</style>
 
@@ -141,49 +176,79 @@ export default async function SiteLandingPage({
           </div>
 
           {/* Content */}
-          <div className='relative z-10 mx-auto max-w-4xl'>
+          <div
+            className={`relative z-10 mx-auto ${
+              illustrations?.hero ? 'grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:text-left' : 'max-w-4xl'
+            }`}
+          >
+            <div>
 
-            {/* Badge */}
-            <div className='fu1 mb-7 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-widest ring-1'
-              style={{ color: colorPrimary, background: `${colorPrimary}10`, ['--tw-ring-color' as string]: `${colorPrimary}30` }}>
-              <span className='h-1.5 w-1.5 rounded-full' style={{ background: colorPrimary }} />
-              {business.categoryName}
+              {/* Badge */}
+              <div className='fu1 mb-7 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-widest ring-1'
+                style={{ color: colorPrimary, background: `${colorPrimary}10`, ['--tw-ring-color' as string]: `${colorPrimary}30` }}>
+                <span className='pulse-dot h-1.5 w-1.5 rounded-full' style={{ background: colorPrimary }} />
+                {profile?.tagline || business.categoryName}
+              </div>
+
+              {/* Headline */}
+              <h1
+                className='hero-headline fu2 mb-6 font-bold leading-[1.08] tracking-tight text-gray-900'
+                style={{ fontSize: 'clamp(2.4rem, 6vw, 4.5rem)' }}
+              >
+                {headlineMain && <span>{headlineMain} </span>}
+                <span className='gradient-text'>{headlineAccent}</span>
+              </h1>
+
+              {/* Subheadline */}
+              <p
+                className={`fu3 mb-10 max-w-2xl text-lg leading-relaxed text-gray-500 sm:text-xl ${
+                  illustrations?.hero ? 'mx-auto lg:mx-0' : 'mx-auto'
+                }`}
+              >
+                {heroSub}
+              </p>
+
+              {/* CTAs */}
+              <div
+                className={`fu4 flex flex-wrap items-center justify-center gap-4 ${
+                  illustrations?.hero ? 'lg:justify-start' : ''
+                }`}
+              >
+                <a
+                  href='booking'
+                  className='btn-primary inline-flex items-center gap-2.5 rounded-2xl px-8 py-4 text-base font-semibold text-white shadow-lg'
+                  style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
+                >
+                  {heroCta}
+                  <svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M17 8l4 4m0 0l-4 4m4-4H3' />
+                  </svg>
+                </a>
+                <a
+                  href='#services'
+                  className='btn-outline inline-flex items-center gap-2.5 rounded-2xl border-2 px-8 py-4 text-base font-semibold'
+                  style={{ borderColor: colorPrimary, color: colorPrimary }}
+                >
+                  Our Services
+                </a>
+              </div>
             </div>
 
-            {/* Headline */}
-            <h1
-              className='hero-headline fu2 mb-6 font-bold leading-[1.08] tracking-tight text-gray-900'
-              style={{ fontSize: 'clamp(2.4rem, 6vw, 4.5rem)' }}
-            >
-              {headlineMain && <span>{headlineMain} </span>}
-              <span className='gradient-text'>{headlineAccent}</span>
-            </h1>
-
-            {/* Subheadline */}
-            <p className='fu3 mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-gray-500 sm:text-xl'>
-              {heroSub}
-            </p>
-
-            {/* CTAs */}
-            <div className='fu4 flex flex-wrap items-center justify-center gap-4'>
-              <a
-                href='booking'
-                className='btn-primary inline-flex items-center gap-2.5 rounded-2xl px-8 py-4 text-base font-semibold text-white shadow-lg'
-                style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
-              >
-                {heroCta}
-                <svg className='h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
-                  <path strokeLinecap='round' strokeLinejoin='round' d='M17 8l4 4m0 0l-4 4m4-4H3' />
-                </svg>
-              </a>
-              <a
-                href='#services'
-                className='btn-outline inline-flex items-center gap-2.5 rounded-2xl border-2 px-8 py-4 text-base font-semibold'
-                style={{ borderColor: colorPrimary, color: colorPrimary }}
-              >
-                Our Services
-              </a>
-            </div>
+            {illustrations?.hero && (
+              <div className='fu3 relative'>
+                <div
+                  className='absolute -inset-6 rounded-[2.5rem] opacity-20 blur-3xl'
+                  style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
+                  aria-hidden='true'
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={illustrations.hero.url}
+                  alt={`Illustration of ${business.name}`}
+                  className='float relative w-full rounded-[2rem] border border-white/60 bg-white/70 shadow-2xl backdrop-blur'
+                />
+              </div>
+            )}
           </div>
 
           {/* Scroll indicator */}
@@ -203,53 +268,77 @@ export default async function SiteLandingPage({
           <div className='relative mx-auto max-w-6xl'>
 
             {/* Heading */}
-            <div className='mb-16 text-center'>
+            <Reveal className='mb-16 text-center'>
               <p className='mb-3 text-xs font-semibold uppercase tracking-widest' style={{ color: colorPrimary }}>
                 What We Offer
               </p>
               <h2 className='text-4xl font-bold text-gray-900 sm:text-5xl'>Our Services</h2>
               <div className='mx-auto mt-5 h-1 w-14 rounded-full' style={{ background: `linear-gradient(90deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }} />
-            </div>
+            </Reveal>
 
             {/* Cards */}
-            <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3'>
-              {services.map((service) => (
-                <div
-                  key={service.name}
-                  className='svc-card group relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-sm'
-                >
-                  {/* Top accent bar */}
-                  <div
-                    className='svc-bar absolute inset-x-0 top-0 h-[3px] rounded-t-3xl'
-                    style={{ background: `linear-gradient(90deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
-                  />
+            <RevealGroup className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3'>
+              {services.map((service) => {
+                const image = serviceIllustration(illustrations, service.name);
+                const price = servicePrice(profile, service.name);
+                return (
+                  <RevealItem key={service.name} className='h-full'>
+                    <div
+                      className='svc-card group relative flex h-full flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white p-7 shadow-sm'
+                    >
+                      {/* Top accent bar */}
+                      <div
+                        className='svc-bar absolute inset-x-0 top-0 h-[3px] rounded-t-3xl'
+                        style={{ background: `linear-gradient(90deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
+                      />
 
-                  {/* Icon */}
-                  <div
-                    className='mb-5 flex h-13 w-13 items-center justify-center rounded-2xl text-xl font-bold text-white shadow-md'
-                    style={{
-                      background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary + 'cc'})`,
-                      width: '3.25rem',
-                      height: '3.25rem',
-                    }}
-                  >
-                    {service.name.charAt(0)}
-                  </div>
+                      {image ? (
+                        <div
+                          className='svc-media -mx-7 -mt-7 mb-6 aspect-[4/3] overflow-hidden'
+                          style={{ background: `${colorPrimary}0d` }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={image} alt='' loading='lazy' className='h-full w-full object-cover' />
+                        </div>
+                      ) : (
+                        <div
+                          className='mb-5 flex items-center justify-center rounded-2xl text-xl font-bold text-white shadow-md'
+                          style={{
+                            background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary + 'cc'})`,
+                            width: '3.25rem',
+                            height: '3.25rem',
+                          }}
+                        >
+                          {service.name.charAt(0)}
+                        </div>
+                      )}
 
-                  <h3 className='mb-2 text-[1.05rem] font-bold text-gray-900'>{service.name}</h3>
-                  {service.description && (
-                    <p className='mb-5 text-sm leading-relaxed text-gray-500'>{service.description}</p>
-                  )}
+                      <div className='mb-2 flex items-start justify-between gap-3'>
+                        <h3 className='text-[1.05rem] font-bold text-gray-900'>{service.name}</h3>
+                        {price && (
+                          <span
+                            className='shrink-0 rounded-full px-3 py-1 text-xs font-bold'
+                            style={{ color: colorPrimary, background: `${colorPrimary}12` }}
+                          >
+                            {price}
+                          </span>
+                        )}
+                      </div>
+                      {service.description && (
+                        <p className='mb-5 text-sm leading-relaxed text-gray-500'>{service.description}</p>
+                      )}
 
-                  <div className='mt-auto flex items-center gap-1 text-xs font-bold uppercase tracking-wide' style={{ color: colorPrimary }}>
-                    Book Now
-                    <svg className='svc-arrow h-3.5 w-3.5' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
-                      <path strokeLinecap='round' strokeLinejoin='round' d='M9 5l7 7-7 7' />
-                    </svg>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      <a href='booking' className='mt-auto flex items-center gap-1 text-xs font-bold uppercase tracking-wide' style={{ color: colorPrimary }}>
+                        Book Now
+                        <svg className='svc-arrow h-3.5 w-3.5' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2.5}>
+                          <path strokeLinecap='round' strokeLinejoin='round' d='M9 5l7 7-7 7' />
+                        </svg>
+                      </a>
+                    </div>
+                  </RevealItem>
+                );
+              })}
+            </RevealGroup>
           </div>
         </section>
 
@@ -265,17 +354,59 @@ export default async function SiteLandingPage({
           />
           <div className='relative mx-auto grid max-w-4xl grid-cols-2 gap-8 text-center text-white sm:grid-cols-3'>
             {[
-              { value: `${services.length}+`, label: 'Services' },
+              { value: `${services.length}`, label: services.length === 1 ? 'Service' : 'Services' },
               { value: business.categoryName, label: 'Specialty' },
-              { value: '< 24h', label: 'Response Time' },
-            ].map(({ value, label }) => (
-              <div key={label} className='flex flex-col gap-1'>
+              fromPrice ? { value: fromPrice, label: 'Starting from' } : { value: '24/7', label: 'Online booking' },
+            ].map(({ value, label }, i) => (
+              <Reveal key={label} delay={i * 0.12} className='flex flex-col gap-1'>
                 <span className='text-3xl font-bold tracking-tight sm:text-4xl'>{value}</span>
                 <span className='text-sm font-medium text-white/70'>{label}</span>
-              </div>
+              </Reveal>
             ))}
           </div>
         </section>
+
+        {/* ─────────────────────── WHY US / WHO WE SERVE ─────────────────────── */}
+        {(profile?.valueProposition || audience.length > 0) && (
+          <section className='relative overflow-hidden px-5 py-24'>
+            <div className='pointer-events-none absolute inset-0 dot-grid opacity-40' aria-hidden='true' />
+            <div className='relative mx-auto grid max-w-6xl gap-10 lg:grid-cols-5'>
+              {profile?.valueProposition && (
+                <Reveal className={audience.length ? 'lg:col-span-3' : 'lg:col-span-5'}>
+                  <div
+                    className='relative h-full overflow-hidden rounded-[2rem] p-10 text-white shadow-xl'
+                    style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
+                  >
+                    <div className='blob-c pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl' aria-hidden='true' />
+                    <p className='mb-3 text-xs font-semibold uppercase tracking-widest text-white/70'>Why {business.name}</p>
+                    <p className='relative text-2xl font-bold leading-snug sm:text-3xl'>{profile.valueProposition}</p>
+                  </div>
+                </Reveal>
+              )}
+              {audience.length > 0 && (
+                <Reveal delay={0.15} className={profile?.valueProposition ? 'lg:col-span-2' : 'lg:col-span-5'}>
+                  <div className='flex h-full flex-col justify-center rounded-[2rem] border border-gray-100 bg-white p-10 shadow-sm'>
+                    <p className='mb-3 text-xs font-semibold uppercase tracking-widest' style={{ color: colorPrimary }}>
+                      Who We Serve
+                    </p>
+                    <h2 className='mb-6 text-2xl font-bold text-gray-900'>Made for people like you</h2>
+                    <div className='flex flex-wrap gap-2.5'>
+                      {audience.map((customer) => (
+                        <span
+                          key={customer}
+                          className='chip rounded-full px-4 py-2 text-sm font-semibold'
+                          style={{ color: colorPrimary, background: `${colorPrimary}0f`, border: `1px solid ${colorPrimary}26` }}
+                        >
+                          {customer}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </Reveal>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* ─────────────────────── ABOUT ─────────────────────── */}
         {(aiContent?.about || business.description) && (
@@ -284,7 +415,7 @@ export default async function SiteLandingPage({
               <div className='grid items-center gap-14 lg:grid-cols-2'>
 
                 {/* Text */}
-                <div>
+                <Reveal>
                   <p className='mb-3 text-xs font-semibold uppercase tracking-widest' style={{ color: colorPrimary }}>
                     Our Story
                   </p>
@@ -305,77 +436,94 @@ export default async function SiteLandingPage({
                       <path strokeLinecap='round' strokeLinejoin='round' d='M17 8l4 4m0 0l-4 4m4-4H3' />
                     </svg>
                   </a>
-                </div>
+                </Reveal>
 
-                {/* Decorative panel */}
-                <div className='relative'>
-                  <div
-                    className='absolute -inset-6 rounded-[2rem] opacity-[.12] blur-3xl'
-                    style={{ background: colorPrimary }}
-                  />
-                  <div className='relative overflow-hidden rounded-[2rem] border border-gray-100 bg-white p-8 shadow-2xl'>
-                    {/* Corner accent */}
+                {/* Illustration, or a decorative brand panel until one is drawn */}
+                {illustrations?.about ? (
+                  <Reveal delay={0.15} className='relative'>
                     <div
-                      className='absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-[.08]'
+                      className='absolute -inset-6 rounded-[2rem] opacity-[.14] blur-3xl'
+                      style={{ background: colorPrimary }}
+                      aria-hidden='true'
+                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={illustrations.about.url}
+                      alt={`The team behind ${business.name}`}
+                      loading='lazy'
+                      className='relative w-full rounded-[2rem] border border-gray-100 bg-white shadow-2xl'
+                    />
+                  </Reveal>
+                ) : (
+                  <Reveal delay={0.15} className='relative'>
+                    <div
+                      className='absolute -inset-6 rounded-[2rem] opacity-[.12] blur-3xl'
                       style={{ background: colorPrimary }}
                     />
-                    <div
-                      className='absolute -bottom-10 -left-10 h-28 w-28 rounded-full opacity-[.06]'
-                      style={{ background: colorSecondary || colorPrimary }}
-                    />
-
-                    <div className='relative space-y-5'>
-                      {/* Brand initial */}
+                    <div className='relative overflow-hidden rounded-[2rem] border border-gray-100 bg-white p-8 shadow-2xl'>
+                      {/* Corner accent */}
                       <div
-                        className='flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg'
-                        style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
-                      >
-                        {business.name.charAt(0)}
-                      </div>
+                        className='absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-[.08]'
+                        style={{ background: colorPrimary }}
+                      />
+                      <div
+                        className='absolute -bottom-10 -left-10 h-28 w-28 rounded-full opacity-[.06]'
+                        style={{ background: colorSecondary || colorPrimary }}
+                      />
 
-                      <div>
-                        <h3 className='text-xl font-bold text-gray-900'>{business.name}</h3>
-                        <p className='mt-0.5 text-sm text-gray-400'>{business.categoryName}</p>
-                      </div>
+                      <div className='relative space-y-5'>
+                        {/* Brand initial */}
+                        <div
+                          className='flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-lg'
+                          style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
+                        >
+                          {business.name.charAt(0)}
+                        </div>
 
-                      {/* Service pills */}
-                      <div className='flex flex-wrap gap-2 pt-1'>
-                        {business.services.slice(0, 5).map((s) => (
-                          <span
-                            key={s}
-                            className='rounded-full px-3.5 py-1 text-xs font-semibold text-white'
-                            style={{ background: `${colorPrimary}cc` }}
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
+                        <div>
+                          <h3 className='text-xl font-bold text-gray-900'>{business.name}</h3>
+                          <p className='mt-0.5 text-sm text-gray-400'>{business.categoryName}</p>
+                        </div>
 
-                      {/* Divider */}
-                      <div className='h-px bg-gray-100' />
+                        {/* Service pills */}
+                        <div className='flex flex-wrap gap-2 pt-1'>
+                          {business.services.slice(0, 5).map((s) => (
+                            <span
+                              key={s}
+                              className='rounded-full px-3.5 py-1 text-xs font-semibold text-white'
+                              style={{ background: `${colorPrimary}cc` }}
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
 
-                      {/* Contact snippet */}
-                      <div className='flex flex-col gap-2 text-sm text-gray-500'>
-                        {business.phone && (
-                          <div className='flex items-center gap-2'>
-                            <svg className='h-4 w-4 shrink-0' style={{ color: colorPrimary }} fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
-                              <path strokeLinecap='round' strokeLinejoin='round' d='M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z' />
-                            </svg>
-                            {business.phone}
-                          </div>
-                        )}
-                        {business.email && (
-                          <div className='flex items-center gap-2'>
-                            <svg className='h-4 w-4 shrink-0' style={{ color: colorPrimary }} fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
-                              <path strokeLinecap='round' strokeLinejoin='round' d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
-                            </svg>
-                            {business.email}
-                          </div>
-                        )}
+                        {/* Divider */}
+                        <div className='h-px bg-gray-100' />
+
+                        {/* Contact snippet */}
+                        <div className='flex flex-col gap-2 text-sm text-gray-500'>
+                          {business.phone && (
+                            <div className='flex items-center gap-2'>
+                              <svg className='h-4 w-4 shrink-0' style={{ color: colorPrimary }} fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+                                <path strokeLinecap='round' strokeLinejoin='round' d='M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z' />
+                              </svg>
+                              {business.phone}
+                            </div>
+                          )}
+                          {business.email && (
+                            <div className='flex items-center gap-2'>
+                              <svg className='h-4 w-4 shrink-0' style={{ color: colorPrimary }} fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+                                <path strokeLinecap='round' strokeLinejoin='round' d='M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' />
+                              </svg>
+                              {business.email}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </Reveal>
+                )}
               </div>
             </div>
           </section>
@@ -392,7 +540,7 @@ export default async function SiteLandingPage({
               className='pointer-events-none absolute inset-0 dot-grid opacity-40'
               aria-hidden='true'
             />
-            <div className='relative mx-auto max-w-3xl text-center'>
+            <Reveal className='relative mx-auto max-w-3xl text-center'>
               <svg
                 className='mx-auto mb-8 h-14 w-14'
                 style={{ color: colorPrimary, opacity: .25 }}
@@ -417,7 +565,7 @@ export default async function SiteLandingPage({
                   <p className='text-sm text-gray-400'>Verified Customer</p>
                 </div>
               </div>
-            </div>
+            </Reveal>
           </section>
         )}
 
@@ -437,7 +585,7 @@ export default async function SiteLandingPage({
 
           <div className='relative mx-auto max-w-6xl'>
             {/* CTA block */}
-            <div className='mb-14 text-center'>
+            <Reveal className='mb-14 text-center'>
               <p className='mb-3 text-xs font-semibold uppercase tracking-widest' style={{ color: colorPrimary }}>
                 Get In Touch
               </p>
@@ -457,7 +605,7 @@ export default async function SiteLandingPage({
                   <path strokeLinecap='round' strokeLinejoin='round' d='M17 8l4 4m0 0l-4 4m4-4H3' />
                 </svg>
               </a>
-            </div>
+            </Reveal>
 
             {/* Contact info cards */}
             {(business.phone || business.email || business.address) && (

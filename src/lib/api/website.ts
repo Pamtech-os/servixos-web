@@ -1,4 +1,5 @@
 import { HttpError, RequestTimeoutError } from '@/common/network/http-client';
+import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
 import {
   BASE_URL,
   REAL_API_URL,
@@ -47,8 +48,9 @@ export interface WebsiteAiContent {
   hero: { headline: string; subheadline: string; ctaText: string };
   about: { title: string; body: string };
   services: Array<{ name: string; description: string }>;
-  testimonialPlaceholder: { quote: string; author: string };
+  testimonialPlaceholder: { quote: string; author: string; isPlaceholder?: boolean };
   contact: { callToAction: string };
+  illustrations?: SiteIllustrations;
 }
 
 export interface WebsiteConfig {
@@ -60,6 +62,8 @@ export interface WebsiteConfig {
   logoUrl?: string;
   aiContent?: WebsiteAiContent;
   bookingForm?: WebsiteBookingForm;
+  /** Approved AI-setup details; absent for businesses not created through AI setup. */
+  profile?: SiteProfile;
 }
 
 export interface SaveDesignInput {

@@ -29,6 +29,7 @@ import {
 import { toast } from '@/components/ui/sonner';
 import OnboardingChat from '@/components/onboarding/OnboardingChat';
 import ProfilePanel, { SECTION_LABELS } from '@/components/onboarding/ProfilePanel';
+import RegistrationCard from '@/components/onboarding/RegistrationCard';
 import WebsitePreviewPanel from '@/components/onboarding/WebsitePreviewPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -43,6 +44,7 @@ import { useBusinessCategories } from '@/hooks/queries/use-business-categories';
 import { useApproveSetup } from '@/hooks/mutations/use-onboarding';
 import { useOnboardingChat } from '@/hooks/use-onboarding-chat';
 import {
+  REGISTRY_COUNTRIES,
   REQUIRED_SECTIONS,
   auth as authApi,
   type OnboardingStatus,
@@ -262,7 +264,19 @@ const OnboardingWorkspace = () => {
     );
   }
 
-  const profilePanel = <ProfilePanel profile={profile} highlighted={highlighted} />;
+  const status = statusQuery.data;
+  const showRegistration =
+    session?.startingPoint === 'existing_business' &&
+    !!status &&
+    REGISTRY_COUNTRIES.includes(status.country);
+  const profilePanel = (
+    <div className='space-y-4'>
+      {showRegistration && (
+        <RegistrationCard country={status.country} registration={status.businessRegistration} />
+      )}
+      <ProfilePanel profile={profile} highlighted={highlighted} />
+    </div>
+  );
   const websitePanel = (
     <WebsitePreviewPanel
       preview={previewQuery.data}

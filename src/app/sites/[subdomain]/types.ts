@@ -1,3 +1,5 @@
+import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+
 export type BookingFieldKey =
   | 'clientName'
   | 'clientEmail'
@@ -50,12 +52,14 @@ export interface WebsitePublicData {
       contact: {
         callToAction: string;
       };
+      illustrations?: SiteIllustrations;
     };
     bookingForm?: {
       title: string;
       description?: string;
       fields: BookingField[];
     };
+    profile?: SiteProfile;
   };
 }
 

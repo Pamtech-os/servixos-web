@@ -39,5 +39,7 @@ export function useWebsitePreview(enabled: boolean) {
     queryFn: () => onboardingWorkspace.preview(),
     enabled,
     staleTime: Infinity,
+    // Illustrations are drawn in the background; poll until they land.
+    refetchInterval: (query) => (query.state.data?.illustrationStatus === 'pending' ? 5_000 : false),
   });
 }

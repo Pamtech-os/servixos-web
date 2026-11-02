@@ -202,7 +202,11 @@ const AppLayout = ({ children }: PropsWithChildren) => {
             <AppHeader />
             <NewBusinessBanner />
             {sub?.status === 'trialing' && sub.trialEndsAt && (
-              <TrialingBanner trialEndsAt={sub.trialEndsAt} planName={sub.plan} />
+              <TrialingBanner
+                trialEndsAt={sub.trialEndsAt}
+                planName={sub.plan}
+                hasPaymentMethod={sub.hasPaymentMethod}
+              />
             )}
             <main className='flex-1 overflow-hidden'>
               <div
@@ -220,7 +224,11 @@ const AppLayout = ({ children }: PropsWithChildren) => {
             <AppHeader />
             <NewBusinessBanner />
             {sub?.status === 'trialing' && sub.trialEndsAt && (
-              <TrialingBanner trialEndsAt={sub.trialEndsAt} planName={sub.plan} />
+              <TrialingBanner
+                trialEndsAt={sub.trialEndsAt}
+                planName={sub.plan}
+                hasPaymentMethod={sub.hasPaymentMethod}
+              />
             )}
             <main>
               <div
