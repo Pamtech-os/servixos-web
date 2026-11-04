@@ -13,7 +13,7 @@ import {
   FileText,
   MapPin,
   Clock,
-  DollarSign,
+  Banknote,
   CalendarDays,
   StickyNote,
   Sparkles,
@@ -69,6 +69,7 @@ import CreateJobDialog from '@/components/jobs/CreateJobDialog';
 import DepositDialog from '@/components/jobs/DepositDialog';
 import ContractReviewDialog from '@/components/jobs/ContractReviewDialog';
 import type { Job, JobStatus, Contract } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -99,6 +100,7 @@ const statusLabel = (s: JobStatus) => {
 };
 
 const Jobs = () => {
+  const money = useMoney();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [clientFilter, setClientFilter] = useState('all');
@@ -574,9 +576,9 @@ const Jobs = () => {
                 </div>
                 {viewJob.price != null && (
                   <div className='flex items-center gap-2 text-sm'>
-                    <DollarSign size={14} className='text-muted-foreground' />
+                    <Banknote size={14} className='text-muted-foreground' />
                     <span className='text-muted-foreground'>Price:</span>
-                    <span className='font-medium'>${viewJob.price.toLocaleString()}</span>
+                    <span className='font-medium'>{money.format(viewJob.price)}</span>
                   </div>
                 )}
                 {viewJob.location && (
@@ -706,7 +708,7 @@ const Jobs = () => {
                     onClick={() => setDepositDialogOpen(true)}
                     className='gap-2'
                   >
-                    <DollarSign size={14} />
+                    <Banknote size={14} />
                     Record Deposit
                   </Button>
                 )}

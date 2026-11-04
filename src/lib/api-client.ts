@@ -29,4 +29,6 @@ export * from './api/ai-insights';
 export * from './api/ai-advisor';
 export * from './api/ai-suggestions';
 export * from './api/ai-guidance';
+export * from './api/ai-priorities';
+export * from './api/notifications';
 export * from './api/onboarding';

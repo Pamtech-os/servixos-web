@@ -30,6 +30,8 @@ export function useOnboardingSession(enabled: boolean) {
     queryFn: () => onboardingWorkspace.session(),
     enabled,
     staleTime: Infinity,
+    // The website import drafts profile sections in the background; poll until it settles.
+    refetchInterval: (query) => (query.state.data?.websiteImport?.status === 'pending' ? 3_000 : false),
   });
 }
 

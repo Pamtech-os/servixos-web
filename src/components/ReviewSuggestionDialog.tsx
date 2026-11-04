@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,13 @@ const ReviewSuggestionDialog = ({
               </DialogDescription>
             </DialogHeader>
 
+            {suggestion.status === 'failed' && suggestion.failure && (
+              <div className='flex gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive'>
+                <AlertCircle size={16} className='mt-0.5 shrink-0' />
+                <p>{suggestion.failure.message}</p>
+              </div>
+            )}
+
             <div className='rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm'>
               <div className='mb-1 flex items-center gap-1.5 text-xs font-semibold text-primary'>
                 <Sparkles size={13} />
@@ -145,7 +152,7 @@ const ReviewSuggestionDialog = ({
                 disabled={isExecuting || isDraftEmpty}
               >
                 {isExecuting && <Loader2 size={14} className='mr-1.5 animate-spin' />}
-                {suggestion.review.executeLabel}
+                {suggestion.status === 'failed' ? 'Retry' : suggestion.review.executeLabel}
               </Button>
             </DialogFooter>
           </>

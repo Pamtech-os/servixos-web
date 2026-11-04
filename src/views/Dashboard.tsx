@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  DollarSign,
+  Banknote,
   Users,
   FileText,
   Star,
@@ -23,6 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import AIGuidanceCard from '@/components/dashboard/AIGuidanceCard';
+import PrioritiesCard from '@/components/dashboard/PrioritiesCard';
 
 const RevenueChart = dynamic(() => import('@/components/charts/RevenueChart'), { ssr: false });
 const JobsStatusChart = dynamic(() => import('@/components/charts/JobsStatusChart'), { ssr: false });
@@ -32,6 +33,7 @@ import {
   useAnalyticsJobs,
 } from '@/hooks/queries/use-analytics';
 import type { ActivityLogCategory } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#f59e0b',
@@ -88,6 +90,7 @@ function getInitials(name: string): string {
 }
 
 const Dashboard = () => {
+  const money = useMoney();
   const { data: dashboardData, isPending: dashboardPending } = useAnalyticsDashboard();
   const { data: revenueData, isPending: revenuePending } = useAnalyticsRevenue(7);
   const { data: jobsData, isPending: jobsPending } = useAnalyticsJobs();
@@ -116,6 +119,8 @@ const Dashboard = () => {
         </p>
       </div>
 
+      <PrioritiesCard />
+
       <AIGuidanceCard />
 
       {/* Stat Cards */}
@@ -124,10 +129,10 @@ const Dashboard = () => {
           {
             title: 'Monthly Revenue',
             value: dashboardData != null
-              ? `$${dashboardData.monthlyRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              ? money.format(dashboardData.monthlyRevenue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
               : '—',
             sub: 'Current month',
-            icon: DollarSign,
+            icon: Banknote,
             iconGradient: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)))',
           },
           {
@@ -141,7 +146,7 @@ const Dashboard = () => {
             title: 'Outstanding Invoices',
             value: dashboardData != null ? String(dashboardData.outstandingInvoices.count) : '—',
             sub: dashboardData != null
-              ? `$${dashboardData.outstandingInvoices.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} remaining`
+              ? `${money.format(dashboardData.outstandingInvoices.totalAmount, { maximumFractionDigits: 2 })} remaining`
               : '',
             icon: FileText,
             iconGradient: 'linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)))',
@@ -366,7 +371,7 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <span className='font-display text-sm font-semibold'>
-                        ${client.totalSpent.toLocaleString()}
+                        {money.format(client.totalSpent)}
                       </span>
                     </div>
                   ))}

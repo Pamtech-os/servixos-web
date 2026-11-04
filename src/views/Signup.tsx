@@ -61,6 +61,7 @@ const COUNTRY_LABELS: Record<LaunchCountry, { name: string; flag: string }> = {
   GB: { name: 'United Kingdom', flag: '🇬🇧' },
   US: { name: 'United States', flag: '🇺🇸' },
   CA: { name: 'Canada', flag: '🇨🇦' },
+  OM: { name: 'Oman', flag: '🇴🇲' },
 };
 
 // The whole journey, so users see where account creation sits.

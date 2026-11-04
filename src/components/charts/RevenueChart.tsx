@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useMoney } from '@/hooks/use-money';
 
 interface RevenueDataPoint {
   month: string;
@@ -16,6 +17,7 @@ interface RevenueDataPoint {
 }
 
 export default function RevenueChart({ data }: { data: RevenueDataPoint[] }) {
+  const money = useMoney();
   return (
     <ResponsiveContainer width='100%' height={260}>
       <AreaChart data={data}>
@@ -30,7 +32,7 @@ export default function RevenueChart({ data }: { data: RevenueDataPoint[] }) {
         <YAxis
           tick={{ fontSize: 12 }}
           stroke='hsl(220, 10%, 46%)'
-          tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+          tickFormatter={(v: number) => money.format(v, { compact: true })}
         />
         <Tooltip
           contentStyle={{
@@ -39,7 +41,7 @@ export default function RevenueChart({ data }: { data: RevenueDataPoint[] }) {
             borderRadius: '8px',
             fontSize: '13px',
           }}
-          formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Revenue']}
+          formatter={(value) => [money.format(Number(value ?? 0)), 'Revenue']}
         />
         <Area
           type='monotone'

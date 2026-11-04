@@ -1,50 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { motion } from 'framer-motion';
-import {
-  ArrowUp,
-  Building2,
-  Compass,
-  Lightbulb,
-  Loader2,
-  Mic,
-  Sparkles,
-  Square,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import type { ChatMessage, StartingPoint } from '@/lib/api-client';
+import type { ChatMessage } from '@/lib/api-client';
 import { MAX_CHAT_MESSAGE_LENGTH } from '@/hooks/use-onboarding-chat';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
 import { useSpeechSynthesis } from '@/hooks/use-speech-synthesis';
 import { cn } from '@/lib/utils';
 
-const STARTERS: Array<{ id: StartingPoint; label: string; message: string; icon: typeof Compass }> = [
-  {
-    id: 'no_idea',
-    label: "I don't have an idea yet",
-    message: "I want to start a business but I don't have an idea yet. Can you help me find one?",
-    icon: Compass,
-  },
-  {
-    id: 'has_idea',
-    label: 'I have a business idea',
-    message: 'I have a business idea I want to turn into a real business.',
-    icon: Lightbulb,
-  },
-  {
-    id: 'existing_business',
-    label: 'I already run a business',
-    message: 'I already run a business and want to bring it online with ServixOS.',
-    icon: Building2,
-  },
-];
-
 interface OnboardingChatProps {
-  firstName?: string;
+  /** Shown before the first message, e.g. the opening question. */
+  emptyState: React.ReactNode;
   messages: ChatMessage[];
   streamingText: string;
   isStreaming: boolean;
@@ -80,7 +48,7 @@ const Bubble = ({
 const messageId = (m: ChatMessage, index: number) => `${m.createdAt}-${index}`;
 
 const OnboardingChat = ({
-  firstName,
+  emptyState,
   messages,
   streamingText,
   isStreaming,
@@ -154,37 +122,7 @@ const OnboardingChat = ({
     <div className='flex h-full min-h-0 flex-col'>
       <div ref={scrollRef} className='flex-1 space-y-3 overflow-y-auto p-4'>
         {isEmpty ? (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className='mx-auto flex max-w-md flex-col items-center gap-4 py-8 text-center'
-          >
-            <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15'>
-              <Sparkles className='h-6 w-6 text-primary' />
-            </div>
-            <div className='space-y-1'>
-              <h2 className='font-display text-lg font-semibold'>
-                Hi{firstName ? ` ${firstName}` : ''}, let&apos;s build your business
-              </h2>
-              <p className='text-sm text-muted-foreground'>
-                Tell me where you&apos;re starting from. I&apos;ll draft your concept, brand, services
-                and website as we talk, and you approve each part.
-              </p>
-            </div>
-            <div className='grid w-full gap-2'>
-              {STARTERS.map(({ id, label, message, icon: Icon }) => (
-                <button
-                  key={id}
-                  type='button'
-                  onClick={() => onSend(message)}
-                  className='flex items-center gap-3 rounded-xl border border-border bg-card/60 px-4 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-primary/5'
-                >
-                  <Icon className='h-4 w-4 shrink-0 text-primary' />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
+          emptyState
         ) : (
           <>
             {messages.map((m, i) => {

@@ -12,6 +12,7 @@ import {
   type ProfileSectionKey,
   type ProfileSectionMap,
   type SetPinInput,
+  type StartingPointInput,
   type VerifyEmailInput,
   type WebsitePreview,
 } from '@/lib/api-client';
@@ -82,6 +83,32 @@ export function useRegeneratePreview() {
   return useMutation({
     mutationFn: (instructions?: string) => onboardingWorkspace.regeneratePreview(instructions),
     onSuccess: (preview) => queryClient.setQueryData<WebsitePreview>([ONBOARDING_PREVIEW_KEY], preview),
+  });
+}
+
+export function useSetStartingPoint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: StartingPointInput) => onboardingWorkspace.setStartingPoint(input),
+    onSuccess: (session) => queryClient.setQueryData<OnboardingSession>([ONBOARDING_SESSION_KEY], session),
+  });
+}
+
+export function useImportWebsite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (url: string) => onboardingWorkspace.importWebsite(url),
+    // Seeding `pending` starts the session poll straight away.
+    onSuccess: (websiteImport) =>
+      queryClient.setQueryData<OnboardingSession>([ONBOARDING_SESSION_KEY], (prev) =>
+        prev ? { ...prev, hasWebsite: true, websiteImport } : prev
+      ),
+    onError: (err) => {
+      // 409: an import is already running, so resume polling it.
+      if (err instanceof HttpError && err.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: [ONBOARDING_SESSION_KEY] });
+      }
+    },
   });
 }
 

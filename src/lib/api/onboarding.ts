@@ -32,6 +32,10 @@ export interface ExistingBusinessSection {
   currentPricing?: string;
   challenges: string[];
   growthGoals: string[];
+  /** Up to 20 places served. */
+  serviceAreas?: string[];
+  /** Up to 200 characters, e.g. a phone number or email from the owner's site. */
+  publicContact?: string;
 }
 
 export interface OpportunityItem {
@@ -113,10 +117,60 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+// ─── Website import ───────────────────────────────────────────────────────────
+
+export type WebsiteImportStatus = 'pending' | 'ready' | 'partial' | 'failed';
+
+export type WebsiteImportFailureCode =
+  | 'site_unreachable'
+  | 'no_business_content'
+  | 'ai_unavailable'
+  | 'ai_declined';
+
+export type WebsiteImportMissing =
+  | 'business_name'
+  | 'description'
+  | 'industry'
+  | 'services'
+  | 'pricing'
+  | 'target_customers'
+  | 'value_proposition'
+  | 'service_areas'
+  | 'contact';
+
+export interface FieldProvenance {
+  /** "<section>.<field>", e.g. "brand.name". */
+  field: string;
+  /** `website`: read from the site; `inferred`: the AI's guess, so ask the owner to check. */
+  source: 'website' | 'inferred';
+  pageUrl?: string;
+}
+
+export interface WebsiteImport {
+  url: string;
+  domain: string;
+  status: WebsiteImportStatus;
+  failureCode?: WebsiteImportFailureCode;
+  provenance: FieldProvenance[];
+  missing: WebsiteImportMissing[];
+  /** Sections left alone because the owner had already approved or edited them. */
+  skippedSections: ProfileSectionKey[];
+  pagesRead: string[];
+  requestedAt: string;
+  completedAt?: string;
+}
+
 export interface OnboardingSession {
   startingPoint: StartingPoint | null;
+  hasWebsite?: boolean;
+  websiteImport?: WebsiteImport | null;
   profile: OnboardingProfile;
   messages: ChatMessage[];
+}
+
+export interface StartingPointInput {
+  startingPoint: StartingPoint;
+  hasWebsite: boolean;
 }
 
 // ─── Website preview ──────────────────────────────────────────────────────────
@@ -275,6 +329,14 @@ export const onboardingWorkspace = {
       instructions ? { instructions } : undefined,
       { timeoutMs: 60_000 }
     ),
+
+  /** Saves the opening answer; returns the updated session. */
+  setStartingPoint: (input: StartingPointInput) =>
+    sessionRequest<OnboardingSession>('POST', '/onboarding/starting-point', input),
+
+  /** Starts reading the owner's public site; poll the session while `websiteImport.status` is pending. */
+  importWebsite: (url: string) =>
+    sessionRequest<WebsiteImport>('POST', '/onboarding/website-import', { url }),
 
   /** Queues the one billed registry lookup; the result arrives on the onboarding status. */
   submitRegistration: (registrationNumber: string) =>
