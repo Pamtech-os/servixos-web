@@ -1,18 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronLeft, ChevronRight, X, CircleCheck, Clock } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  CircleSlash,
+  Clock,
+  Loader2,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import ReviewSuggestionDialog, {
   CATEGORY_PILL_CLASS,
   GRADIENT_BUTTON_CLASS,
   SUGGESTION_CATEGORY_LABELS,
 } from '@/components/ReviewSuggestionDialog';
+import DismissSuggestionDialog from '@/components/DismissSuggestionDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage, HttpError } from '@/common/network/http-client';
 import { useAiSuggestions, useTrackedSuggestions } from '@/hooks/queries/use-ai-suggestions';
 import { useApplySuggestion, useDismissSuggestion } from '@/hooks/mutations/use-ai-suggestions';
-import type { Suggestion, TrackedSuggestion } from '@/lib/api-client';
+import { useSuggestionExecution } from '@/hooks/use-suggestion-execution';
+import type {
+  DismissSuggestionInput,
+  OutcomeStatus,
+  Suggestion,
+  SuggestionStatus,
+  TrackedSuggestion,
+} from '@/lib/api-client';
 
 const HINT_STORAGE_KEY = 'ai_suggestions_hint_seen';
 
@@ -23,8 +41,22 @@ const executedTimeFormatter = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
+const OPEN_STATUSES = new Set<SuggestionStatus>(['pending_review', 'executing', 'failed']);
+
+const OWNER_ONLY_MESSAGE = 'Ask the business owner to do this.';
+
+const OUTCOME_BADGES: Record<Exclude<OutcomeStatus, 'pending'>, { label: string; className: string }> = {
+  achieved: { label: 'Achieved', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  partial: { label: 'Partly achieved', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  not_achieved: { label: 'Not achieved', className: 'bg-muted text-muted-foreground' },
+  not_applicable: { label: 'No longer applies', className: 'bg-muted text-muted-foreground' },
+};
+
 const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
-  const isPending = entry.outcome === null;
+  // Older responses carry no outcomeStatus; fall back to whether an outcome exists.
+  const outcomeStatus = entry.outcomeStatus ?? (entry.outcome === null ? 'pending' : 'achieved');
+  const isPending = outcomeStatus === 'pending';
+  const badge = isPending ? null : OUTCOME_BADGES[outcomeStatus];
   return (
     <motion.div
       layout
@@ -41,10 +73,14 @@ const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
             Pending
           </span>
         ) : (
-          <span className='inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-500 dark:text-blue-400'>
-            <CircleCheck size={12} />
-            Tracked
-          </span>
+          badge && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${badge.className}`}
+            >
+              {outcomeStatus === 'achieved' ? <CircleCheck size={12} /> : <CircleSlash size={12} />}
+              {badge.label}
+            </span>
+          )
         )}
       </div>
       <div className='space-y-1.5'>
@@ -81,20 +117,49 @@ const SuggestionSkeleton = () => (
 );
 
 const AISuggestionsPanel = () => {
-  const { isAiSuggestionsOpen: isOpen } = useUiState();
-  const { setAiSuggestionsOpen } = useUiActions();
+  const { isAiSuggestionsOpen: isOpen, reviewSuggestionId } = useUiState();
+  const { setAiSuggestionsOpen, setReviewSuggestionId } = useUiActions();
   const { data, isLoading, isError } = useAiSuggestions();
   const { data: trackedData } = useTrackedSuggestions(isOpen);
   const applySuggestion = useApplySuggestion();
   const dismissSuggestion = useDismissSuggestion();
   const [reviewing, setReviewing] = useState<Suggestion | null>(null);
+  const [dismissing, setDismissing] = useState<Suggestion | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
 
-  const suggestions = data?.suggestions ?? [];
+  const allSuggestions = useMemo(() => data?.suggestions ?? [], [data]);
+  // Server order is priority order; dismissed/expired cards just disappear.
+  const suggestions = allSuggestions.filter((s) => OPEN_STATUSES.has(s.status ?? 'pending_review'));
   const count = data?.count ?? suggestions.length;
   const tracked = trackedData?.tracked ?? [];
   const isMutating = applySuggestion.isPending || dismissSuggestion.isPending;
+
+  useSuggestionExecution(allSuggestions, {
+    onCompleted: (suggestion) =>
+      toast.success(suggestion.review.successMessage, {
+        description: 'The outcome will be tracked automatically.',
+      }),
+    onFailed: (suggestion, message) =>
+      toast.error(suggestion.title, {
+        description: message,
+        action: { label: 'Retry', onClick: () => openReview({ ...suggestion, status: 'failed' }) },
+      }),
+    onExpired: () => toast.info('This suggestion is no longer needed.'),
+  });
+
+  // Review requests from elsewhere (e.g. the priorities card) open the same dialog.
+  useEffect(() => {
+    if (!reviewSuggestionId || !data) return;
+    setReviewSuggestionId(null);
+    const target = data.suggestions.find((s) => s.id === reviewSuggestionId);
+    if (target && OPEN_STATUSES.has(target.status ?? 'pending_review')) {
+      if (target.status === 'executing') toast.info('This is being sent now.');
+      else openReview(target);
+    } else {
+      toast.info('This suggestion is no longer available.');
+    }
+  }, [reviewSuggestionId, data, setReviewSuggestionId]);
 
   useEffect(() => {
     if (localStorage.getItem(HINT_STORAGE_KEY)) return;
@@ -112,11 +177,15 @@ const AISuggestionsPanel = () => {
     setReviewing(suggestion);
   };
 
-  const handleDismiss = (id: string) => {
-    dismissSuggestion.mutate(id, {
-      onSuccess: () => toast.info('Suggestion dismissed.'),
+  const handleDismiss = (suggestion: Suggestion, input: DismissSuggestionInput) => {
+    dismissSuggestion.mutate({ id: suggestion.id, input }, {
+      onSuccess: () => {
+        setDismissing(null);
+        toast.info(input.reason === 'not_now' ? 'We’ll remind you in a few days.' : 'Suggestion dismissed.');
+      },
       onError: (err) => {
         if (err instanceof HttpError && err.status === 404) {
+          setDismissing(null);
           toast.info('This suggestion is no longer available.');
           return;
         }
@@ -130,16 +199,29 @@ const AISuggestionsPanel = () => {
     applySuggestion.mutate(
       { suggestion, draftValue },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setReviewing(null);
-          toast.success(suggestion.review.successMessage, {
-            description: 'The outcome will be tracked automatically.',
-          });
+          // Emails report success only once the mail provider confirms (see the watcher).
+          if (result.status === 'completed') {
+            toast.success(suggestion.review.successMessage, {
+              description: 'The outcome will be tracked automatically.',
+            });
+          }
         },
         onError: (err) => {
           if (err instanceof HttpError && err.status === 404) {
             setReviewing(null);
             toast.info('This suggestion is no longer available.');
+            return;
+          }
+          if (err instanceof HttpError && err.status === 403) {
+            setReviewing(null);
+            toast.error('You don’t have permission to do this', { description: OWNER_ONLY_MESSAGE });
+            return;
+          }
+          if (err instanceof HttpError && err.status >= 500) {
+            setReviewing(null);
+            toast.error('That didn’t go through', { description: getApiErrorMessage(err) });
             return;
           }
           // Validation errors on the draft are shown inline; the dialog keeps the user's edits.
@@ -258,7 +340,10 @@ const AISuggestionsPanel = () => {
                 )}
 
                 <AnimatePresence>
-                  {suggestions.map((suggestion) => (
+                  {suggestions.map((suggestion) => {
+                    const isSending = suggestion.status === 'executing';
+                    const isFailed = suggestion.status === 'failed';
+                    return (
                     <motion.div
                       key={suggestion.id}
                       layout
@@ -269,12 +354,19 @@ const AISuggestionsPanel = () => {
                       className='space-y-3 rounded-2xl border border-border bg-background p-4'
                     >
                       <div className='flex items-start justify-between gap-2'>
-                        <span className={CATEGORY_PILL_CLASS}>
-                          {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
-                        </span>
+                        <div className='flex flex-wrap items-center gap-1.5'>
+                          <span className={CATEGORY_PILL_CLASS}>
+                            {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
+                          </span>
+                          {suggestion.priority === 'high' && (
+                            <span className='inline-flex rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400'>
+                              High priority
+                            </span>
+                          )}
+                        </div>
                         <button
-                          onClick={() => handleDismiss(suggestion.id)}
-                          disabled={isMutating}
+                          onClick={() => setDismissing(suggestion)}
+                          disabled={isMutating || isSending}
                           aria-label='Dismiss suggestion'
                           className='-mr-1 -mt-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50'
                         >
@@ -293,15 +385,23 @@ const AISuggestionsPanel = () => {
                         <span className='text-muted-foreground'>Recommended: </span>
                         {suggestion.recommendation}
                       </p>
+                      {isFailed && suggestion.failure && (
+                        <p className='flex gap-1.5 rounded-xl bg-destructive/10 px-3 py-2 text-[12px] leading-relaxed text-destructive'>
+                          <AlertCircle size={14} className='mt-0.5 shrink-0' />
+                          {suggestion.failure.message}
+                        </p>
+                      )}
                       <button
                         onClick={() => openReview(suggestion)}
-                        disabled={isMutating}
-                        className={`h-10 w-full text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
+                        disabled={isMutating || isSending}
+                        className={`flex h-10 w-full items-center justify-center gap-1.5 text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
                       >
-                        Review &amp; Execute
+                        {isSending && <Loader2 size={14} className='animate-spin' />}
+                        {isSending ? 'Sending…' : isFailed ? 'Retry' : 'Review & Execute'}
                       </button>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </AnimatePresence>
 
                 {tracked.length > 0 && (
@@ -344,6 +444,13 @@ const AISuggestionsPanel = () => {
         onDraftChange={() => setDraftError(null)}
         onOpenChange={(open) => !open && setReviewing(null)}
         onExecute={handleExecute}
+      />
+
+      <DismissSuggestionDialog
+        suggestion={dismissing}
+        isDismissing={dismissSuggestion.isPending}
+        onOpenChange={(open) => !open && setDismissing(null)}
+        onDismiss={handleDismiss}
       />
     </>
   );

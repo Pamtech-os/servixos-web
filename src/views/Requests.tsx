@@ -12,7 +12,7 @@ import {
   CalendarIcon,
   MessageCircle,
   Sparkles,
-  DollarSign,
+  Banknote,
   Loader2,
   Ban,
 } from 'lucide-react';
@@ -34,6 +34,7 @@ import ChatUI from '@/components/ChatUI';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import {
   useServiceRequests,
+  useServiceRequest,
   useRequestPriceEstimate,
   useRequestConversation,
   isClientProvisioningPendingError,
@@ -41,6 +42,8 @@ import {
 import { useUpdateRequest, useDeleteRequest } from '@/hooks/mutations/use-requests';
 import { useClientChatSocket } from '@/hooks/use-client-chat-socket';
 import { buildPaginationMeta } from '@/lib/pagination';
+import { formatMoney } from '@/lib/money';
+import { OPEN_REQUEST_EVENT } from '@/lib/open-request';
 import type { ServiceRequest, RequestStatus } from '@/lib/api-client';
 
 const ITEMS_PER_PAGE = 10;
@@ -190,9 +193,10 @@ function AiPriceButton({
     if (result.data) {
       onEstimate(result.data.suggestedPrice);
       toast.success('AI Pricing Suggested', {
-        description: `Recommended price: ${
+        description: `Recommended price: ${formatMoney(
+          result.data.suggestedPrice,
           result.data.currency
-        } ${result.data.suggestedPrice.toLocaleString()} — ${result.data.confidence} confidence.`,
+        )} — ${result.data.confidence} confidence.`,
       });
     }
   };
@@ -266,6 +270,12 @@ const Requests = () => {
   const updateRequest = useUpdateRequest();
   const deleteRequest = useDeleteRequest();
 
+  // Deep link /requests?id=<id> (from the priorities card) opens that request once.
+  const [linkedId, setLinkedId] = useState(() =>
+    typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('id') ?? ''
+  );
+  const { data: linkedRequest, isError: linkedError } = useServiceRequest(linkedId);
+
   const openDetail = (req: ServiceRequest) => {
     const rawDate = new Date(req.requestedDate);
     const reqDate = isValid(rawDate) ? rawDate : today;
@@ -283,6 +293,21 @@ const Requests = () => {
     setPricingValue(req.quotedPrice ?? 0);
     setDetailOpen(true);
   };
+
+  useEffect(() => {
+    const onOpen = (e: Event) => setLinkedId((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_REQUEST_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_REQUEST_EVENT, onOpen);
+  }, []);
+
+  useEffect(() => {
+    if (!linkedId || (!linkedRequest && !linkedError)) return;
+    if (linkedRequest) openDetail(linkedRequest);
+    else toast.error('That request could not be found.');
+    setLinkedId('');
+    window.history.replaceState(null, '', window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedId, linkedRequest, linkedError]);
 
   const handleStartDateSelect = (date: Date | undefined) => {
     setAdjustedDate(date);
@@ -671,7 +696,7 @@ const Requests = () => {
               <div className='rounded-lg border border-border p-3 space-y-2'>
                 <div className='flex flex-wrap items-center justify-between gap-2'>
                   <p className='flex items-center gap-1.5 text-xs font-semibold'>
-                    <DollarSign size={14} className='text-primary' /> Pricing
+                    <Banknote size={14} className='text-primary' /> Pricing
                     {selectedRequest.status === 'pending' && (
                       <span className='text-destructive'>*</span>
                     )}

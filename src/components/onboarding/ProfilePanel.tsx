@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, CheckCircle2, Loader2, Pencil, Sparkles, User } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Check, CheckCircle2, Globe, HelpCircle, Loader2, Pencil, Sparkles, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
 import {
   REQUIRED_SECTIONS,
+  type FieldProvenance,
   type OnboardingProfile,
   type ProfileSectionKey,
   type ProfileSectionMap,
@@ -64,6 +65,51 @@ const formatPrice = (amount: number, currency: string) => {
     return `${currency} ${amount}`;
   }
 };
+
+// ─── Provenance ───────────────────────────────────────────────────────────────
+
+interface SectionProvenance {
+  website: string[];
+  inferred: string[];
+}
+
+/** "targetCustomers" → "target customers". */
+const humanizeField = (field: string) => field.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+
+/** Groups "<section>.<field>" entries by section in one pass. O(n). */
+const groupProvenance = (entries: FieldProvenance[]) => {
+  const bySection = new Map<string, SectionProvenance>();
+  for (const { field, source } of entries) {
+    const dot = field.indexOf('.');
+    if (dot < 0) continue;
+    const section = field.slice(0, dot);
+    const group = bySection.get(section) ?? { website: [], inferred: [] };
+    group[source === 'website' ? 'website' : 'inferred'].push(humanizeField(field.slice(dot + 1)));
+    bySection.set(section, group);
+  }
+  return bySection;
+};
+
+const ProvenanceBadges = ({ provenance }: { provenance: SectionProvenance }) => (
+  <div className='flex flex-wrap gap-1.5'>
+    {provenance.website.length > 0 && (
+      <span
+        className='inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-600 dark:text-sky-400'
+        title={provenance.website.join(', ')}
+      >
+        <Globe className='h-3 w-3' /> From your website: {provenance.website.join(', ')}
+      </span>
+    )}
+    {provenance.inferred.length > 0 && (
+      <span
+        className='inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-600 dark:text-amber-400'
+        title={provenance.inferred.join(', ')}
+      >
+        <HelpCircle className='h-3 w-3' /> Please check: {provenance.inferred.join(', ')}
+      </span>
+    )}
+  </div>
+);
 
 // ─── Read-only views ──────────────────────────────────────────────────────────
 
@@ -124,6 +170,8 @@ const SectionView = ({
           <Row label='Current pricing'>{s.currentPricing}</Row>
           <Row label='Challenges'><Chips items={s.challenges} /></Row>
           <Row label='Growth goals'><Chips items={s.growthGoals} /></Row>
+          <Row label='Service areas'><Chips items={s.serviceAreas} /></Row>
+          <Row label='Public contact'>{s.publicContact}</Row>
         </div>
       );
     }
@@ -282,10 +330,12 @@ const SectionCard = ({
   sectionKey,
   section,
   highlighted,
+  provenance,
 }: {
   sectionKey: ProfileSectionKey;
   section: OnboardingProfile[ProfileSectionKey];
   highlighted: boolean;
+  provenance?: SectionProvenance;
 }) => {
   const [editing, setEditing] = useState(false);
   const updateMutation = useUpdateProfileSection();
@@ -317,6 +367,8 @@ const SectionCard = ({
   };
 
   const approved = section?.status === 'approved';
+  // Badges describe the AI's import, so they go once the owner edits or approves.
+  const showProvenance = !!provenance && section?.status === 'draft' && section.updatedBy === 'ai';
 
   return (
     <div
@@ -388,6 +440,7 @@ const SectionCard = ({
         )
       ) : (
         <>
+          {showProvenance && <ProvenanceBadges provenance={provenance} />}
           <SectionView
             sectionKey={sectionKey}
             section={section}
@@ -422,9 +475,12 @@ const SectionCard = ({
 interface ProfilePanelProps {
   profile: OnboardingProfile;
   highlighted: ReadonlySet<ProfileSectionKey>;
+  /** Where website-imported fields came from. */
+  provenance?: FieldProvenance[];
 }
 
-const ProfilePanel = ({ profile, highlighted }: ProfilePanelProps) => {
+const ProfilePanel = ({ profile, highlighted, provenance }: ProfilePanelProps) => {
+  const provenanceBySection = useMemo(() => groupProvenance(provenance ?? []), [provenance]);
   // Drafted sections in journey order, plus placeholders for required ones not drafted yet.
   const visible = SECTION_ORDER.filter((key) => profile[key] || REQUIRED.has(key));
 
@@ -440,6 +496,7 @@ const ProfilePanel = ({ profile, highlighted }: ProfilePanelProps) => {
           sectionKey={key}
           section={profile[key]}
           highlighted={highlighted.has(key)}
+          provenance={provenanceBySection.get(key)}
         />
       ))}
     </div>

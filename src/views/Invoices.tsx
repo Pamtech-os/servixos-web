@@ -52,8 +52,9 @@ import { cn } from '@/lib/utils';
 import { useInvoices } from '@/hooks/queries/use-invoices';
 import { useClients } from '@/hooks/queries/use-clients';
 import { useCreateInvoice, useDeleteInvoice, useSendInvoice, useGetInvoicePdf } from '@/hooks/mutations/use-invoices';
-import { getApiErrorMessage } from '@/common/network/http-client';
+import { getApiErrorMessage, HttpError } from '@/common/network/http-client';
 import type { Invoice, InvoiceClient, InvoiceLineItem, InvoiceStatus } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 function getClientName(clientId: Invoice['clientId']): string {
   if (typeof clientId === 'object' && clientId !== null) return (clientId as InvoiceClient).name;
@@ -80,6 +81,7 @@ const statusColor = (s: InvoiceStatus) => {
 };
 
 const Invoices = () => {
+  const money = useMoney();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
   const [page, setPage] = useState(1);
@@ -179,11 +181,19 @@ const Invoices = () => {
     if (!sendTarget) return;
     sendInvoice.mutate(sendTarget._id, {
       onSuccess: () => {
-        toast.success('Invoice sent', { description: `${sendTarget.invoiceNumber} has been emailed to the client.` });
+        toast.success('Invoice on its way', {
+          description: `${sendTarget.invoiceNumber} is being emailed to the client.`,
+        });
         setSendTarget(null);
       },
       onError: (err) => {
-        toast.error('Failed to send invoice', { description: getApiErrorMessage(err) });
+        if (err instanceof HttpError && err.status === 403) {
+          toast.error('You don’t have permission to send invoices', {
+            description: 'Ask the business owner to do this.',
+          });
+        } else {
+          toast.error('Failed to send invoice', { description: getApiErrorMessage(err) });
+        }
         setSendTarget(null);
       },
     });
@@ -251,7 +261,7 @@ const Invoices = () => {
                   </CardHeader>
                   <CardContent>
                     <div className='text-2xl font-bold'>
-                      ${card.value.toLocaleString()}
+                      {money.format(card.value)}
                     </div>
                   </CardContent>
                 </Card>
@@ -335,8 +345,8 @@ const Invoices = () => {
                     >
                       <TableCell className='font-medium'>{inv.invoiceNumber}</TableCell>
                       <TableCell>{getClientName(inv.clientId)}</TableCell>
-                      <TableCell>${inv.totalAmount.toLocaleString()}</TableCell>
-                      <TableCell>${inv.amountPaid.toLocaleString()}</TableCell>
+                      <TableCell>{money.format(inv.totalAmount)}</TableCell>
+                      <TableCell>{money.format(inv.amountPaid)}</TableCell>
                       <TableCell>
                         {format(new Date(inv.invoiceDate), 'MMM d, yyyy')}
                       </TableCell>
@@ -578,7 +588,7 @@ const Invoices = () => {
             <div className='space-y-2'>
               <div className='flex justify-between text-sm'>
                 <span className='text-muted-foreground'>Subtotal</span>
-                <span>${subtotal.toLocaleString()}</span>
+                <span>{money.format(subtotal)}</span>
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <div className='flex items-center gap-2'>
@@ -590,12 +600,12 @@ const Invoices = () => {
                     className='h-8 w-20'
                   />
                 </div>
-                <span>${taxAmount.toLocaleString()}</span>
+                <span>{money.format(taxAmount)}</span>
               </div>
               <Separator />
               <div className='flex justify-between text-base font-bold'>
                 <span>Total</span>
-                <span>${total.toLocaleString()}</span>
+                <span>{money.format(total)}</span>
               </div>
             </div>
           </div>

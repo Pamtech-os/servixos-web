@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CreditCard, Lock, ArrowRight, Loader2, X } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { fromMinorUnits } from '@/lib/money';
 
 // ─── Stripe init ──────────────────────────────────────────────────────────────
 
@@ -111,7 +112,7 @@ const InnerForm = ({
           style: 'currency',
           currency,
           minimumFractionDigits: 2,
-        }).format(amountCents / 100)
+        }).format(fromMinorUnits(amountCents, currency))
       : null;
 
   const handleSubmit = useCallback(
@@ -340,7 +341,7 @@ const StripeCardModal = ({
                           style: 'currency',
                           currency: currency ?? 'usd',
                           minimumFractionDigits: 2,
-                        }).format(amountCents / 100)}
+                        }).format(fromMinorUnits(amountCents, currency ?? 'usd'))}
                       </strong>
                     </p>
                   )}

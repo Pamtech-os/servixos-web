@@ -36,12 +36,19 @@ const Teams = () => {
 
   // Default to the first visible tab; update when the visible set is first known
   const [activeTab, setActiveTab] = useState('');
+  // Deep links such as /teams?tab=tasks&task=<id> (from the priorities card).
+  const [deepLink] = useState(() => {
+    if (typeof window === 'undefined') return { tab: null, task: null };
+    const params = new URLSearchParams(window.location.search);
+    return { tab: params.get('tab'), task: params.get('task') };
+  });
 
   useEffect(() => {
     if (access.isResolving || visibleTabs.length === 0) return;
     setActiveTab((prev) => {
-      const stillVisible = visibleTabs.some((t) => t.value === prev);
-      return stillVisible ? prev : visibleTabs[0].value;
+      const wanted = prev || deepLink.tab;
+      const stillVisible = visibleTabs.some((t) => t.value === wanted);
+      return stillVisible && wanted ? wanted : visibleTabs[0].value;
     });
   }, [access.isResolving]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -98,7 +105,7 @@ const Teams = () => {
               <TimeTrackingTab />
             </TabsContent>
             <TabsContent value='tasks'>
-              <TasksTab />
+              <TasksTab initialTaskId={deepLink.task} />
             </TabsContent>
             <TabsContent value='communications'>
               <CommunicationsTab />

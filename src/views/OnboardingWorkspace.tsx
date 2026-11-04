@@ -30,6 +30,7 @@ import { toast } from '@/components/ui/sonner';
 import OnboardingChat from '@/components/onboarding/OnboardingChat';
 import ProfilePanel, { SECTION_LABELS } from '@/components/onboarding/ProfilePanel';
 import RegistrationCard from '@/components/onboarding/RegistrationCard';
+import SetupOpening from '@/components/onboarding/SetupOpening';
 import WebsitePreviewPanel from '@/components/onboarding/WebsitePreviewPanel';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -274,7 +275,11 @@ const OnboardingWorkspace = () => {
       {showRegistration && (
         <RegistrationCard country={status.country} registration={status.businessRegistration} />
       )}
-      <ProfilePanel profile={profile} highlighted={highlighted} />
+      <ProfilePanel
+        profile={profile}
+        highlighted={highlighted}
+        provenance={session?.websiteImport?.provenance}
+      />
     </div>
   );
   const websitePanel = (
@@ -286,7 +291,13 @@ const OnboardingWorkspace = () => {
   );
   const chatPanel = (
     <OnboardingChat
-      firstName={auth.user?.firstName}
+      emptyState={
+        <SetupOpening
+          firstName={auth.user?.firstName}
+          session={session}
+          onSend={(message) => void chat.send(message)}
+        />
+      }
       messages={session?.messages ?? []}
       streamingText={chat.streamingText}
       isStreaming={chat.isStreaming}

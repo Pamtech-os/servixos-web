@@ -12,17 +12,21 @@ import {
 type UiState = {
   isMobileSidebarOpen: boolean;
   isAiSuggestionsOpen: boolean;
+  /** A suggestion whose Review & Execute dialog was requested from outside the panel. */
+  reviewSuggestionId: string | null;
 };
 
 type UiAction =
   | { type: 'SET_MOBILE_SIDEBAR'; payload: boolean }
   | { type: 'TOGGLE_MOBILE_SIDEBAR' }
   | { type: 'SET_AI_PANEL'; payload: boolean }
-  | { type: 'TOGGLE_AI_PANEL' };
+  | { type: 'TOGGLE_AI_PANEL' }
+  | { type: 'SET_REVIEW_SUGGESTION'; payload: string | null };
 
 const initialState: UiState = {
   isMobileSidebarOpen: false,
   isAiSuggestionsOpen: false,
+  reviewSuggestionId: null,
 };
 
 function uiReducer(state: UiState, action: UiAction): UiState {
@@ -35,6 +39,8 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, isAiSuggestionsOpen: action.payload };
     case 'TOGGLE_AI_PANEL':
       return { ...state, isAiSuggestionsOpen: !state.isAiSuggestionsOpen };
+    case 'SET_REVIEW_SUGGESTION':
+      return { ...state, reviewSuggestionId: action.payload };
     default:
       return state;
   }
@@ -46,6 +52,7 @@ const UiActionsContext = createContext<{
   toggleMobileSidebar: () => void;
   setAiSuggestionsOpen: (next: boolean) => void;
   toggleAiSuggestions: () => void;
+  setReviewSuggestionId: (id: string | null) => void;
 } | null>(null);
 
 export function UiProvider({ children }: PropsWithChildren) {
@@ -67,14 +74,19 @@ export function UiProvider({ children }: PropsWithChildren) {
     dispatch({ type: 'TOGGLE_AI_PANEL' });
   }, []);
 
+  const setReviewSuggestionId = useCallback((id: string | null) => {
+    dispatch({ type: 'SET_REVIEW_SUGGESTION', payload: id });
+  }, []);
+
   const actions = useMemo(
     () => ({
       setMobileSidebarOpen,
       toggleMobileSidebar,
       setAiSuggestionsOpen,
       toggleAiSuggestions,
+      setReviewSuggestionId,
     }),
-    [setAiSuggestionsOpen, setMobileSidebarOpen, toggleAiSuggestions, toggleMobileSidebar]
+    [setAiSuggestionsOpen, setMobileSidebarOpen, setReviewSuggestionId, toggleAiSuggestions, toggleMobileSidebar]
   );
 
   return (

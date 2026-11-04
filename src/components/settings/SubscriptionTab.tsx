@@ -32,6 +32,7 @@ import { useUpgradePlanMutation } from '@/hooks/mutations/use-subscription';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { type SubscriptionPlan, type BillingInterval, planOrder } from '@/lib/api-client';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { formatMoney, fromMinorUnits } from '@/lib/money';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -260,7 +261,9 @@ const TransactionHistory = () => {
           </div>
           <div className='text-right'>
             {tx.amountUsd > 0 && (
-              <p className='text-sm font-semibold'>{centsToDisplay(tx.amountUsd)}</p>
+              <p className='text-sm font-semibold'>
+                {formatMoney(fromMinorUnits(tx.amountUsd, tx.currency), tx.currency.toUpperCase())}
+              </p>
             )}
             <p className='text-xs capitalize text-muted-foreground'>{tx.plan}</p>
           </div>

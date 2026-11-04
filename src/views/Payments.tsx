@@ -60,6 +60,7 @@ import {
 } from '@/hooks/mutations/use-payments';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import type { Payment, PaymentMode, PaymentStatus, UpdatePaymentInput } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -81,6 +82,7 @@ const statusColor = (s: PaymentStatus) => {
 };
 
 const Payments = () => {
+  const money = useMoney();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all');
   const [page, setPage] = useState(1);
@@ -170,7 +172,7 @@ const Payments = () => {
       {
         onSuccess: () => {
           toast.success('Payment recorded', {
-            description: `$${amount.toLocaleString()} has been recorded.`,
+            description: `${money.format(amount)} has been recorded.`,
           });
           setDialogOpen(false);
           resetForm();
@@ -310,7 +312,7 @@ const Payments = () => {
                   ) : (
                     <p className='text-lg font-bold'>
                       {card.currency
-                        ? `$${card.value.toLocaleString()}`
+                        ? money.format(card.value)
                         : card.value.toLocaleString()}
                     </p>
                   )}
@@ -401,7 +403,7 @@ const Payments = () => {
                           <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
                           <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
                           <TableCell className='text-right font-medium'>
-                            ${p.amount.toLocaleString()}
+                            {money.format(p.amount)}
                           </TableCell>
                           <TableCell>
                             <Badge variant='outline' className={statusColor(p.status)}>
@@ -503,7 +505,7 @@ const Payments = () => {
                 <SelectContent>
                   {invoiceList.map((inv) => (
                     <SelectItem key={inv._id} value={inv._id}>
-                      {inv.invoiceNumber} — ${inv.totalAmount.toLocaleString()}
+                      {inv.invoiceNumber} — {money.format(inv.totalAmount)}
                     </SelectItem>
                   ))}
                 </SelectContent>

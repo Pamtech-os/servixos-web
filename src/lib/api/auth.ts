@@ -36,7 +36,7 @@ export interface BusinessCategory {
 
 // ─── Onboarding input types ───────────────────────────────────────────────────
 
-export const LAUNCH_COUNTRIES = ['NG', 'GH', 'GB', 'US', 'CA'] as const;
+export const LAUNCH_COUNTRIES = ['NG', 'GH', 'GB', 'US', 'CA', 'OM'] as const;
 export type LaunchCountry = (typeof LAUNCH_COUNTRIES)[number];
 
 export interface CreateAccountInput {
@@ -68,7 +68,7 @@ export type OnboardingNextStep =
 
 export type BusinessRegistrationStatus = 'pending' | 'verified' | 'not_found' | 'unavailable';
 
-/** Countries with a registry lookup (Nigeria CAC, Ghana, Canada); GB and US get a 400. */
+/** Countries with a registry lookup (Nigeria CAC, Ghana, Canada); GB, US and OM get a 400. */
 export const REGISTRY_COUNTRIES: readonly LaunchCountry[] = ['NG', 'GH', 'CA'];
 
 export interface OnboardingStatus {

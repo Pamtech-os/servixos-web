@@ -63,6 +63,9 @@ export interface BusinessProfile {
   name: string;
   subdomain: string;
   email: string;
+  country?: string | null;
+  /** ISO 4217 code the business trades in (from its country), e.g. "NGN". */
+  currency?: string;
   subscription: BusinessSubscription;
 }
 
