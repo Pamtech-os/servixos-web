@@ -34,7 +34,13 @@ export function useSaveDesignMutation() {
     onSuccess: (data) => {
       queryClient.setQueryData<WebsiteConfig>([WEBSITE_CONFIG_KEY, businessId], (prev) =>
         prev
-          ? { ...prev, colorPrimary: data.colorPrimary, colorSecondary: data.colorSecondary, font: data.font }
+          ? {
+              ...prev,
+              colorPrimary: data.colorPrimary,
+              colorSecondary: data.colorSecondary,
+              font: data.font,
+              template: data.template ?? prev.template,
+            }
           : prev,
       );
     },
