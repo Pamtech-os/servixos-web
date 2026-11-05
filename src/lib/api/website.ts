@@ -1,5 +1,6 @@
 import { HttpError, RequestTimeoutError } from '@/common/network/http-client';
 import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+import type { SiteTemplate } from '@/lib/website/site-templates';
 import {
   BASE_URL,
   REAL_API_URL,
@@ -59,6 +60,8 @@ export interface WebsiteConfig {
   colorPrimary: string;
   colorSecondary: string;
   font: string;
+  /** Missing on API versions that predate templates; treated as classic. */
+  template?: SiteTemplate;
   logoUrl?: string;
   aiContent?: WebsiteAiContent;
   bookingForm?: WebsiteBookingForm;
@@ -70,12 +73,14 @@ export interface SaveDesignInput {
   colorPrimary?: string;
   colorSecondary?: string;
   font?: string;
+  template?: SiteTemplate;
 }
 
 export interface SaveDesignResult {
   colorPrimary: string;
   colorSecondary: string;
   font: string;
+  template?: SiteTemplate;
 }
 
 export interface SaveContentInput {

@@ -1,4 +1,5 @@
 import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+import type { SiteTemplate } from '@/lib/website/site-templates';
 
 export type BookingFieldKey =
   | 'clientName'
@@ -30,6 +31,8 @@ export interface WebsitePublicData {
     colorPrimary: string;
     colorSecondary: string;
     font: string;
+    /** Missing on API versions that predate templates; treated as classic. */
+    template?: SiteTemplate;
     logoUrl?: string;
     aiContent?: {
       hero: {
