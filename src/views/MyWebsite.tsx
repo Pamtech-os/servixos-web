@@ -22,6 +22,7 @@ import {
   Loader2,
   Upload,
   ImageIcon,
+  Images,
 } from 'lucide-react';
 import {
   Card,
@@ -39,6 +40,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/sonner';
+import ConfirmModal from '@/components/ConfirmModal';
+import WebsitePhotosEditor from '@/components/website/WebsitePhotosEditor';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebsiteConfig } from '@/hooks/queries/use-website';
 import {
@@ -52,6 +55,7 @@ import { getApiErrorMessage } from '@/common/network/http-client';
 import type { WebsiteBookingFieldKey, WebsiteAiContent } from '@/lib/api-client';
 import type { LucideIcon } from 'lucide-react';
 import { SITE_TEMPLATES, resolveTemplate, type SiteTemplate } from '@/lib/website/site-templates';
+import { nameKey } from '@/lib/website/site-images';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,6 +140,19 @@ function getSectionDisplayText(id: keyof SectionContents, contents: SectionConte
   }
 }
 
+function parseServiceNames(csv: string): string[] {
+  return csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Service photos the API will delete because their service is no longer in `nextNames`. O(n + m). */
+function servicePhotosToDrop(photoServiceNames: string[], nextNames: string[]): string[] {
+  const kept = new Set(nextNames.map(nameKey));
+  return photoServiceNames.filter((name) => !kept.has(nameKey(name)));
+}
+
 function buildBookingFields(
   apiFields?: Array<{ key: WebsiteBookingFieldKey; label: string; placeholder?: string; required: boolean }>,
 ): BookingField[] {
@@ -176,6 +193,7 @@ const MyWebsite = () => {
   const [fontFamily, setFontFamily] = useState('Inter');
   const [template, setTemplate] = useState<SiteTemplate>('classic');
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [photosAtRisk, setPhotosAtRisk] = useState<string[]>([]);
 
   const [bookingFields, setBookingFields] = useState<BookingField[]>(DEFAULT_BOOKING_FIELDS);
   const [bookingTitle, setBookingTitle] = useState('Book a Service');
@@ -211,7 +229,17 @@ const MyWebsite = () => {
     document.head.appendChild(link);
   }, []);
 
-  const handleSaveSection = async (sectionId: keyof SectionContents) => {
+  const handleSaveSection = async (sectionId: keyof SectionContents, confirmed = false) => {
+    if (sectionId === 'services' && !confirmed) {
+      const atRisk = servicePhotosToDrop(
+        (websiteData?.photos?.services ?? []).map((p) => p.serviceName),
+        parseServiceNames(sectionContents.services),
+      );
+      if (atRisk.length) {
+        setPhotosAtRisk(atRisk);
+        return;
+      }
+    }
     try {
       switch (sectionId) {
         case 'hero':
@@ -219,11 +247,7 @@ const MyWebsite = () => {
           break;
         case 'services':
           await saveContent.mutateAsync({
-            services: sectionContents.services
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .map((name) => ({ name, description: '' })),
+            services: parseServiceNames(sectionContents.services).map((name) => ({ name, description: '' })),
           });
           break;
         case 'about':
@@ -413,6 +437,9 @@ const MyWebsite = () => {
           <TabsTrigger value='content' className='gap-1.5'>
             <Edit3 size={14} /> Content
           </TabsTrigger>
+          <TabsTrigger value='photos' className='gap-1.5'>
+            <Images size={14} /> Photos
+          </TabsTrigger>
           <TabsTrigger value='bookings' className='gap-1.5'>
             <ClipboardList size={14} /> Bookings
           </TabsTrigger>
@@ -489,6 +516,11 @@ const MyWebsite = () => {
               </Card>
             </motion.div>
           ))}
+        </TabsContent>
+
+        {/* Photos Tab */}
+        <TabsContent value='photos'>
+          <WebsitePhotosEditor config={websiteData} isLoading={isLoading} />
         </TabsContent>
 
         {/* Bookings Tab */}
@@ -822,6 +854,20 @@ const MyWebsite = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ConfirmModal
+        open={photosAtRisk.length > 0}
+        onOpenChange={(open) => !open && setPhotosAtRisk([])}
+        title='Delete service photos?'
+        description={`Renaming or removing ${photosAtRisk.join(', ')} will delete ${
+          photosAtRisk.length === 1 ? 'its photo' : 'their photos'
+        } from your website. You can upload new ones from the Photos tab.`}
+        confirmLabel='Save anyway'
+        onConfirm={() => {
+          setPhotosAtRisk([]);
+          void handleSaveSection('services', true);
+        }}
+      />
     </div>
   );
 };

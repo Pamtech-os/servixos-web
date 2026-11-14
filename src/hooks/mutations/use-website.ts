@@ -9,6 +9,8 @@ import {
   type SaveDesignResult,
   type SaveContentInput,
   type UploadLogoResult,
+  type PhotoSlot,
+  type WebsitePhotosData,
 } from '@/lib/api-client';
 import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { WEBSITE_CONFIG_KEY } from '@/hooks/queries/use-website';
@@ -82,3 +84,47 @@ export function useUploadLogoMutation() {
     },
   });
 }
+
+// ─── Photos ───────────────────────────────────────────────────────────────────
+
+/** Every photo endpoint returns the full photos + images, so the cache updates without a refetch. */
+function usePhotoMutation<TInput>(request: (businessId: string, input: TInput) => Promise<WebsitePhotosData>) {
+  const { businessId } = useBusinessAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation<WebsitePhotosData, Error, TInput>({
+    mutationFn: (input) => request(businessId, input),
+    onSuccess: ({ photos, images }) => {
+      queryClient.setQueryData<WebsiteConfig>([WEBSITE_CONFIG_KEY, businessId], (prev) =>
+        prev ? { ...prev, photos, images } : prev,
+      );
+    },
+  });
+}
+
+export const useSetSlotPhotoMutation = () =>
+  usePhotoMutation<{ slot: PhotoSlot; file: File; alt?: string }>((id, { slot, file, alt }) =>
+    website.photos.setSlot(id, slot, file, alt),
+  );
+
+export const useRemoveSlotPhotoMutation = () =>
+  usePhotoMutation<PhotoSlot>((id, slot) => website.photos.removeSlot(id, slot));
+
+export const useSetServicePhotoMutation = () =>
+  usePhotoMutation<{ serviceName: string; file: File; alt?: string }>((id, { serviceName, file, alt }) =>
+    website.photos.setService(id, serviceName, file, alt),
+  );
+
+export const useRemoveServicePhotoMutation = () =>
+  usePhotoMutation<string>((id, serviceName) => website.photos.removeService(id, serviceName));
+
+export const useAddGalleryPhotoMutation = () =>
+  usePhotoMutation<{ file: File; alt?: string; caption?: string }>((id, { file, ...opts }) =>
+    website.photos.addToGallery(id, file, opts),
+  );
+
+export const useReorderGalleryMutation = () =>
+  usePhotoMutation<string[]>((id, photoIds) => website.photos.reorderGallery(id, photoIds));
+
+export const useRemoveGalleryPhotoMutation = () =>
+  usePhotoMutation<string>((id, photoId) => website.photos.removeFromGallery(id, photoId));

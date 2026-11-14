@@ -1,12 +1,15 @@
 import type { WebsitePublicData } from '../types';
 import { Reveal, RevealGroup, RevealItem } from '../reveal';
-import { serviceIllustration, servicePrice, startingPrice } from '@/lib/website/site-content';
+import { servicePrice, startingPrice } from '@/lib/website/site-content';
+import { indexByServiceName, nameKey, resolveSiteImages } from '@/lib/website/site-images';
+import { SiteGallery, SiteImg } from './parts';
 
 /** The original landing page; every site published before templates existed renders with it. */
 export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
   const { business, website } = data;
   const { aiContent, colorPrimary, colorSecondary, profile } = website;
-  const illustrations = aiContent?.illustrations;
+  const images = resolveSiteImages(website.images, aiContent?.illustrations, business.name);
+  const serviceImages = indexByServiceName(images.services);
   const fromPrice = startingPrice(profile);
   const audience = profile?.targetCustomers ?? [];
 
@@ -170,7 +173,7 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
           {/* Content */}
           <div
             className={`relative z-10 mx-auto ${
-              illustrations?.hero ? 'grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:text-left' : 'max-w-4xl'
+              images.hero ? 'grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:text-left' : 'max-w-4xl'
             }`}
           >
             <div>
@@ -194,7 +197,7 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
               {/* Subheadline */}
               <p
                 className={`fu3 mb-10 max-w-2xl text-lg leading-relaxed text-gray-500 sm:text-xl ${
-                  illustrations?.hero ? 'mx-auto lg:mx-0' : 'mx-auto'
+                  images.hero ? 'mx-auto lg:mx-0' : 'mx-auto'
                 }`}
               >
                 {heroSub}
@@ -203,7 +206,7 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
               {/* CTAs */}
               <div
                 className={`fu4 flex flex-wrap items-center justify-center gap-4 ${
-                  illustrations?.hero ? 'lg:justify-start' : ''
+                  images.hero ? 'lg:justify-start' : ''
                 }`}
               >
                 <a
@@ -226,18 +229,18 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
               </div>
             </div>
 
-            {illustrations?.hero && (
+            {images.hero && (
               <div className='fu3 relative'>
                 <div
                   className='absolute -inset-6 rounded-[2.5rem] opacity-20 blur-3xl'
                   style={{ background: `linear-gradient(135deg, ${colorPrimary}, ${colorSecondary || colorPrimary})` }}
                   aria-hidden='true'
                 />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={illustrations.hero.url}
-                  alt={`Illustration of ${business.name}`}
-                  className='float relative w-full rounded-[2rem] border border-white/60 bg-white/70 shadow-2xl backdrop-blur'
+                <SiteImg
+                  image={images.hero}
+                  lazy={false}
+                  className='float relative h-auto w-full rounded-[2rem] border border-white/60 bg-white/70 shadow-2xl backdrop-blur'
+                  photoClassName='aspect-[4/3]'
                 />
               </div>
             )}
@@ -271,7 +274,7 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
             {/* Cards */}
             <RevealGroup className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3'>
               {services.map((service) => {
-                const image = serviceIllustration(illustrations, service.name);
+                const image = serviceImages.get(nameKey(service.name));
                 const price = servicePrice(profile, service.name);
                 return (
                   <RevealItem key={service.name} className='h-full'>
@@ -289,8 +292,7 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
                           className='svc-media -mx-7 -mt-7 mb-6 aspect-[4/3] overflow-hidden'
                           style={{ background: `${colorPrimary}0d` }}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={image} alt='' loading='lazy' className='h-full w-full object-cover' />
+                          <SiteImg image={image} className='h-full w-full' />
                         </div>
                       ) : (
                         <div
@@ -431,19 +433,17 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
                 </Reveal>
 
                 {/* Illustration, or a decorative brand panel until one is drawn */}
-                {illustrations?.about ? (
+                {images.about ? (
                   <Reveal delay={0.15} className='relative'>
                     <div
                       className='absolute -inset-6 rounded-[2rem] opacity-[.14] blur-3xl'
                       style={{ background: colorPrimary }}
                       aria-hidden='true'
                     />
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={illustrations.about.url}
-                      alt={`The team behind ${business.name}`}
-                      loading='lazy'
-                      className='relative w-full rounded-[2rem] border border-gray-100 bg-white shadow-2xl'
+                    <SiteImg
+                      image={images.about}
+                      className='relative h-auto w-full rounded-[2rem] border border-gray-100 bg-white shadow-2xl'
+                      photoClassName='aspect-[4/3]'
                     />
                   </Reveal>
                 ) : (
@@ -520,6 +520,8 @@ export default function ClassicTemplate({ data }: { data: WebsitePublicData }) {
             </div>
           </section>
         )}
+
+        <SiteGallery images={images.gallery} accent={colorPrimary} className='bg-gray-50/60' />
 
         {/* ─────────────────────── TESTIMONIAL ─────────────────────── */}
         {aiContent?.testimonialPlaceholder && (

@@ -1,7 +1,7 @@
 import type { WebsitePublicData } from '../types';
 import { Reveal, RevealGroup, RevealItem } from '../reveal';
 import { Magnetic, Spotlight, SplitWords, TiltCard } from './effects';
-import { Icon, contactItems } from './parts';
+import { Icon, SiteGallery, SiteImg, contactItems } from './parts';
 import { buildSiteModel, siteStats } from './site-model';
 
 const BG = '#06060c';
@@ -162,8 +162,7 @@ export default function AuroraTemplate({ data }: { data: WebsitePublicData }) {
               <Reveal delay={0.35}>
                 <TiltCard className='spin-frame mx-auto max-w-lg rounded-[2rem] p-[2px]' max={14}>
                   <div className='overflow-hidden rounded-[calc(2rem-2px)] bg-white/95'>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.hero.image} alt={`Illustration of ${m.name}`} className='w-full' />
+                    <SiteImg image={m.hero.image} lazy={false} className='block h-auto w-full' photoClassName='aspect-[4/3]' />
                   </div>
                 </TiltCard>
               </Reveal>
@@ -191,8 +190,7 @@ export default function AuroraTemplate({ data }: { data: WebsitePublicData }) {
                     <div className='glass glow-card flex h-full flex-col overflow-hidden rounded-3xl p-7'>
                       {service.image ? (
                         <div className='-mx-7 -mt-7 mb-6 aspect-[4/3] overflow-hidden bg-white/90'>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={service.image} alt='' loading='lazy' className='h-full w-full object-cover' />
+                          <SiteImg image={service.image} className='h-full w-full' />
                         </div>
                       ) : (
                         <div
@@ -286,8 +284,7 @@ export default function AuroraTemplate({ data }: { data: WebsitePublicData }) {
                 <TiltCard className='spin-frame rounded-[2rem] p-[2px]'>
                   {m.about.image ? (
                     <div className='overflow-hidden rounded-[calc(2rem-2px)] bg-white/95'>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.about.image} alt={`The team behind ${m.name}`} loading='lazy' className='w-full' />
+                      <SiteImg image={m.about.image} className='block h-auto w-full' photoClassName='aspect-[4/3]' />
                     </div>
                   ) : (
                     <div className='flex aspect-[4/3] items-center justify-center rounded-[calc(2rem-2px)]' style={{ background: BG }}>
@@ -299,6 +296,8 @@ export default function AuroraTemplate({ data }: { data: WebsitePublicData }) {
             </div>
           </section>
         )}
+
+        <SiteGallery images={m.gallery} accent={p} tone='dark' eyebrow='In the field' className='relative' />
 
         {/* ── TESTIMONIAL ── */}
         {m.testimonial && (

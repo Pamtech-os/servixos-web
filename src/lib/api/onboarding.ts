@@ -1,4 +1,5 @@
 import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+import type { SiteImages } from '@/lib/website/site-images';
 import { HttpError, NetworkOfflineError } from '@/common/network/http-client';
 import { BASE_URL, buildSignedHeaders, sessionGet, sessionRequest, withSessionRefresh } from './core';
 import type { BusinessRegistrationStatus, SessionData } from './auth';
@@ -195,6 +196,8 @@ export interface WebsitePreview {
       illustrations?: SiteIllustrations;
     };
     profile?: SiteProfile;
+    /** Illustrations only: photos are added after the business exists. */
+    images?: SiteImages;
   };
   generatedAt: string | null;
   /** `pending` while Claude draws the illustrations in the background. */

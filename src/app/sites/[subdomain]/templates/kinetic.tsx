@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import type { WebsitePublicData } from '../types';
 import { Reveal } from '../reveal';
 import { Magnetic, Parallax, ScrollProgress, SplitWords } from './effects';
-import { Icon, contactItems } from './parts';
+import { Icon, SiteGallery, SiteImg, contactItems } from './parts';
 import { buildSiteModel, siteStats } from './site-model';
 
 const INK = '#0b0b0f';
@@ -128,8 +128,7 @@ export default function KineticTemplate({ data }: { data: WebsitePublicData }) {
 
           {m.hero.image && (
             <Parallax speed={180} className='pointer-events-none absolute -right-16 top-24 hidden w-[38vw] max-w-xl opacity-90 xl:block'>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.hero.image} alt='' className='w-full rotate-3 rounded-[2rem] shadow-2xl' />
+              <SiteImg image={m.hero.image} lazy={false} className='h-auto w-full rotate-3 rounded-[2rem] shadow-2xl' photoClassName='aspect-[4/3]' />
             </Parallax>
           )}
         </section>
@@ -162,8 +161,7 @@ export default function KineticTemplate({ data }: { data: WebsitePublicData }) {
                       {service.description && <span className='k-muted mt-2 block max-w-2xl text-sm opacity-60 sm:text-base'>{service.description}</span>}
                     </span>
                     {service.image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={service.image} alt='' loading='lazy' className='k-thumb hidden h-24 w-32 shrink-0 rounded-xl object-cover shadow-xl md:block' />
+                      <SiteImg image={service.image} className='k-thumb hidden h-24 w-32 shrink-0 rounded-xl bg-white shadow-xl md:block' />
                     )}
                     {service.price && <span className='hidden shrink-0 text-sm font-bold sm:block'>{service.price}</span>}
                     <Icon name='arrow' className='k-arrow h-7 w-7 shrink-0' strokeWidth={2.4} />
@@ -221,8 +219,7 @@ export default function KineticTemplate({ data }: { data: WebsitePublicData }) {
             <div className='mx-auto grid max-w-7xl items-center gap-16 lg:grid-cols-2'>
               <Parallax speed={100}>
                 {m.about.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.about.image} alt={`The team behind ${m.name}`} loading='lazy' className='w-full -rotate-2 rounded-[2rem] border-2 shadow-[12px_12px_0_0]' style={{ borderColor: INK, color: INK }} />
+                  <SiteImg image={m.about.image} className='h-auto w-full -rotate-2 rounded-[2rem] border-2 bg-white shadow-[12px_12px_0_0]' photoClassName='aspect-[4/3]' style={{ borderColor: INK, color: INK }} />
                 ) : (
                   <div className='flex aspect-square -rotate-2 items-center justify-center rounded-[2rem] border-2 shadow-[12px_12px_0_0]' style={{ borderColor: INK, color: INK, background: p }}>
                     <span className='text-[12rem] font-black uppercase leading-none text-white'>{m.name.charAt(0)}</span>
@@ -246,6 +243,8 @@ export default function KineticTemplate({ data }: { data: WebsitePublicData }) {
             </div>
           </section>
         )}
+
+        <SiteGallery images={m.gallery} accent={p} eyebrow='Work in progress' title='The gallery' className='sm:px-8' frameClassName='rounded-[2rem] border-2' />
 
         {/* ── TESTIMONIAL ── */}
         {m.testimonial && (

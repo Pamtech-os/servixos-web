@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  images: {
+    // Logos and website photos are served from the storage CDN.
+    remotePatterns: [{ protocol: 'https', hostname: 'res.cloudinary.com' }],
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

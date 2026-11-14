@@ -1,7 +1,7 @@
 import type { WebsitePublicData } from '../types';
 import { Reveal } from '../reveal';
 import { BubbleField, SpringIn, SplitWords } from './effects';
-import { Icon, contactItems } from './parts';
+import { Icon, SiteGallery, SiteImg, contactItems } from './parts';
 import { buildSiteModel, siteStats } from './site-model';
 
 function Wave({ fill, flip = false }: { fill: string; flip?: boolean }) {
@@ -118,8 +118,7 @@ export default function BubblesTemplate({ data }: { data: WebsitePublicData }) {
               <SpringIn delay={0.3} className='relative mx-auto w-full max-w-lg'>
                 <div className='morph absolute -inset-6 opacity-40' style={{ background: gradient }} aria-hidden='true' />
                 <div className='morph relative overflow-hidden bg-white p-3 shadow-2xl' style={{ animationDelay: '-6s' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.hero.image} alt={`Illustration of ${m.name}`} className='morph w-full' style={{ animationDelay: '-6s' }} />
+                  <SiteImg image={m.hero.image} lazy={false} className='morph w-full' photoClassName='aspect-[4/3]' style={{ animationDelay: '-6s' }} />
                 </div>
               </SpringIn>
             )}
@@ -147,8 +146,7 @@ export default function BubblesTemplate({ data }: { data: WebsitePublicData }) {
                     <div className='pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-10' style={{ background: gradient }} aria-hidden='true' />
                     {service.image ? (
                       <div className='-mx-3 -mt-3 mb-6 aspect-[4/3] overflow-hidden rounded-[2rem]' style={{ background: `${p}0d` }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={service.image} alt='' loading='lazy' className='h-full w-full object-cover' />
+                        <SiteImg image={service.image} className='h-full w-full' />
                       </div>
                     ) : (
                       <div
@@ -232,8 +230,7 @@ export default function BubblesTemplate({ data }: { data: WebsitePublicData }) {
               <SpringIn className='relative mx-auto aspect-square w-full max-w-md'>
                 <div className='morph absolute inset-0 opacity-90' style={{ background: gradient }} aria-hidden='true' />
                 {m.about.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.about.image} alt={`The team behind ${m.name}`} loading='lazy' className='morph absolute inset-6 h-[calc(100%-3rem)] w-[calc(100%-3rem)] bg-white object-cover' style={{ animationDelay: '-3s' }} />
+                  <SiteImg image={m.about.image} className='morph absolute inset-6 h-[calc(100%-3rem)] w-[calc(100%-3rem)] bg-white' style={{ animationDelay: '-3s' }} />
                 ) : (
                   <div className='absolute inset-0 flex items-center justify-center text-8xl font-extrabold text-white/90'>{m.name.charAt(0)}</div>
                 )}
@@ -249,6 +246,8 @@ export default function BubblesTemplate({ data }: { data: WebsitePublicData }) {
             </div>
           </section>
         )}
+
+        <SiteGallery images={m.gallery} accent={p} eyebrow='Snapshots' frameClassName='rounded-[2rem]' />
 
         {/* ── TESTIMONIAL as a speech bubble ── */}
         {m.testimonial && (
