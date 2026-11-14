@@ -54,11 +54,6 @@ const byName = <T extends { name: string }>(items: T[] | undefined, name: string
   return items?.find((item) => item.name.trim().toLowerCase() === key);
 };
 
-/** The illustration drawn for a service, matched by name. */
-export function serviceIllustration(illustrations: SiteIllustrations | undefined, name: string): string | undefined {
-  return byName(illustrations?.services, name)?.url;
-}
-
 /** The setup price for a service, formatted, matched by name. */
 export function servicePrice(profile: SiteProfile | undefined, name: string): string | null {
   const offer = byName(profile?.services, name);

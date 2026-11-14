@@ -1,10 +1,17 @@
 import type { WebsitePublicData } from '../types';
-import { serviceIllustration, servicePrice, startingPrice } from '@/lib/website/site-content';
+import { servicePrice, startingPrice } from '@/lib/website/site-content';
+import {
+  indexByServiceName,
+  nameKey,
+  resolveSiteImages,
+  type SiteGalleryImage,
+  type SiteImage,
+} from '@/lib/website/site-images';
 
 export interface SiteService {
   name: string;
   description: string;
-  image?: string;
+  image?: SiteImage;
   price: string | null;
 }
 
@@ -23,13 +30,14 @@ export interface SiteModel {
     accent: string;
     sub: string;
     cta: string;
-    image?: string;
+    image?: SiteImage;
   };
   services: SiteService[];
   fromPrice: string | null;
   valueProposition?: string;
   audience: string[];
-  about?: { title: string; body: string; image?: string };
+  about?: { title: string; body: string; image?: SiteImage };
+  gallery: SiteGalleryImage[];
   testimonial?: { quote: string; author: string };
   contactCta: string;
   phone?: string;
@@ -39,7 +47,8 @@ export interface SiteModel {
 
 export function buildSiteModel({ business, website }: WebsitePublicData): SiteModel {
   const { aiContent, profile } = website;
-  const illustrations = aiContent?.illustrations;
+  const images = resolveSiteImages(website.images, aiContent?.illustrations, business.name);
+  const serviceImages = indexByServiceName(images.services);
   const primary = website.colorPrimary;
   const secondary = website.colorSecondary || primary;
 
@@ -51,7 +60,7 @@ export function buildSiteModel({ business, website }: WebsitePublicData): SiteMo
   ).map((s) => ({
     name: s.name,
     description: s.description,
-    image: serviceIllustration(illustrations, s.name),
+    image: serviceImages.get(nameKey(s.name)),
     price: servicePrice(profile, s.name),
   }));
 
@@ -69,15 +78,16 @@ export function buildSiteModel({ business, website }: WebsitePublicData): SiteMo
       accent: words.slice(-2).join(' '),
       sub: aiContent?.hero.subheadline ?? business.description ?? business.categoryName,
       cta: aiContent?.hero.ctaText ?? 'Book a Service',
-      image: illustrations?.hero?.url,
+      image: images.hero,
     },
     services,
     fromPrice: startingPrice(profile),
     valueProposition: profile?.valueProposition,
     audience: profile?.targetCustomers ?? [],
     about: aboutBody
-      ? { title: aiContent?.about.title ?? 'About Us', body: aboutBody, image: illustrations?.about?.url }
+      ? { title: aiContent?.about.title ?? 'About Us', body: aboutBody, image: images.about }
       : undefined,
+    gallery: images.gallery,
     testimonial: aiContent?.testimonialPlaceholder,
     contactCta: aiContent?.contact.callToAction ?? 'Ready to get started?',
     phone: business.phone,

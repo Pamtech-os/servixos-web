@@ -1,4 +1,5 @@
 import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+import type { SiteImages } from '@/lib/website/site-images';
 import type { SiteTemplate } from '@/lib/website/site-templates';
 
 export type BookingFieldKey =
@@ -63,6 +64,8 @@ export interface WebsitePublicData {
       fields: BookingField[];
     };
     profile?: SiteProfile;
+    /** Resolved per section: the owner's photo wins over the AI illustration. */
+    images?: SiteImages;
   };
 }
 

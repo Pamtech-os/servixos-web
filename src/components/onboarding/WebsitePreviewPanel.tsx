@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Globe, Loader2, MessageSquarePlus, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
+import { Globe, ImagePlus, Loader2, MessageSquarePlus, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,7 +9,8 @@ import { toast } from '@/components/ui/sonner';
 import type { WebsitePreview } from '@/lib/api-client';
 import { useRegeneratePreview } from '@/hooks/mutations/use-onboarding';
 import { HttpError, getApiErrorMessage } from '@/common/network/http-client';
-import { serviceIllustration, servicePrice } from '@/lib/website/site-content';
+import { servicePrice } from '@/lib/website/site-content';
+import { indexByServiceName, nameKey, resolveSiteImages } from '@/lib/website/site-images';
 
 const MAX_INSTRUCTIONS_LENGTH = 1000;
 
@@ -29,7 +30,8 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
     ? content.services
     : business.services.map((name) => ({ name, description: '' }));
   const testimonial = content?.testimonialPlaceholder;
-  const illustrations = content?.illustrations;
+  const images = resolveSiteImages(website.images, content?.illustrations, business.name);
+  const serviceImages = indexByServiceName(images.services);
   const profile = website.profile;
 
   return (
@@ -59,11 +61,11 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
         <span className='mt-4 inline-block rounded-full bg-white px-4 py-2 text-xs font-semibold' style={{ color: primary }}>
           {content?.hero.ctaText ?? 'Book a Service'}
         </span>
-        {illustrations?.hero && (
+        {images.hero && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={illustrations.hero.url}
-            alt=''
+            src={images.hero.url}
+            alt={images.hero.alt}
             className='mt-6 w-full rounded-lg bg-white/90 shadow-lg animate-in fade-in duration-700'
           />
         )}
@@ -92,9 +94,9 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
         <section className='px-6 py-6'>
           <h4 className='text-base font-bold'>{content.about.title}</h4>
           <p className='mt-1 text-sm text-slate-600'>{content.about.body}</p>
-          {illustrations?.about && (
+          {images.about && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={illustrations.about.url} alt='' className='mt-3 w-full rounded-lg border border-slate-100 animate-in fade-in duration-700' />
+            <img src={images.about.url} alt={images.about.alt} className='mt-3 w-full rounded-lg border border-slate-100 animate-in fade-in duration-700' />
           )}
         </section>
       )}
@@ -104,13 +106,13 @@ const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
           <h4 className='text-base font-bold'>Services</h4>
           <div className='mt-3 grid gap-2 sm:grid-cols-2'>
             {services.map((s) => {
-              const image = serviceIllustration(illustrations, s.name);
+              const image = serviceImages.get(nameKey(s.name));
               const price = servicePrice(profile, s.name);
               return (
                 <div key={s.name} className='overflow-hidden rounded-lg border border-slate-200 bg-white'>
                   {image && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={image} alt='' className='aspect-[4/3] w-full object-cover animate-in fade-in duration-700' />
+                    <img src={image.url} alt={image.alt} className='aspect-[4/3] w-full object-cover animate-in fade-in duration-700' />
                   )}
                   <div className='p-3'>
                     <div className='flex items-start justify-between gap-2'>
@@ -226,6 +228,14 @@ const WebsitePreviewPanel = ({ preview, isLoading, canGenerate }: WebsitePreview
           <Globe className='h-8 w-8 text-muted-foreground' />
           <p className='text-sm text-muted-foreground'>Your website preview will appear here.</p>
         </div>
+      )}
+
+      {hasContent && (
+        <p className='flex items-start gap-1.5 text-[11px] text-muted-foreground'>
+          <ImagePlus className='mt-px h-3.5 w-3.5 shrink-0' />
+          After you launch, you can swap any illustration for your own photos and add a gallery
+          in the Website Builder.
+        </p>
       )}
 
       <p className='text-[11px] text-muted-foreground'>

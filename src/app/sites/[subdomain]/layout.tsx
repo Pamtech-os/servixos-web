@@ -54,6 +54,7 @@ function SiteNav({
   primaryColor,
   secondaryColor,
   hasAbout,
+  hasGallery,
   logoUrl,
   template,
 }: {
@@ -61,6 +62,7 @@ function SiteNav({
   primaryColor: string;
   secondaryColor: string;
   hasAbout: boolean;
+  hasGallery: boolean;
   logoUrl?: string;
   template: SiteTemplate;
 }) {
@@ -81,6 +83,7 @@ function SiteNav({
           {[
             { label: 'Services', href: '#services' },
             ...(hasAbout ? [{ label: 'About', href: '#about' }] : []),
+            ...(hasGallery ? [{ label: 'Gallery', href: '#gallery' }] : []),
             { label: 'Contact', href: '#contact' },
           ].map(({ label, href }) => (
             <a
@@ -121,6 +124,7 @@ export default async function SiteLayout({
   const { colorPrimary, font } = data.website;
   const googleFont = font.replace(/\s+/g, '+');
   const hasAbout = !!(data.website.aiContent?.about || data.business.description);
+  const hasGallery = (data.website.images?.gallery?.length ?? 0) > 0;
   const template = resolveTemplate(data.website.template);
 
   return (
@@ -142,7 +146,7 @@ export default async function SiteLayout({
         }
         className='min-h-screen bg-white text-gray-900'
       >
-        <SiteNav businessName={data.business.name} primaryColor={colorPrimary} secondaryColor={data.website.colorSecondary} hasAbout={hasAbout} logoUrl={data.website.logoUrl} template={template} />
+        <SiteNav businessName={data.business.name} primaryColor={colorPrimary} secondaryColor={data.website.colorSecondary} hasAbout={hasAbout} hasGallery={hasGallery} logoUrl={data.website.logoUrl} template={template} />
         {children}
       </div>
     </>
