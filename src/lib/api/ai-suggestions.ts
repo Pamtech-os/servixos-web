@@ -1,4 +1,5 @@
 import { protectedGet, protectedRequest } from './core';
+import type { SuggestionEducation } from './learning';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export interface Suggestion {
   recommendation: string;
   review: SuggestionReview;
   failure: SuggestionFailure | null;
+  /** Depends on the viewer, not the business; null means no "Why this matters" section. */
+  education: SuggestionEducation | null;
 }
 
 export type OutcomeStatus = 'pending' | 'achieved' | 'partial' | 'not_achieved' | 'not_applicable';

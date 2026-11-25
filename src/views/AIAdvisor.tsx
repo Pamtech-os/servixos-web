@@ -3,7 +3,17 @@
 import { useState, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Bot, User, DollarSign, Megaphone, Settings2, Sparkles, Loader2 } from 'lucide-react';
+import {
+  Send,
+  Bot,
+  User,
+  DollarSign,
+  Megaphone,
+  Settings2,
+  Sparkles,
+  Loader2,
+  GraduationCap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
@@ -11,13 +21,16 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage, getSubscriptionRequiredInfo } from '@/common/network/http-client';
 import { useAskAdvisor } from '@/hooks/mutations/use-ai-advisor';
 import { useUpgradePlan } from '@/common/state/upgrade-plan-context';
-import type { AdvisorTopic } from '@/lib/api-client';
+import { useUiActions } from '@/common/state/ui-context';
+import LearningModeSwitch from '@/components/learning/LearningModeSwitch';
+import type { AdvisorTopic, ConceptRef } from '@/lib/api-client';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   title?: string;
   content: string;
+  concepts?: ConceptRef[];
   timestamp: string;
 }
 
@@ -76,6 +89,7 @@ const AIAdvisor = () => {
   const router = useRouter();
   const { mutateAsync: askAdvisor, isPending } = useAskAdvisor();
   const { showUpgradeModal } = useUpgradePlan();
+  const { openLearn } = useUiActions();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -102,6 +116,7 @@ const AIAdvisor = () => {
           role: 'assistant',
           title: result.title,
           content: result.answer,
+          concepts: result.concepts ?? [],
           timestamp: timestamp(),
         },
       ]);
@@ -133,14 +148,17 @@ const AIAdvisor = () => {
   return (
     <div className='flex h-full min-h-0 flex-col overflow-hidden'>
       {/* Header */}
-      <div className='mb-2 shrink-0 sm:mb-3'>
-        <h1 className='font-display flex items-center gap-2 text-xl font-bold md:text-2xl'>
-          <Bot size={24} className='text-primary' />
-          AI Business Advisor
-        </h1>
-        <p className='text-xs text-muted-foreground'>
-          Get AI-powered advice on pricing, marketing, and operations.
-        </p>
+      <div className='mb-2 flex shrink-0 flex-col gap-2 sm:mb-3 sm:flex-row sm:items-start sm:justify-between'>
+        <div>
+          <h1 className='font-display flex items-center gap-2 text-xl font-bold md:text-2xl'>
+            <Bot size={24} className='text-primary' />
+            AI Business Advisor
+          </h1>
+          <p className='text-xs text-muted-foreground'>
+            Get AI-powered advice on pricing, marketing, and operations.
+          </p>
+        </div>
+        <LearningModeSwitch className='shrink-0' />
       </div>
 
       {/* Chat area */}
@@ -234,6 +252,22 @@ const AIAdvisor = () => {
                       </div>
                     ) : (
                       msg.content
+                    )}
+                    {msg.role === 'assistant' && msg.concepts && msg.concepts.length > 0 && (
+                      <div className='mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2'>
+                        <span className='text-[11px] text-muted-foreground'>Learn about:</span>
+                        {msg.concepts.map((concept) => (
+                          <button
+                            key={concept.key}
+                            type='button'
+                            onClick={() => openLearn({ concept: concept.key })}
+                            className='inline-flex items-center gap-1 rounded-full bg-background px-2.5 py-0.5 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/10 dark:text-blue-400'
+                          >
+                            <GraduationCap size={11} aria-hidden />
+                            {concept.name}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

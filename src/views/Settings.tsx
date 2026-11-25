@@ -14,10 +14,11 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import ConfirmModal from '@/components/ConfirmModal';
 import SubscriptionTab from '@/components/settings/SubscriptionTab';
+import AiLearningTab from '@/components/settings/AiLearningTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import { HttpError } from '@/common/network/http-client';
-import { Building2, Bell, Shield, CreditCard, Loader2, Volume2 } from 'lucide-react';
+import { Building2, Bell, Shield, CreditCard, Loader2, Volume2, Sparkles } from 'lucide-react';
 import { useSoundAlerts } from '@/hooks/use-sound-alerts';
 import { playNotificationSound, unlockAudio } from '@/lib/notification-sound';
 import { useBusinessProfileSettings, useNotificationPreferences } from '@/hooks/queries/use-settings';
@@ -424,12 +425,15 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue='business' className='space-y-6'>
-        <TabsList className='flex h-auto w-full min-h-0 flex-nowrap justify-start gap-1 overflow-x-auto p-1 lg:w-[520px]'>
+        <TabsList className='flex h-auto w-full min-h-0 flex-nowrap justify-start gap-1 overflow-x-auto p-1 lg:w-[600px]'>
           <TabsTrigger value='business' className='shrink-0 gap-1.5 px-3'>
             <Building2 size={16} /> Business
           </TabsTrigger>
           <TabsTrigger value='notifications' className='shrink-0 gap-1.5 px-3'>
             <Bell size={16} /> Notifications
+          </TabsTrigger>
+          <TabsTrigger value='ai' className='shrink-0 gap-1.5 px-3'>
+            <Sparkles size={16} /> AI
           </TabsTrigger>
           <TabsTrigger value='account' className='shrink-0 gap-1.5 px-3'>
             <Shield size={16} /> Account
@@ -445,6 +449,10 @@ const Settings = () => {
 
         <TabsContent value='notifications'>
           <NotificationsTab />
+        </TabsContent>
+
+        <TabsContent value='ai'>
+          <AiLearningTab />
         </TabsContent>
 
         <TabsContent value='account'>

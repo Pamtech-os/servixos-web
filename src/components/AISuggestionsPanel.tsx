@@ -7,6 +7,7 @@ import {
   CircleCheck,
   CircleSlash,
   Clock,
+  GraduationCap,
   Loader2,
   Sparkles,
   X,
@@ -17,6 +18,7 @@ import ReviewSuggestionDialog, {
   SUGGESTION_CATEGORY_LABELS,
 } from '@/components/ReviewSuggestionDialog';
 import DismissSuggestionDialog from '@/components/DismissSuggestionDialog';
+import SuggestionEducationSection from '@/components/learning/SuggestionEducationSection';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUiActions, useUiState } from '@/common/state/ui-context';
 import { toast } from '@/components/ui/sonner';
@@ -118,7 +120,7 @@ const SuggestionSkeleton = () => (
 
 const AISuggestionsPanel = () => {
   const { isAiSuggestionsOpen: isOpen, reviewSuggestionId } = useUiState();
-  const { setAiSuggestionsOpen, setReviewSuggestionId } = useUiActions();
+  const { setAiSuggestionsOpen, setReviewSuggestionId, openLearn } = useUiActions();
   const { data, isLoading, isError } = useAiSuggestions();
   const { data: trackedData } = useTrackedSuggestions(isOpen);
   const applySuggestion = useApplySuggestion();
@@ -127,6 +129,9 @@ const AISuggestionsPanel = () => {
   const [dismissing, setDismissing] = useState<Suggestion | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
+  // Per-card open state once the user toggles; otherwise the server's defaultExpanded wins.
+  // Lives here (not in the card) so it survives the panel closing and list refetches.
+  const [educationToggles, setEducationToggles] = useState<Record<string, boolean>>({});
 
   const allSuggestions = useMemo(() => data?.suggestions ?? [], [data]);
   // Server order is priority order; dismissed/expired cards just disappear.
@@ -385,20 +390,46 @@ const AISuggestionsPanel = () => {
                         <span className='text-muted-foreground'>Recommended: </span>
                         {suggestion.recommendation}
                       </p>
+                      {suggestion.education && (
+                        <SuggestionEducationSection
+                          education={suggestion.education}
+                          expanded={
+                            educationToggles[suggestion.id] ?? suggestion.education.defaultExpanded
+                          }
+                          onToggle={() =>
+                            setEducationToggles((prev) => ({
+                              ...prev,
+                              [suggestion.id]: !(
+                                prev[suggestion.id] ?? suggestion.education?.defaultExpanded
+                              ),
+                            }))
+                          }
+                        />
+                      )}
                       {isFailed && suggestion.failure && (
                         <p className='flex gap-1.5 rounded-xl bg-destructive/10 px-3 py-2 text-[12px] leading-relaxed text-destructive'>
                           <AlertCircle size={14} className='mt-0.5 shrink-0' />
                           {suggestion.failure.message}
                         </p>
                       )}
-                      <button
-                        onClick={() => openReview(suggestion)}
-                        disabled={isMutating || isSending}
-                        className={`flex h-10 w-full items-center justify-center gap-1.5 text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
-                      >
-                        {isSending && <Loader2 size={14} className='animate-spin' />}
-                        {isSending ? 'Sending…' : isFailed ? 'Retry' : 'Review & Execute'}
-                      </button>
+                      <div className='flex gap-2'>
+                        <button
+                          type='button'
+                          onClick={() => openLearn({ suggestionId: suggestion.id })}
+                          className='flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border px-3.5 text-sm font-medium transition-colors hover:bg-muted'
+                        >
+                          <GraduationCap size={14} />
+                          Learn more
+                        </button>
+                        <button
+                          onClick={() => openReview(suggestion)}
+                          disabled={isMutating || isSending}
+                          className={`flex h-10 flex-1 items-center justify-center gap-1.5 text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
+                        >
+                          {isSending && <Loader2 size={14} className='animate-spin' />}
+                          {isSending ? 'Sending…' : isFailed ? 'Retry' : 'Help me do this'}
+                        </button>
+                      </div>
                     </motion.div>
                     );
                   })}
