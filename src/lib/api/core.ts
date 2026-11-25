@@ -317,7 +317,8 @@ export async function protectedRequest<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
   businessId: string,
-  body?: unknown
+  body?: unknown,
+  options: { timeoutMs?: number } = {}
 ): Promise<T> {
   const envelope = await withSessionRefresh(() =>
     requestEnvelope<T>({
@@ -325,6 +326,7 @@ export async function protectedRequest<T>(
       path,
       body,
       headers: { 'x-business-id': businessId },
+      timeoutMs: options.timeoutMs,
     })
   );
   return envelope.data;

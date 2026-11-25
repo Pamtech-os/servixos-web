@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar from '@/components/AppSidebar';
 import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
+import LearnMoreDrawer from '@/components/learning/LearnMoreDrawer';
 import NotificationPopups from '@/components/notifications/NotificationPopups';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
 import TrialingBanner from '@/components/TrialingBanner';
@@ -245,6 +246,7 @@ const AppLayout = ({ children }: PropsWithChildren) => {
         )}
       </div>
       <AISuggestionsPanel />
+      <LearnMoreDrawer />
       <NotificationPopups />
     </div>
   );

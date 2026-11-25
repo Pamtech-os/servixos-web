@@ -1,4 +1,5 @@
 import { protectedRequest } from './core';
+import type { ConceptRef, LearningMode } from './learning';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -9,6 +10,9 @@ export interface AdvisorAnswer {
   topic: AdvisorTopic | null;
   title: string;
   answer: string;
+  learningMode: LearningMode;
+  /** Empty for out-of-scope answers. */
+  concepts: ConceptRef[];
 }
 
 export interface AskAdvisorInput {
