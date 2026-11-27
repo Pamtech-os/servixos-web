@@ -166,8 +166,13 @@ const Invoices = () => {
   const handleDelete = () => {
     if (!deleteTarget) return;
     deleteInvoice.mutate(deleteTarget._id, {
-      onSuccess: () => {
-        toast.success('Invoice deleted', { description: `${deleteTarget.invoiceNumber} has been removed.` });
+      onSuccess: ({ deletedPayments }) => {
+        toast.success('Invoice deleted', {
+          description:
+            deletedPayments > 0
+              ? `${deleteTarget.invoiceNumber} and ${deletedPayments} recorded payment${deletedPayments === 1 ? '' : 's'} have been removed.`
+              : `${deleteTarget.invoiceNumber} has been removed.`,
+        });
         setDeleteTarget(null);
       },
       onError: (err) => {
@@ -413,7 +418,7 @@ const Invoices = () => {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
         title='Delete Invoice'
-        description={`Are you sure you want to delete ${deleteTarget?.invoiceNumber}? This action cannot be undone.`}
+        description={`Are you sure you want to delete ${deleteTarget?.invoiceNumber}? Any payments recorded against it will be deleted too, and the client's balance recalculated. This action cannot be undone.`}
         confirmLabel='Delete'
         onConfirm={handleDelete}
         variant='destructive'

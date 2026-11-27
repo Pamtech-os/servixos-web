@@ -10,28 +10,38 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import { useSendContract, useGetContractPdf } from '@/hooks/mutations/use-contracts';
-import type { Contract } from '@/lib/api-client';
+import { useGetContractPdf } from '@/hooks/mutations/use-contracts';
+import { useContract } from '@/hooks/queries/use-contracts';
 
 interface ContractReviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contract: Contract | null;
-  clientEmail: string;
-  onSent: () => void;
+  /** Loaded with GET /contracts/:id, which carries the rendered html and pdfUrl. */
+  contractId: string | null;
+  onSend: () => void;
+  isSending: boolean;
+  sendLabel?: string;
 }
 
+/**
+ * Shows a drafted contract before it goes to the client. Sending is up to the caller: the
+ * jobs page uses the job's send route, the AI panel applies its "Review and send" card.
+ */
 export default function ContractReviewDialog({
   open,
   onOpenChange,
-  contract,
-  clientEmail,
-  onSent,
+  contractId,
+  onSend,
+  isSending,
+  sendLabel = 'Send to client',
 }: ContractReviewDialogProps) {
-  const sendContract = useSendContract();
+  const contractQuery = useContract(open ? (contractId ?? '') : '');
+  const contract = contractQuery.data ?? null;
   const getPdf = useGetContractPdf();
+  const canSend = contract?.status === 'draft';
 
   const handleGetPdf = () => {
     if (!contract) return;
@@ -45,27 +55,8 @@ export default function ContractReviewDialog({
     });
   };
 
-  const handleSendContract = () => {
-    if (!contract) return;
-    sendContract.mutate(
-      { id: contract._id, clientEmail },
-      {
-        onSuccess: () => {
-          onOpenChange(false);
-          onSent();
-          toast.success('Contract sent', {
-            description: 'Contract has been sent to the client for signing.',
-          });
-        },
-        onError: (err) => {
-          toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
-        },
-      },
-    );
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isSending && onOpenChange(next)}>
       <DialogContent
         className='flex max-h-[90dvh] flex-col sm:max-w-2xl'
         onPointerDownOutside={(e) => e.preventDefault()}
@@ -73,12 +64,26 @@ export default function ContractReviewDialog({
       >
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
-            <FileText size={18} className='text-primary' /> Contract Ready
+            <FileText size={18} className='text-primary' /> Contract ready
           </DialogTitle>
           <DialogDescription>
             Review the contract before sending it to the client for signing.
           </DialogDescription>
         </DialogHeader>
+
+        {contractQuery.isLoading && (
+          <div className='space-y-3 py-2'>
+            <Skeleton className='h-4 w-1/2' />
+            <Skeleton className='h-56 w-full rounded-lg' />
+          </div>
+        )}
+
+        {contractQuery.isError && (
+          <p className='py-6 text-center text-sm text-muted-foreground'>
+            {getApiErrorMessage(contractQuery.error, 'This contract could not be loaded.')}
+          </p>
+        )}
+
         {contract && (
           <div className='flex-1 space-y-3 overflow-y-auto py-2'>
             <p className='text-sm font-medium'>{contract.title}</p>
@@ -112,23 +117,21 @@ export default function ContractReviewDialog({
                 Get PDF
               </Button>
             )}
+            {!canSend && (
+              <p className='text-xs text-muted-foreground'>
+                This contract is {contract.status}, so it can’t be sent again.
+              </p>
+            )}
           </div>
         )}
+
         <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant='outline' onClick={() => onOpenChange(false)} disabled={isSending}>
             Close
           </Button>
-          <Button
-            onClick={handleSendContract}
-            className='gap-2'
-            disabled={sendContract.isPending || !contract}
-          >
-            {sendContract.isPending ? (
-              <Loader2 size={14} className='animate-spin' />
-            ) : (
-              <Send size={14} />
-            )}
-            Send to Client
+          <Button onClick={onSend} className='gap-2' disabled={isSending || !canSend}>
+            {isSending ? <Loader2 size={14} className='animate-spin' /> : <Send size={14} />}
+            {isSending ? 'Sending…' : sendLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

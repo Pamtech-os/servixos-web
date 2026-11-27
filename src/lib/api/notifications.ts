@@ -4,7 +4,7 @@ import { protectedGet, protectedRequest } from './core';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Unknown future types render as a generic notification (title and body only). */
-export type NotificationType = 'new_booking' | (string & {});
+export type NotificationType = 'new_booking' | 'contract_signed' | (string & {});
 
 export interface NotificationView {
   id: string;
@@ -19,6 +19,10 @@ export interface NotificationView {
     service: string | null;
     /** Calendar day at UTC midnight. */
     requestedDate: string | null;
+    /** Set on `contract_signed`; null for other types. */
+    contractId: string | null;
+    /** Set on `contract_signed`; null for other types. */
+    jobId: string | null;
   };
   readAt: string | null;
   createdAt: string;

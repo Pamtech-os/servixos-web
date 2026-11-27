@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRoles } from '@/hooks/queries/use-roles';
-import { useCurrentEmployee } from '@/hooks/queries/use-employees';
+import { useClockMe } from '@/hooks/queries/use-employees';
 
 export interface ResolvedPermissions {
   isOwner: boolean;
@@ -23,25 +23,26 @@ export function usePermissions(): ResolvedPermissions {
 
   const shouldFetchRole = !isOwner && directPermissions.length === 0;
   const rolesQuery = useRoles();
-  const currentEmployeeQuery = useCurrentEmployee({ enabled: shouldFetchRole });
+  // /clock/me needs no permission, unlike searching /staff (employees.view).
+  const clockMeQuery = useClockMe({ enabled: shouldFetchRole });
 
   const rolePermissions = useMemo(() => {
     const roleIdFromSession = (auth.user as { roleId?: unknown } | null)?.roleId;
     const roleId =
       typeof roleIdFromSession === 'string'
         ? roleIdFromSession
-        : currentEmployeeQuery.data?.roleId;
+        : clockMeQuery.data?.employee.roleId;
     if (!roleId) return [];
     const role = (rolesQuery.data ?? []).find((r) => r._id === roleId);
     return role?.permissions ?? [];
-  }, [auth.user, currentEmployeeQuery.data?.roleId, rolesQuery.data]);
+  }, [auth.user, clockMeQuery.data?.employee.roleId, rolesQuery.data]);
 
   const permissions = directPermissions.length > 0 ? directPermissions : rolePermissions;
 
   const isResolving =
     !isOwner &&
     directPermissions.length === 0 &&
-    (rolesQuery.isLoading || currentEmployeeQuery.isLoading);
+    (rolesQuery.isLoading || clockMeQuery.isLoading);
 
   return { isOwner, permissions, isResolving };
 }

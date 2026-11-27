@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, CalendarDays, PartyPopper, Sparkles, Volume2, X } from 'lucide-react';
+import { Bell, CalendarDays, FileSignature, PartyPopper, Sparkles, Volume2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNotificationsSocket } from '@/hooks/use-notifications-socket';
 import { useMarkNotificationRead } from '@/hooks/mutations/use-notifications';
 import { playNotificationSound, unlockAudio } from '@/lib/notification-sound';
-import { openServiceRequest } from '@/lib/open-request';
+import { getNotificationTarget } from '@/lib/notification-target';
 import type { NotificationView } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
@@ -185,6 +185,8 @@ const BookingPopup = ({ notification, onView, onClose }: PopupProps) => {
 
 const GenericPopup = ({ notification, onView, onClose }: PopupProps) => {
   const { setPaused } = useAutoClose(notification.id, GENERIC_TIMEOUT_MS, onClose);
+  const target = getNotificationTarget(notification);
+  const Icon = notification.type === 'contract_signed' ? FileSignature : Bell;
 
   return (
     <div
@@ -192,19 +194,26 @@ const GenericPopup = ({ notification, onView, onClose }: PopupProps) => {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary'>
-        <Bell size={16} />
+      <span
+        className={cn(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+          notification.type === 'contract_signed'
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            : 'bg-primary/10 text-primary'
+        )}
+      >
+        <Icon size={16} />
       </span>
       <div className='min-w-0 flex-1 pr-5'>
         <p className='text-sm font-semibold'>{notification.title}</p>
         <p className='text-sm text-muted-foreground'>{notification.body}</p>
-        {notification.data?.requestId && (
+        {target && (
           <button
             type='button'
             onClick={() => onView(notification)}
             className='mt-1 text-xs font-medium text-primary hover:underline'
           >
-            View request
+            {target.label}
           </button>
         )}
       </div>
@@ -222,7 +231,7 @@ const GenericPopup = ({ notification, onView, onClose }: PopupProps) => {
 
 /**
  * Live notification pop-ups. Listens on the /chat socket, plays the sound for the type the
- * moment a pop-up appears, and opens the related request from "View request".
+ * moment a pop-up appears, and opens the related request or job from its view link.
  */
 const NotificationPopups = () => {
   const router = useRouter();
@@ -280,7 +289,7 @@ const NotificationPopups = () => {
   const view = (notification: NotificationView) => {
     close(notification.id);
     markRead.mutate(notification.id);
-    if (notification.data?.requestId) openServiceRequest(router, notification.data.requestId);
+    getNotificationTarget(notification)?.open(router);
   };
 
   return (

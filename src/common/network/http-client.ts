@@ -86,6 +86,7 @@ export function getApiErrorMessage(
 }
 
 export type ApiErrorCode =
+  | 'CLOCK_IN_REQUIRED'
   | 'ONBOARDING_INCOMPLETE'
   | 'PAYMENT_METHOD_REQUIRED'
   | 'SETUP_NOT_APPROVED'

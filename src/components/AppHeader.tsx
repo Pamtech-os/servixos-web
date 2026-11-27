@@ -27,7 +27,7 @@ import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
 } from '@/hooks/mutations/use-notifications';
-import { openServiceRequest } from '@/lib/open-request';
+import { getNotificationTarget } from '@/lib/notification-target';
 import type { NotificationView } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { useOnlineEmployees } from '@/hooks/queries/use-employees';
@@ -136,9 +136,10 @@ const NotificationBell = memo(() => {
 
   const openNotification = (notification: NotificationView) => {
     if (!notification.readAt) markRead.mutate(notification.id);
-    if (notification.data?.requestId) {
+    const target = getNotificationTarget(notification);
+    if (target) {
       setOpen(false);
-      openServiceRequest(router, notification.data.requestId);
+      target.open(router);
     }
   };
 
@@ -207,7 +208,7 @@ const NotificationBell = memo(() => {
             })}
             {!isLoading && items.length === 0 && (
               <p className='px-2 py-6 text-center text-xs text-muted-foreground'>
-                No notifications yet. New website bookings will show up here.
+                No notifications yet. New bookings and signed contracts will show up here.
               </p>
             )}
           </div>
@@ -227,8 +228,7 @@ const AppHeader = () => {
     endBreak,
     clockedInAt,
     isActionPending,
-    trackingMode,
-    employeeMappingState,
+    isClockAvailable,
   } = useClock();
   const { auth } = useAuth();
   const onlineEmployeesQuery = useOnlineEmployees();
@@ -241,13 +241,6 @@ const AppHeader = () => {
   const userRoleLabel = auth.userRole ? toTitleCase(auth.userRole) : 'User';
   const clockStatusLabel =
     status === 'clocked_in' ? 'Clocked In' : status === 'on_break' ? 'On Break' : 'Clocked Out';
-  const clockSyncLabel =
-    trackingMode === 'api'
-      ? 'Employee linked'
-      : employeeMappingState === 'loading'
-      ? 'Checking employee link...'
-      : 'Employee not linked';
-  console.warn(clockSyncLabel);
 
   const onlineTeamMembers = useMemo(() => {
     const employees = Array.isArray(onlineEmployeesQuery.data) ? onlineEmployeesQuery.data : [];
@@ -289,7 +282,7 @@ const AppHeader = () => {
     <header className='sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 backdrop-blur-sm sm:px-4 sm:py-3 md:px-6'>
       <div className='flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2'>
         <AnimatePresence mode='wait'>
-          {status === 'clocked_out' ? (
+          {!isClockAvailable ? null : status === 'clocked_out' ? (
             <motion.div
               key='clock-in'
               initial={{ opacity: 0, scale: 0.9 }}
@@ -386,7 +379,8 @@ const AppHeader = () => {
         <div className='hidden text-right sm:block'>
           <p className='text-sm font-semibold'>{displayName}</p>
           <p className='text-xs text-muted-foreground'>
-            {userRoleLabel} ({clockStatusLabel})
+            {userRoleLabel}
+            {isClockAvailable && ` (${clockStatusLabel})`}
           </p>
         </div>
         <div className='gradient-bg flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground'>

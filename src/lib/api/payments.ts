@@ -4,7 +4,8 @@ import type { PaginationMeta } from '@/lib/pagination';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type PaymentMode = 'cash' | 'bank_transfer' | 'credit_card' | 'cheque' | 'mobile_money';
-export type PaymentStatus = 'completed' | 'partial';
+/** Set by the server; every record is `recorded`. Paid/partial lives on the invoice. */
+export type PaymentStatus = 'recorded';
 
 export interface Payment {
   _id: string;
@@ -34,7 +35,6 @@ export interface PaymentStatistics {
 
 export interface PaymentsQuery {
   search?: string;
-  status?: PaymentStatus;
   paymentMode?: PaymentMode;
   dateFrom?: string;
   dateTo?: string;
@@ -49,17 +49,6 @@ export interface CreatePaymentInput {
   paymentDate: string;
   paymentMode: PaymentMode;
   amount: number;
-  status?: PaymentStatus;
-  notes?: string;
-}
-
-export interface UpdatePaymentInput {
-  invoiceId?: string;
-  clientId?: string;
-  paymentDate?: string;
-  paymentMode?: PaymentMode;
-  amount?: number;
-  status?: PaymentStatus;
   notes?: string;
 }
 
@@ -72,7 +61,6 @@ export const payments = {
   ): Promise<{ data: Payment[]; meta: PaginationMeta; statistics: PaymentStatistics }> => {
     const params = new URLSearchParams();
     if (query.search) params.set('search', query.search);
-    if (query.status) params.set('status', query.status);
     if (query.paymentMode) params.set('paymentMode', query.paymentMode);
     if (query.dateFrom) params.set('dateFrom', query.dateFrom);
     if (query.dateTo) params.set('dateTo', query.dateTo);
@@ -97,9 +85,6 @@ export const payments = {
 
   create: (businessId: string, input: CreatePaymentInput): Promise<Payment> =>
     protectedRequest<Payment>('POST', '/payments', businessId, input),
-
-  update: (businessId: string, id: string, input: UpdatePaymentInput): Promise<Payment> =>
-    protectedRequest<Payment>('PATCH', `/payments/${id}`, businessId, input),
 
   delete: (businessId: string, id: string): Promise<null> =>
     protectedRequest<null>('DELETE', `/payments/${id}`, businessId),

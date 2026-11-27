@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  Banknote,
+  HeartHandshake,
+  ListChecks,
+  Loader2,
+  Sparkles,
+  Tag,
+  type LucideIcon,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,19 +21,45 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import type { Suggestion, SuggestionCategory } from '@/lib/api-client';
 
 export const SUGGESTION_CATEGORY_LABELS: Record<SuggestionCategory, string> = {
   cash_flow: 'Cash flow',
   pricing: 'Pricing',
   customer_retention: 'Customer retention',
+  job_workflow: 'Next step',
+};
+
+const SUGGESTION_CATEGORY_ICONS: Record<SuggestionCategory, LucideIcon> = {
+  cash_flow: Banknote,
+  pricing: Tag,
+  customer_retention: HeartHandshake,
+  job_workflow: ListChecks,
 };
 
 export const GRADIENT_BUTTON_CLASS =
   'rounded-full bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60';
 
-export const CATEGORY_PILL_CLASS =
-  'inline-flex rounded-full bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400';
+const CATEGORY_PILL_CLASS =
+  'inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2.5 py-0.5 text-[11px] font-medium text-violet-600 dark:text-violet-400';
+
+export const SuggestionCategoryPill = ({
+  category,
+  className,
+}: {
+  category: SuggestionCategory | undefined;
+  className?: string;
+}) => {
+  // Older cached cards or a category this build doesn't know yet fall back to a plain pill.
+  const Icon = category ? SUGGESTION_CATEGORY_ICONS[category] : undefined;
+  return (
+    <span className={cn(CATEGORY_PILL_CLASS, className)}>
+      {Icon && <Icon size={11} aria-hidden />}
+      {(category && SUGGESTION_CATEGORY_LABELS[category]) ?? 'Suggestion'}
+    </span>
+  );
+};
 
 interface ReviewSuggestionDialogProps {
   suggestion: Suggestion | null;
@@ -63,9 +98,7 @@ const ReviewSuggestionDialog = ({
         {suggestion && (
           <>
             <DialogHeader className='space-y-2 text-left'>
-              <span className={`${CATEGORY_PILL_CLASS} w-fit`}>
-                {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
-              </span>
+              <SuggestionCategoryPill category={suggestion.category} className='w-fit' />
               <DialogTitle className='font-display text-lg leading-snug'>
                 {suggestion.title}
               </DialogTitle>

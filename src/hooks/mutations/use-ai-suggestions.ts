@@ -14,6 +14,7 @@ import {
   AI_SUGGESTIONS_TRACKED_KEY,
 } from '@/hooks/queries/use-ai-suggestions';
 import { AI_PRIORITIES_KEY } from '@/hooks/queries/use-ai-priorities';
+import { JOB_WORKFLOW_KEY } from '@/hooks/queries/use-jobs';
 import { HttpError } from '@/common/network/http-client';
 
 function removeSuggestion(
@@ -68,30 +69,49 @@ export function markSuggestionCompleted(
   void queryClient.invalidateQueries({ queryKey: [AI_PRIORITIES_KEY, businessId] });
 }
 
+/**
+ * Applies a card by id. The card need not be in the cached list yet: the "Review and send"
+ * card that `next.suggestionId` names is created by the previous apply.
+ */
 export function useApplySuggestion() {
   const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
   const queryKey = [AI_SUGGESTIONS_KEY, businessId];
 
   return useMutation({
-    mutationFn: ({ suggestion, draftValue }: { suggestion: Suggestion; draftValue?: string }) =>
-      aiSuggestions.apply(businessId, suggestion.id, draftValue),
-    onSuccess: (data, { suggestion }) => {
-      if (data.status === 'completed') {
-        markSuggestionCompleted(queryClient, businessId, suggestion, data.executedAt, data.remaining);
-        return;
+    mutationFn: ({ id, draftValue }: { id: string; draftValue?: string }) =>
+      aiSuggestions.apply(businessId, id, draftValue),
+    onSuccess: (data, { id }) => {
+      const cached = queryClient
+        .getQueryData<SuggestionsResult>(queryKey)
+        ?.suggestions.find((s) => s.id === id);
+
+      if (data.status === 'completed' && cached) {
+        markSuggestionCompleted(queryClient, businessId, cached, data.executedAt, data.remaining);
+      } else if (data.status === 'executing' && cached) {
+        // Emails confirm in the background; the execution watcher polls from here.
+        queryClient.setQueryData<SuggestionsResult>(queryKey, (prev) =>
+          patchSuggestion(prev, data.id, { status: 'executing', failure: null })
+        );
+      } else {
+        // Not cached: the refetched list carries it as `executing` for the watcher, or not at all.
+        void queryClient.invalidateQueries({ queryKey: [AI_SUGGESTIONS_TRACKED_KEY, businessId] });
+        void queryClient.invalidateQueries({ queryKey: [AI_PRIORITIES_KEY, businessId] });
       }
-      // Emails confirm in the background; the execution watcher polls from here.
-      queryClient.setQueryData<SuggestionsResult>(queryKey, (prev) =>
-        patchSuggestion(prev, data.id, { status: 'executing', failure: null })
-      );
+      // A completed pipeline step creates the job's next card (and `next` may point at it).
+      if (data.status === 'completed' && (data.next || cached?.category === 'job_workflow')) {
+        void queryClient.invalidateQueries({ queryKey });
+      } else if (!cached) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+      const jobId = data.next?.jobId ?? cached?.references?.jobId;
+      if (jobId) void queryClient.invalidateQueries({ queryKey: [JOB_WORKFLOW_KEY, businessId, jobId] });
     },
-    onError: (err, { suggestion }) => {
+    onError: (err, { id }) => {
       if (!(err instanceof HttpError)) return;
       if (err.status === 404) {
-        queryClient.setQueryData<SuggestionsResult>(queryKey, (prev) =>
-          removeSuggestion(prev, suggestion.id)
-        );
+        // The job moved past this step (e.g. done from the jobs page), so the card expired.
+        queryClient.setQueryData<SuggestionsResult>(queryKey, (prev) => removeSuggestion(prev, id));
         void queryClient.invalidateQueries({ queryKey });
       } else if (err.status >= 500) {
         // An instant action failed and the card is now `failed`; pull its failure message.

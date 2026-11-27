@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
   CircleSlash,
   Clock,
+  FileText,
   GraduationCap,
   Loader2,
+  Receipt,
   Sparkles,
   X,
 } from 'lucide-react';
 import ReviewSuggestionDialog, {
-  CATEGORY_PILL_CLASS,
   GRADIENT_BUTTON_CLASS,
-  SUGGESTION_CATEGORY_LABELS,
+  SuggestionCategoryPill,
 } from '@/components/ReviewSuggestionDialog';
+import ContractReviewDialog from '@/components/jobs/ContractReviewDialog';
 import DismissSuggestionDialog from '@/components/DismissSuggestionDialog';
 import SuggestionEducationSection from '@/components/learning/SuggestionEducationSection';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,7 +29,10 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage, HttpError } from '@/common/network/http-client';
 import { useAiSuggestions, useTrackedSuggestions } from '@/hooks/queries/use-ai-suggestions';
 import { useApplySuggestion, useDismissSuggestion } from '@/hooks/mutations/use-ai-suggestions';
+import { useSendJobContract } from '@/hooks/mutations/use-contracts';
+import { useGetInvoicePdf } from '@/hooks/mutations/use-invoices';
 import { useSuggestionExecution } from '@/hooks/use-suggestion-execution';
+import { openJob } from '@/lib/open-job';
 import type {
   DismissSuggestionInput,
   OutcomeStatus,
@@ -46,6 +53,22 @@ const executedTimeFormatter = new Intl.DateTimeFormat(undefined, {
 const OPEN_STATUSES = new Set<SuggestionStatus>(['pending_review', 'executing', 'failed']);
 
 const OWNER_ONLY_MESSAGE = 'Ask the business owner to do this.';
+
+interface ContractReviewTarget {
+  contractId: string;
+  /** The "Review and send" card whose apply sends it; null falls back to the job's send route. */
+  suggestionId: string | null;
+  jobId: string | null;
+}
+
+interface ApplyOptions {
+  successMessage?: string;
+  hasDraft: boolean;
+  close: () => void;
+}
+
+const REFERENCE_LINK_CLASS =
+  'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50';
 
 const OUTCOME_BADGES: Record<Exclude<OutcomeStatus, 'pending'>, { label: string; className: string }> = {
   achieved: { label: 'Achieved', className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
@@ -68,7 +91,7 @@ const TrackedSuggestionCard = ({ entry }: { entry: TrackedSuggestion }) => {
       className='space-y-3 rounded-2xl border border-border bg-background p-4'
     >
       <div className='flex items-center justify-between gap-2'>
-        <span className={CATEGORY_PILL_CLASS}>{SUGGESTION_CATEGORY_LABELS[entry.category]}</span>
+        <SuggestionCategoryPill category={entry.category} />
         {isPending ? (
           <span className='inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400'>
             <Clock size={12} />
@@ -119,13 +142,17 @@ const SuggestionSkeleton = () => (
 );
 
 const AISuggestionsPanel = () => {
+  const router = useRouter();
   const { isAiSuggestionsOpen: isOpen, reviewSuggestionId } = useUiState();
   const { setAiSuggestionsOpen, setReviewSuggestionId, openLearn } = useUiActions();
   const { data, isLoading, isError } = useAiSuggestions();
   const { data: trackedData } = useTrackedSuggestions(isOpen);
   const applySuggestion = useApplySuggestion();
   const dismissSuggestion = useDismissSuggestion();
+  const sendJobContract = useSendJobContract();
+  const getInvoicePdf = useGetInvoicePdf();
   const [reviewing, setReviewing] = useState<Suggestion | null>(null);
+  const [contractReview, setContractReview] = useState<ContractReviewTarget | null>(null);
   const [dismissing, setDismissing] = useState<Suggestion | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
@@ -148,10 +175,21 @@ const AISuggestionsPanel = () => {
     onFailed: (suggestion, message) =>
       toast.error(suggestion.title, {
         description: message,
-        action: { label: 'Retry', onClick: () => openReview({ ...suggestion, status: 'failed' }) },
+        action: { label: 'Retry', onClick: () => startCard({ ...suggestion, status: 'failed' }) },
       }),
     onExpired: () => toast.info('This suggestion is no longer needed.'),
   });
+
+  /** Opens what the card's button leads to: the contract review, or the suggestion review. */
+  const startCard = useCallback((suggestion: Suggestion) => {
+    const { contractId, jobId } = suggestion.references ?? {};
+    if (suggestion.action === 'review_contract' && contractId) {
+      setContractReview({ contractId, suggestionId: suggestion.id, jobId });
+      return;
+    }
+    setDraftError(null);
+    setReviewing(suggestion);
+  }, []);
 
   // Review requests from elsewhere (e.g. the priorities card) open the same dialog.
   useEffect(() => {
@@ -160,11 +198,11 @@ const AISuggestionsPanel = () => {
     const target = data.suggestions.find((s) => s.id === reviewSuggestionId);
     if (target && OPEN_STATUSES.has(target.status ?? 'pending_review')) {
       if (target.status === 'executing') toast.info('This is being sent now.');
-      else openReview(target);
+      else startCard(target);
     } else {
       toast.info('This suggestion is no longer available.');
     }
-  }, [reviewSuggestionId, data, setReviewSuggestionId]);
+  }, [reviewSuggestionId, data, setReviewSuggestionId, startCard]);
 
   useEffect(() => {
     if (localStorage.getItem(HINT_STORAGE_KEY)) return;
@@ -175,11 +213,6 @@ const AISuggestionsPanel = () => {
   const dismissHint = () => {
     setShowHint(false);
     localStorage.setItem(HINT_STORAGE_KEY, 'true');
-  };
-
-  const openReview = (suggestion: Suggestion) => {
-    setDraftError(null);
-    setReviewing(suggestion);
   };
 
   const handleDismiss = (suggestion: Suggestion, input: DismissSuggestionInput) => {
@@ -199,38 +232,69 @@ const AISuggestionsPanel = () => {
     });
   };
 
-  const handleExecute = (suggestion: Suggestion, draftValue: string | undefined) => {
+  const viewContract = (contractId: string, jobId: string | null) => {
+    // Sending from here should still go through the job's "Review and send" card when it exists.
+    const reviewCard = allSuggestions.find(
+      (s) => s.action === 'review_contract' && s.references?.contractId === contractId
+    );
+    setContractReview({ contractId, suggestionId: reviewCard?.id ?? null, jobId });
+  };
+
+  const viewInvoice = (invoiceId: string) => {
+    getInvoicePdf.mutate(invoiceId, {
+      onSuccess: ({ pdfUrl }) => window.open(pdfUrl, '_blank', 'noreferrer'),
+      onError: (err) =>
+        toast.error('Couldn’t open the invoice', { description: getApiErrorMessage(err) }),
+    });
+  };
+
+  const applyCard = (
+    id: string,
+    draftValue: string | undefined,
+    { successMessage, hasDraft, close }: ApplyOptions
+  ) => {
     setDraftError(null);
     applySuggestion.mutate(
-      { suggestion, draftValue },
+      { id, draftValue },
       {
         onSuccess: (result) => {
-          setReviewing(null);
+          close();
+          if (result.next?.type === 'review_contract') {
+            toast.success(successMessage ?? 'Contract drafted', {
+              description: 'Review it, then send it to the client for signing.',
+            });
+            setContractReview({
+              contractId: result.next.contractId,
+              suggestionId: result.next.suggestionId,
+              jobId: result.next.jobId,
+            });
+            return;
+          }
           // Emails report success only once the mail provider confirms (see the watcher).
           if (result.status === 'completed') {
-            toast.success(suggestion.review.successMessage, {
+            toast.success(successMessage ?? 'Done', {
               description: 'The outcome will be tracked automatically.',
             });
           }
         },
         onError: (err) => {
           if (err instanceof HttpError && err.status === 404) {
-            setReviewing(null);
-            toast.info('This suggestion is no longer available.');
+            close();
+            toast.info('This step is already done or no longer needed.');
             return;
           }
           if (err instanceof HttpError && err.status === 403) {
-            setReviewing(null);
+            close();
             toast.error('You don’t have permission to do this', { description: OWNER_ONLY_MESSAGE });
             return;
           }
           if (err instanceof HttpError && err.status >= 500) {
-            setReviewing(null);
+            close();
             toast.error('That didn’t go through', { description: getApiErrorMessage(err) });
             return;
           }
           // Validation errors on the draft are shown inline; the dialog keeps the user's edits.
-          if (err instanceof HttpError && err.status === 400 && suggestion.review.draft) {
+          if (err instanceof HttpError && err.status === 400 && hasDraft) {
             setDraftError(getApiErrorMessage(err));
             return;
           }
@@ -238,6 +302,37 @@ const AISuggestionsPanel = () => {
         },
       }
     );
+  };
+
+  const handleExecute = (suggestion: Suggestion, draftValue: string | undefined) =>
+    applyCard(suggestion.id, draftValue, {
+      successMessage: suggestion.review.successMessage,
+      hasDraft: !!suggestion.review.draft,
+      close: () => setReviewing(null),
+    });
+
+  const handleSendContract = () => {
+    if (!contractReview) return;
+    const { suggestionId, jobId } = contractReview;
+    const close = () => setContractReview(null);
+
+    if (suggestionId) {
+      // Returns `executing`; the card shows "Sending…" and the watcher reports the result.
+      applyCard(suggestionId, undefined, { hasDraft: false, close });
+      return;
+    }
+    if (!jobId) return;
+    // No "Review and send" card could be created, so send through the job instead.
+    sendJobContract.mutate(jobId, {
+      onSuccess: () => {
+        close();
+        toast.success('Contract on its way', {
+          description: 'It’s marked sent once the email is delivered.',
+        });
+      },
+      onError: (err) =>
+        toast.error('Failed to send contract', { description: getApiErrorMessage(err) }),
+    });
   };
 
   return (
@@ -348,6 +443,14 @@ const AISuggestionsPanel = () => {
                   {suggestions.map((suggestion) => {
                     const isSending = suggestion.status === 'executing';
                     const isFailed = suggestion.status === 'failed';
+                    const { jobId, contractId, invoiceId } = suggestion.references ?? {};
+                    const primaryLabel = isSending
+                      ? 'Sending…'
+                      : isFailed
+                        ? 'Retry'
+                        : suggestion.category === 'job_workflow'
+                          ? suggestion.review.executeLabel
+                          : 'Help me do this';
                     return (
                     <motion.div
                       key={suggestion.id}
@@ -360,9 +463,7 @@ const AISuggestionsPanel = () => {
                     >
                       <div className='flex items-start justify-between gap-2'>
                         <div className='flex flex-wrap items-center gap-1.5'>
-                          <span className={CATEGORY_PILL_CLASS}>
-                            {SUGGESTION_CATEGORY_LABELS[suggestion.category]}
-                          </span>
+                          <SuggestionCategoryPill category={suggestion.category} />
                           {suggestion.priority === 'high' && (
                             <span className='inline-flex rounded-full bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400'>
                               High priority
@@ -406,6 +507,38 @@ const AISuggestionsPanel = () => {
                           }
                         />
                       )}
+                      {(jobId || invoiceId || (contractId && suggestion.action !== 'review_contract')) && (
+                        <div className='-mx-1.5 flex flex-wrap gap-1'>
+                          {jobId && (
+                            <button
+                              type='button'
+                              onClick={() => openJob(router, jobId)}
+                              className={REFERENCE_LINK_CLASS}
+                            >
+                              <Briefcase size={12} aria-hidden /> View job
+                            </button>
+                          )}
+                          {contractId && suggestion.action !== 'review_contract' && (
+                            <button
+                              type='button'
+                              onClick={() => viewContract(contractId, jobId ?? null)}
+                              className={REFERENCE_LINK_CLASS}
+                            >
+                              <FileText size={12} aria-hidden /> View contract
+                            </button>
+                          )}
+                          {invoiceId && (
+                            <button
+                              type='button'
+                              onClick={() => viewInvoice(invoiceId)}
+                              disabled={getInvoicePdf.isPending}
+                              className={REFERENCE_LINK_CLASS}
+                            >
+                              <Receipt size={12} aria-hidden /> View invoice
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {isFailed && suggestion.failure && (
                         <p className='flex gap-1.5 rounded-xl bg-destructive/10 px-3 py-2 text-[12px] leading-relaxed text-destructive'>
                           <AlertCircle size={14} className='mt-0.5 shrink-0' />
@@ -422,12 +555,12 @@ const AISuggestionsPanel = () => {
                           Learn more
                         </button>
                         <button
-                          onClick={() => openReview(suggestion)}
+                          onClick={() => startCard(suggestion)}
                           disabled={isMutating || isSending}
                           className={`flex h-10 flex-1 items-center justify-center gap-1.5 text-sm font-medium ${GRADIENT_BUTTON_CLASS}`}
                         >
                           {isSending && <Loader2 size={14} className='animate-spin' />}
-                          {isSending ? 'Sending…' : isFailed ? 'Retry' : 'Help me do this'}
+                          {primaryLabel}
                         </button>
                       </div>
                     </motion.div>
@@ -475,6 +608,14 @@ const AISuggestionsPanel = () => {
         onDraftChange={() => setDraftError(null)}
         onOpenChange={(open) => !open && setReviewing(null)}
         onExecute={handleExecute}
+      />
+
+      <ContractReviewDialog
+        open={!!contractReview}
+        onOpenChange={(open) => !open && setContractReview(null)}
+        contractId={contractReview?.contractId ?? null}
+        isSending={applySuggestion.isPending || sendJobContract.isPending}
+        onSend={handleSendContract}
       />
 
       <DismissSuggestionDialog

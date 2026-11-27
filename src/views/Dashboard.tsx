@@ -123,8 +123,8 @@ const Dashboard = () => {
 
       <AIGuidanceCard />
 
-      {/* Stat Cards */}
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+      {/* Stat Cards — columns follow the grid's own width (not the viewport), so they reflow when the AI panel opens */}
+      <div className='grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-4'>
         {[
           {
             title: 'Monthly Revenue',
@@ -184,9 +184,9 @@ const Dashboard = () => {
                   >
                     <stat.icon size={20} />
                   </div>
-                  <p className='text-sm font-medium text-muted-foreground'>{stat.title}</p>
-                  <p className='mt-1 font-display text-2xl font-bold'>{stat.value}</p>
-                  <p className='mt-1 min-h-4 text-xs text-muted-foreground'>{stat.sub}</p>
+                  <p className='pr-12 text-sm font-medium text-muted-foreground'>{stat.title}</p>
+                  <p className='mt-1 font-display text-2xl font-bold tabular-nums [overflow-wrap:anywhere]'>{stat.value}</p>
+                  <p className='mt-1 min-h-4 text-xs text-muted-foreground [overflow-wrap:anywhere]'>{stat.sub}</p>
                 </CardContent>
               </Card>
             )}

@@ -37,6 +37,9 @@ export function useDeleteInvoice() {
     mutationFn: (id: string) => invoices.delete(businessId, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['invoices', businessId] });
+      // The server deletes the invoice's payments too and recalculates the client balance.
+      void queryClient.invalidateQueries({ queryKey: ['payments', businessId] });
+      void queryClient.invalidateQueries({ queryKey: ['clients', businessId] });
     },
   });
 }
