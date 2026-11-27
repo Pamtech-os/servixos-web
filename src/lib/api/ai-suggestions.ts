@@ -3,7 +3,18 @@ import type { SuggestionEducation } from './learning';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SuggestionCategory = 'cash_flow' | 'pricing' | 'customer_retention';
+/** `job_workflow` cards drive an accepted booking from contract to job start. */
+export type SuggestionCategory = 'cash_flow' | 'pricing' | 'customer_retention' | 'job_workflow';
+
+/** `review_contract` opens the contract review instead of applying straight away. */
+export type SuggestionAction = 'execute' | 'review_contract';
+
+export interface SuggestionReferences {
+  jobId: string | null;
+  contractId: string | null;
+  invoiceId: string | null;
+  clientId: string | null;
+}
 
 export interface SuggestionDetail {
   label: string;
@@ -54,6 +65,8 @@ export interface SuggestionFailure {
 export interface Suggestion {
   id: string;
   category: SuggestionCategory;
+  action: SuggestionAction;
+  references: SuggestionReferences;
   status: SuggestionStatus;
   priority: SuggestionPriority;
   score: number;
@@ -94,12 +107,22 @@ export interface TrackedSuggestionsResult {
   tracked: TrackedSuggestion[];
 }
 
+export interface ApplySuggestionNext {
+  type: 'review_contract';
+  jobId: string;
+  contractId: string;
+  /** The "Review and send" card; null if it could not be created. */
+  suggestionId: string | null;
+}
+
 export interface ApplySuggestionResult {
   id: string;
   /** `executing` for emails (poll until settled); `completed` for instant actions. */
   status: 'executing' | 'completed';
   remaining: number;
   executedAt: string | null;
+  /** Where to go after this step, e.g. review the contract that was just drafted. */
+  next?: ApplySuggestionNext | null;
 }
 
 export type DismissReason = 'already_handled' | 'not_now' | 'not_relevant' | 'incorrect' | 'other';
@@ -117,6 +140,8 @@ export interface DismissSuggestionResult {
 
 // The backend waits for AI-written copy when suggestions are new; worst case ~1 min.
 const SUGGESTIONS_LIST_TIMEOUT_MS = 75_000;
+// "Generate contract" drafts the contract with AI before it returns.
+const APPLY_TIMEOUT_MS = 60_000;
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
@@ -146,7 +171,8 @@ export const aiSuggestions = {
       'POST',
       `/ai/suggestions/${id}/apply`,
       businessId,
-      draftValue === undefined ? {} : { draftValue }
+      draftValue === undefined ? {} : { draftValue },
+      { timeoutMs: APPLY_TIMEOUT_MS }
     ),
 
   dismiss: (

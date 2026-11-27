@@ -14,12 +14,19 @@ import {
 import { useBusinessAuth } from '@/hooks/use-business-auth';
 import { NOTIFICATIONS_KEY, NOTIFICATIONS_UNREAD_KEY } from '@/hooks/queries/use-notifications';
 import { AI_PRIORITIES_KEY } from '@/hooks/queries/use-ai-priorities';
+import { AI_SUGGESTIONS_KEY } from '@/hooks/queries/use-ai-suggestions';
+import { JOB_WORKFLOW_KEY } from '@/hooks/queries/use-jobs';
 
 const SERVER_DISCONNECT_RETRY_MS = 5_000;
 
+interface AiSuggestionsChangedEvent {
+  reason: 'job_created' | 'contract_signed' | (string & {});
+  jobId?: string;
+}
+
 /**
- * Keeps an app-wide /chat connection for `notification_created`, updates the bell's cache
- * and hands each new notification to `onNotification` exactly once.
+ * Keeps an app-wide /chat connection for `notification_created` and `ai_suggestions_changed`,
+ * updates the bell's cache and hands each new notification to `onNotification` exactly once.
  */
 export function useNotificationsSocket(onNotification: (notification: NotificationView) => void) {
   const { businessId, isReady } = useBusinessAuth();
@@ -37,6 +44,7 @@ export function useNotificationsSocket(onNotification: (notification: Notificati
     const seen = new Set<string>();
     const listKey = [NOTIFICATIONS_KEY, businessId];
     const unreadKey = [NOTIFICATIONS_UNREAD_KEY, businessId];
+    const suggestionsKey = [AI_SUGGESTIONS_KEY, businessId];
 
     async function connect() {
       let authPayload;
@@ -68,8 +76,20 @@ export function useNotificationsSocket(onNotification: (notification: Notificati
         if (notification.type === 'new_booking') {
           void queryClient.invalidateQueries({ queryKey: ['requests', businessId] });
           void queryClient.invalidateQueries({ queryKey: [AI_PRIORITIES_KEY, businessId] });
+        } else if (notification.type === 'contract_signed') {
+          void queryClient.invalidateQueries({ queryKey: ['contracts', businessId] });
         }
         onNotificationRef.current(notification);
+      });
+
+      // The panel's next steps changed outside this tab (a job was created, a client signed).
+      socket.on('ai_suggestions_changed', (event: AiSuggestionsChangedEvent | undefined) => {
+        void queryClient.invalidateQueries({ queryKey: suggestionsKey });
+        if (event?.jobId) {
+          void queryClient.invalidateQueries({
+            queryKey: [JOB_WORKFLOW_KEY, businessId, event.jobId],
+          });
+        }
       });
 
       // Events sent while disconnected are not replayed, so resync on every reconnect.
@@ -81,6 +101,7 @@ export function useNotificationsSocket(onNotification: (notification: Notificati
         }
         void queryClient.invalidateQueries({ queryKey: unreadKey });
         void queryClient.invalidateQueries({ queryKey: listKey });
+        void queryClient.invalidateQueries({ queryKey: suggestionsKey });
       });
 
       // A server-side disconnect (e.g. a rejected handshake) turns off socket.io's own

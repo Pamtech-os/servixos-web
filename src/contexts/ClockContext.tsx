@@ -2,28 +2,23 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
-  useCallback,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { clock, type EmployeeClockStatus } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCurrentEmployee, useEmployeeClockStatus } from '@/hooks/queries/use-employees';
+import { CLOCK_ME_KEY, useClockMe } from '@/hooks/queries/use-employees';
 import { toast } from '@/components/ui/sonner';
-import { getApiErrorMessage } from '@/common/network/http-client';
+import { getApiErrorDetails, getApiErrorMessage } from '@/common/network/http-client';
+import { apiEvents } from '@/lib/api-events';
 import { parseBusinessLocalDateTime } from '@/common/utils/datetime';
 
 export type ClockStatus = EmployeeClockStatus;
-export type ClockTrackingMode = 'api' | 'local';
-export type EmployeeMappingState = 'loading' | 'mapped' | 'unmapped' | 'error';
-
-interface ClockEntry {
-  type: 'clock_in' | 'clock_out' | 'break_start' | 'break_end';
-  time: Date;
-}
 
 interface ClockContextType {
   status: ClockStatus;
@@ -32,210 +27,120 @@ interface ClockContextType {
   startBreak: () => Promise<void>;
   endBreak: () => Promise<void>;
   clockedInAt: Date | null;
-  history: ClockEntry[];
   isActionPending: boolean;
-  isTrackingAvailable: boolean;
-  trackingMode: ClockTrackingMode;
-  employeeMappingState: EmployeeMappingState;
-  mappedEmployeeId: string | null;
+  /** False for owners and staff with no employee record: they have nothing to clock in to. */
+  isClockAvailable: boolean;
+  /** The portal is blocked until this employee clocks in. Owners are never gated. */
+  isClockInRequired: boolean;
+  employeeName: string | null;
 }
 
 const ClockContext = createContext<ClockContextType | null>(null);
 
-function toSafeDate(value?: string | null): Date | null {
-  return parseBusinessLocalDateTime(value);
-}
+type ClockAction = 'in' | 'out' | 'break_start' | 'break_end';
+
+const ACTION_COPY: Record<ClockAction, { success: string; failure: string }> = {
+  in: { success: 'Clocked in successfully', failure: 'Unable to clock in' },
+  out: { success: 'Clocked out successfully', failure: 'Unable to clock out' },
+  break_start: { success: 'Break started', failure: 'Unable to start break' },
+  break_end: { success: 'Break ended', failure: 'Unable to end break' },
+};
+
+const MAX_BREAK_MINUTES = 480;
 
 export const ClockProvider = ({ children }: { children: ReactNode }) => {
   const { auth } = useAuth();
   const queryClient = useQueryClient();
-  const [history, setHistory] = useState<ClockEntry[]>([]);
   const [isActionPending, setIsActionPending] = useState(false);
-  const [localStatus, setLocalStatus] = useState<ClockStatus>('clocked_out');
-  const [localClockedInAt, setLocalClockedInAt] = useState<Date | null>(null);
-  const [localBreakStartedAt, setLocalBreakStartedAt] = useState<Date | null>(null);
+  // Set when a route refuses with CLOCK_IN_REQUIRED, which can arrive before /clock/me does
+  // (or after a clock-out on another device). Its details carry the employee id.
+  const [blockedEmployeeId, setBlockedEmployeeId] = useState<string | null>(null);
 
   const businessId = auth.user?.businessId ?? '';
-  const currentEmployeeQuery = useCurrentEmployee();
-  const employeeId = currentEmployeeQuery.data?._id ?? null;
-  const clockStatusQuery = useEmployeeClockStatus(employeeId ?? '');
-  const trackingMode: ClockTrackingMode = employeeId ? 'api' : 'local';
-  const employeeMappingState: EmployeeMappingState = employeeId
-    ? 'mapped'
-    : currentEmployeeQuery.isPending
-      ? 'loading'
-      : currentEmployeeQuery.isError
-        ? 'error'
-        : 'unmapped';
-  const isApiBacked = trackingMode === 'api';
+  const isOwner = auth.userRole === 'owner';
+  const clockMeQuery = useClockMe({ enabled: !isOwner });
+  const me = clockMeQuery.data ?? null;
+  const employeeId = me?.employee.id ?? blockedEmployeeId;
 
-  const status = isApiBacked
-    ? clockStatusQuery.data?.status ?? 'clocked_out'
-    : localStatus;
-  const clockedInAt = isApiBacked
-    ? toSafeDate(clockStatusQuery.data?.clockInAt) ??
-      toSafeDate(clockStatusQuery.data?.currentRecord?.clockInAt)
-    : localClockedInAt;
-  const breakStartedAt = isApiBacked
-    ? toSafeDate(clockStatusQuery.data?.currentRecord?.breakStartedAt ?? null)
-    : localBreakStartedAt;
-  const isTrackingAvailable = true;
-
-  const addEntry = useCallback((type: ClockEntry['type']) => {
-    setHistory((prev) => [...prev, { type, time: new Date() }]);
-  }, []);
-
-  const invalidateClockQueries = useCallback(
-    async (targetEmployeeId: string) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['employees', businessId] }),
-        queryClient.invalidateQueries({ queryKey: ['employees', businessId, 'online'] }),
-        queryClient.invalidateQueries({
-          queryKey: ['employee-clock-status', businessId, targetEmployeeId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['employee-clock-history', businessId, targetEmployeeId],
-        }),
-      ]);
-    },
-    [businessId, queryClient]
+  const status: ClockStatus = me?.clock.status ?? 'clocked_out';
+  const clockedInAtRaw = me?.clock.clockedInAt ?? null;
+  const breakStartedAtRaw = me?.clock.breakStartedAt ?? null;
+  // Parsed once per value so the context doesn't change on every poll that returns the same time.
+  const clockedInAt = useMemo(() => parseBusinessLocalDateTime(clockedInAtRaw), [clockedInAtRaw]);
+  const breakStartedAt = useMemo(
+    () => parseBusinessLocalDateTime(breakStartedAtRaw),
+    [breakStartedAtRaw]
   );
 
-  const resolveEmployeeId = useCallback(async (): Promise<string | null> => {
-    if (employeeId) return employeeId;
-    if (!businessId || !auth.isPinVerified) return null;
+  useEffect(() => {
+    if (isOwner) return;
+    return apiEvents.on('CLOCK_IN_REQUIRED', (error) => {
+      const details = getApiErrorDetails<{ employeeId?: string }>(error);
+      setBlockedEmployeeId((prev) => details?.employeeId ?? prev ?? '');
+      void queryClient.invalidateQueries({ queryKey: [CLOCK_ME_KEY, businessId] });
+    });
+  }, [businessId, isOwner, queryClient]);
 
-    try {
-      const result = await currentEmployeeQuery.refetch();
-      return result.data?._id ?? null;
-    } catch {
-      return null;
-    }
-  }, [auth.isPinVerified, businessId, currentEmployeeQuery, employeeId]);
+  const isClockInRequired =
+    !isOwner && ((!!me && status === 'clocked_out') || (!me && blockedEmployeeId !== null));
 
-  const clockIn = useCallback(async () => {
-    if (isActionPending) return;
+  const runAction = useCallback(
+    async (action: ClockAction) => {
+      if (isActionPending) return;
+      if (!employeeId) {
+        toast.error(ACTION_COPY[action].failure, {
+          description: 'Your account isn’t linked to an employee record.',
+        });
+        return;
+      }
 
-    const targetEmployeeId = await resolveEmployeeId();
-    if (!targetEmployeeId) {
-      setLocalStatus('clocked_in');
-      setLocalClockedInAt(new Date());
-      setLocalBreakStartedAt(null);
-      addEntry('clock_in');
-      toast.success('Clocked in locally', {
-        description: 'Employee mapping is pending, so no clock API request was sent.',
-      });
-      return;
-    }
+      setIsActionPending(true);
+      try {
+        if (action === 'in') await clock.in(businessId, employeeId);
+        else if (action === 'out') await clock.out(businessId, employeeId);
+        else if (action === 'break_start') await clock.startBreak(businessId, employeeId);
+        else {
+          const minutes = breakStartedAt
+            ? Math.round((Date.now() - breakStartedAt.getTime()) / 60_000)
+            : 1;
+          await clock.endBreak(
+            businessId,
+            employeeId,
+            Math.min(MAX_BREAK_MINUTES, Math.max(1, minutes))
+          );
+        }
 
-    setIsActionPending(true);
-    try {
-      await clock.in(businessId, targetEmployeeId);
-      addEntry('clock_in');
-      await invalidateClockQueries(targetEmployeeId);
-      toast.success('Clocked in successfully');
-    } catch (err) {
-      toast.error('Unable to clock in', { description: getApiErrorMessage(err) });
-    } finally {
-      setIsActionPending(false);
-    }
-  }, [addEntry, businessId, invalidateClockQueries, isActionPending, resolveEmployeeId]);
+        if (action === 'in') {
+          setBlockedEmployeeId(null);
+          // Every screen that was refused while clocked out reloads now.
+          await queryClient.invalidateQueries();
+        } else {
+          // Clocking out ends access: the refreshed status brings the clock-in prompt back.
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: [CLOCK_ME_KEY, businessId] }),
+            queryClient.invalidateQueries({ queryKey: ['employees', businessId] }),
+            queryClient.invalidateQueries({
+              queryKey: ['employee-clock-status', businessId, employeeId],
+            }),
+            queryClient.invalidateQueries({
+              queryKey: ['employee-clock-history', businessId, employeeId],
+            }),
+          ]);
+        }
+        toast.success(ACTION_COPY[action].success);
+      } catch (err) {
+        toast.error(ACTION_COPY[action].failure, { description: getApiErrorMessage(err) });
+      } finally {
+        setIsActionPending(false);
+      }
+    },
+    [breakStartedAt, businessId, employeeId, isActionPending, queryClient]
+  );
 
-  const clockOut = useCallback(async () => {
-    if (isActionPending) return;
-
-    const targetEmployeeId = await resolveEmployeeId();
-    if (!targetEmployeeId) {
-      setLocalStatus('clocked_out');
-      setLocalClockedInAt(null);
-      setLocalBreakStartedAt(null);
-      addEntry('clock_out');
-      toast.success('Clocked out locally', {
-        description: 'Employee mapping is pending, so no clock API request was sent.',
-      });
-      return;
-    }
-
-    setIsActionPending(true);
-    try {
-      await clock.out(businessId, targetEmployeeId);
-      addEntry('clock_out');
-      await invalidateClockQueries(targetEmployeeId);
-      toast.success('Clocked out successfully');
-    } catch (err) {
-      toast.error('Unable to clock out', { description: getApiErrorMessage(err) });
-    } finally {
-      setIsActionPending(false);
-    }
-  }, [addEntry, businessId, invalidateClockQueries, isActionPending, resolveEmployeeId]);
-
-  const startBreak = useCallback(async () => {
-    if (isActionPending) return;
-
-    const targetEmployeeId = await resolveEmployeeId();
-    if (!targetEmployeeId) {
-      setLocalStatus('on_break');
-      setLocalBreakStartedAt(new Date());
-      addEntry('break_start');
-      toast.success('Break started locally', {
-        description: 'Employee mapping is pending, so no clock API request was sent.',
-      });
-      return;
-    }
-
-    setIsActionPending(true);
-    try {
-      await clock.startBreak(businessId, targetEmployeeId);
-      addEntry('break_start');
-      await invalidateClockQueries(targetEmployeeId);
-      toast.success('Break started');
-    } catch (err) {
-      toast.error('Unable to start break', { description: getApiErrorMessage(err) });
-    } finally {
-      setIsActionPending(false);
-    }
-  }, [addEntry, businessId, invalidateClockQueries, isActionPending, resolveEmployeeId]);
-
-  const endBreak = useCallback(async () => {
-    if (isActionPending) return;
-
-    const targetEmployeeId = await resolveEmployeeId();
-    if (!targetEmployeeId) {
-      setLocalStatus('clocked_in');
-      setLocalBreakStartedAt(null);
-      addEntry('break_end');
-      toast.success('Break ended locally', {
-        description: 'Employee mapping is pending, so no clock API request was sent.',
-      });
-      return;
-    }
-
-    const durationMinutes = (() => {
-      if (!breakStartedAt) return 1;
-      const diffMs = Date.now() - breakStartedAt.getTime();
-      const rounded = Math.round(diffMs / 60000);
-      return Math.min(480, Math.max(1, rounded));
-    })();
-
-    setIsActionPending(true);
-    try {
-      await clock.endBreak(businessId, targetEmployeeId, durationMinutes);
-      addEntry('break_end');
-      await invalidateClockQueries(targetEmployeeId);
-      toast.success('Break ended');
-    } catch (err) {
-      toast.error('Unable to end break', { description: getApiErrorMessage(err) });
-    } finally {
-      setIsActionPending(false);
-    }
-  }, [
-    addEntry,
-    breakStartedAt,
-    businessId,
-    invalidateClockQueries,
-    isActionPending,
-    resolveEmployeeId,
-  ]);
+  const clockIn = useCallback(() => runAction('in'), [runAction]);
+  const clockOut = useCallback(() => runAction('out'), [runAction]);
+  const startBreak = useCallback(() => runAction('break_start'), [runAction]);
+  const endBreak = useCallback(() => runAction('break_end'), [runAction]);
 
   const value = useMemo(
     () => ({
@@ -245,12 +150,10 @@ export const ClockProvider = ({ children }: { children: ReactNode }) => {
       startBreak,
       endBreak,
       clockedInAt,
-      history,
       isActionPending,
-      isTrackingAvailable,
-      trackingMode,
-      employeeMappingState,
-      mappedEmployeeId: employeeId,
+      isClockAvailable: !!employeeId,
+      isClockInRequired,
+      employeeName: me?.employee.fullName ?? null,
     }),
     [
       status,
@@ -259,12 +162,10 @@ export const ClockProvider = ({ children }: { children: ReactNode }) => {
       startBreak,
       endBreak,
       clockedInAt,
-      history,
       isActionPending,
-      isTrackingAvailable,
-      trackingMode,
-      employeeMappingState,
       employeeId,
+      isClockInRequired,
+      me?.employee.fullName,
     ]
   );
 

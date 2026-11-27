@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import AppSidebar from '@/components/AppSidebar';
 import AppHeader from '@/components/AppHeader';
 import AISuggestionsPanel from '@/components/AISuggestionsPanel';
+import ClockInGate from '@/components/ClockInGate';
 import LearnMoreDrawer from '@/components/learning/LearnMoreDrawer';
 import NotificationPopups from '@/components/notifications/NotificationPopups';
 import NewBusinessBanner from '@/components/NewBusinessBanner';
@@ -14,6 +15,7 @@ import TrialPaymentStep from '@/components/onboarding/TrialPaymentStep';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useClock } from '@/contexts/ClockContext';
 import { useAccess } from '@/hooks/permissions/use-access';
 import { useUiState } from '@/common/state/ui-context';
 import { cn } from '@/lib/utils';
@@ -65,6 +67,7 @@ const AppLayout = ({ children }: PropsWithChildren) => {
   const { auth, isHydrated } = useAuth();
   const { isAiSuggestionsOpen } = useUiState();
   const { sub, isLoading: isSubscriptionLoading } = useSubscription();
+  const { isClockInRequired } = useClock();
   const access = useAccess();
   const pathname = usePathname();
   const router = useRouter();
@@ -177,6 +180,11 @@ const AppLayout = ({ children }: PropsWithChildren) => {
 
   if (sub?.status === 'incomplete') {
     return <TrialPaymentStep />;
+  }
+
+  // Unmount the pages too: every business route refuses a clocked-out employee.
+  if (isClockInRequired) {
+    return <ClockInGate />;
   }
 
   if (isAIAdvisorRoute && (access.isResolving || !access.canViewAiAdvisor)) {

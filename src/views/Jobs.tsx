@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import {
@@ -54,7 +54,7 @@ import PaginationControls from '@/components/ui/pagination-controls';
 import ConfirmModal from '@/components/ConfirmModal';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import { useJobs } from '@/hooks/queries/use-jobs';
+import { useJob, useJobs } from '@/hooks/queries/use-jobs';
 import { useClients } from '@/hooks/queries/use-clients';
 import {
   useDeleteJob,
@@ -62,13 +62,15 @@ import {
   useStartJob,
   useCompleteJob,
 } from '@/hooks/mutations/use-jobs';
-import { useCreateContract } from '@/hooks/mutations/use-contracts';
+import { useCreateContract, useSendJobContract } from '@/hooks/mutations/use-contracts';
 import { useContractByJob } from '@/hooks/queries/use-contracts';
 import { useCreateInvoice } from '@/hooks/mutations/use-invoices';
 import CreateJobDialog from '@/components/jobs/CreateJobDialog';
 import DepositDialog from '@/components/jobs/DepositDialog';
 import ContractReviewDialog from '@/components/jobs/ContractReviewDialog';
-import type { Job, JobStatus, Contract } from '@/lib/api-client';
+import JobWorkflowTracker from '@/components/jobs/JobWorkflowTracker';
+import { OPEN_JOB_EVENT } from '@/lib/open-job';
+import type { Job, JobStatus } from '@/lib/api-client';
 import { useMoney } from '@/hooks/use-money';
 
 const ITEMS_PER_PAGE = 8;
@@ -110,8 +112,7 @@ const Jobs = () => {
   const [viewJob, setViewJob] = useState<Job | null>(null);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [contractReviewOpen, setContractReviewOpen] = useState(false);
-  const [activeContractForReview, setActiveContractForReview] = useState<Contract | null>(null);
+  const [reviewContractId, setReviewContractId] = useState<string | null>(null);
   const [depositDialogOpen, setDepositDialogOpen] = useState(false);
 
   const jobsQuery = useJobs({
@@ -132,6 +133,27 @@ const Jobs = () => {
   const jobContractQuery = useContractByJob(viewJob?._id, viewJob?.clientId);
   const jobContract = jobContractQuery.data ?? null;
   const createInvoice = useCreateInvoice();
+  const sendJobContract = useSendJobContract();
+
+  // Deep link /jobs?id=<id> (from a notification or an AI card) opens that job once.
+  const [linkedId, setLinkedId] = useState(() =>
+    typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('id') ?? ''
+  );
+  const { data: linkedJob, isError: linkedError } = useJob(linkedId);
+
+  useEffect(() => {
+    const onOpen = (e: Event) => setLinkedId((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_JOB_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_JOB_EVENT, onOpen);
+  }, []);
+
+  useEffect(() => {
+    if (!linkedId || (!linkedJob && !linkedError)) return;
+    if (linkedJob) setViewJob(linkedJob);
+    else toast.error('That job could not be found.');
+    setLinkedId('');
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [linkedId, linkedJob, linkedError]);
 
   const jobList = jobsQuery.data?.data ?? [];
   const paginationMeta = jobsQuery.data?.meta;
@@ -139,11 +161,6 @@ const Jobs = () => {
 
   const clientMap = useMemo(
     () => Object.fromEntries(clientList.map((c) => [c._id, c.name])),
-    [clientList],
-  );
-
-  const clientEmailMap = useMemo(
-    () => Object.fromEntries(clientList.map((c) => [c._id, c.email])),
     [clientList],
   );
 
@@ -238,15 +255,28 @@ const Jobs = () => {
         amount: viewJob.price ?? 0,
       },
       {
-        onSuccess: (contract) => {
-          setActiveContractForReview(contract);
-          setContractReviewOpen(true);
-        },
+        onSuccess: (contract) => setReviewContractId(contract._id),
         onError: (err) => {
           toast.error('Failed to create contract', { description: getApiErrorMessage(err) });
         },
       },
     );
+  };
+
+  const handleSendContract = () => {
+    if (!viewJob) return;
+    sendJobContract.mutate(viewJob._id, {
+      onSuccess: () => {
+        setReviewContractId(null);
+        void jobContractQuery.refetch();
+        toast.success('Contract on its way', {
+          description: 'It’s marked sent once the email is delivered, with a link for the client to sign.',
+        });
+      },
+      onError: (err) => {
+        toast.error('Failed to send contract', { description: getApiErrorMessage(err) });
+      },
+    });
   };
 
   const handleCreateInvoice = () => {
@@ -610,6 +640,11 @@ const Jobs = () => {
                 </>
               )}
               <Separator />
+              <div className='space-y-2'>
+                <p className='text-sm text-muted-foreground'>Progress</p>
+                <JobWorkflowTracker jobId={viewJob._id} />
+              </div>
+              <Separator />
               <div className='flex flex-wrap gap-2'>
                 {!hasContract && (
                   <Button
@@ -630,10 +665,7 @@ const Jobs = () => {
                   <Button
                     variant='outline'
                     className='gap-2'
-                    onClick={() => {
-                      setActiveContractForReview(jobContract);
-                      setContractReviewOpen(true);
-                    }}
+                    onClick={() => setReviewContractId(jobContract._id)}
                   >
                     <FileText size={14} /> Review &amp; Send Contract
                   </Button>
@@ -719,17 +751,13 @@ const Jobs = () => {
       </Dialog>
 
       <ContractReviewDialog
-        open={contractReviewOpen}
+        open={!!reviewContractId}
         onOpenChange={(open) => {
-          setContractReviewOpen(open);
-          if (!open) setActiveContractForReview(null);
+          if (!open) setReviewContractId(null);
         }}
-        contract={activeContractForReview}
-        clientEmail={viewJob ? (clientEmailMap[viewJob.clientId] ?? '') : ''}
-        onSent={() => {
-          setActiveContractForReview(null);
-          void jobContractQuery.refetch();
-        }}
+        contractId={reviewContractId}
+        isSending={sendJobContract.isPending}
+        onSend={handleSendContract}
       />
 
       <DepositDialog

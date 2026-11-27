@@ -238,7 +238,7 @@ export async function requestEnvelope<T>({
       return send(true);
     }
     const code = getApiErrorCode(err);
-    if (code) apiEvents.emit(code);
+    if (code) apiEvents.emit(code, err);
     throw err;
   }
 }
