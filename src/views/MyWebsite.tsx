@@ -22,6 +22,7 @@ import {
   Loader2,
   Upload,
   ImageIcon,
+  Images,
 } from 'lucide-react';
 import {
   Card,
@@ -39,6 +40,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui/sonner';
+import ConfirmModal from '@/components/ConfirmModal';
+import WebsitePhotosEditor from '@/components/website/WebsitePhotosEditor';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebsiteConfig } from '@/hooks/queries/use-website';
 import {
@@ -51,6 +54,8 @@ import {
 import { getApiErrorMessage } from '@/common/network/http-client';
 import type { WebsiteBookingFieldKey, WebsiteAiContent } from '@/lib/api-client';
 import type { LucideIcon } from 'lucide-react';
+import { SITE_TEMPLATES, resolveTemplate, type SiteTemplate } from '@/lib/website/site-templates';
+import { nameKey } from '@/lib/website/site-images';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +140,19 @@ function getSectionDisplayText(id: keyof SectionContents, contents: SectionConte
   }
 }
 
+function parseServiceNames(csv: string): string[] {
+  return csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Service photos the API will delete because their service is no longer in `nextNames`. O(n + m). */
+function servicePhotosToDrop(photoServiceNames: string[], nextNames: string[]): string[] {
+  const kept = new Set(nextNames.map(nameKey));
+  return photoServiceNames.filter((name) => !kept.has(nameKey(name)));
+}
+
 function buildBookingFields(
   apiFields?: Array<{ key: WebsiteBookingFieldKey; label: string; placeholder?: string; required: boolean }>,
 ): BookingField[] {
@@ -173,7 +191,9 @@ const MyWebsite = () => {
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
   const [secondaryColor, setSecondaryColor] = useState('#8B5CF6');
   const [fontFamily, setFontFamily] = useState('Inter');
+  const [template, setTemplate] = useState<SiteTemplate>('classic');
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
+  const [photosAtRisk, setPhotosAtRisk] = useState<string[]>([]);
 
   const [bookingFields, setBookingFields] = useState<BookingField[]>(DEFAULT_BOOKING_FIELDS);
   const [bookingTitle, setBookingTitle] = useState('Book a Service');
@@ -186,6 +206,7 @@ const MyWebsite = () => {
     setPrimaryColor(websiteData.colorPrimary);
     setSecondaryColor(websiteData.colorSecondary);
     setFontFamily(websiteData.font);
+    setTemplate(resolveTemplate(websiteData.template));
     setLogoUrl(websiteData.logoUrl);
     setSectionContents(buildSectionContents(websiteData.aiContent));
     if (websiteData.bookingForm) {
@@ -208,7 +229,17 @@ const MyWebsite = () => {
     document.head.appendChild(link);
   }, []);
 
-  const handleSaveSection = async (sectionId: keyof SectionContents) => {
+  const handleSaveSection = async (sectionId: keyof SectionContents, confirmed = false) => {
+    if (sectionId === 'services' && !confirmed) {
+      const atRisk = servicePhotosToDrop(
+        (websiteData?.photos?.services ?? []).map((p) => p.serviceName),
+        parseServiceNames(sectionContents.services),
+      );
+      if (atRisk.length) {
+        setPhotosAtRisk(atRisk);
+        return;
+      }
+    }
     try {
       switch (sectionId) {
         case 'hero':
@@ -216,11 +247,7 @@ const MyWebsite = () => {
           break;
         case 'services':
           await saveContent.mutateAsync({
-            services: sectionContents.services
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .map((name) => ({ name, description: '' })),
+            services: parseServiceNames(sectionContents.services).map((name) => ({ name, description: '' })),
           });
           break;
         case 'about':
@@ -285,10 +312,12 @@ const MyWebsite = () => {
         colorPrimary: primaryColor,
         colorSecondary: secondaryColor,
         font: fontFamily,
+        template,
       });
       setPrimaryColor(result.colorPrimary);
       setSecondaryColor(result.colorSecondary);
       setFontFamily(result.font);
+      setTemplate(resolveTemplate(result.template ?? template));
       toast.success('Design saved!');
     } catch (err) {
       toast.error('Save failed', { description: getApiErrorMessage(err) });
@@ -408,6 +437,9 @@ const MyWebsite = () => {
           <TabsTrigger value='content' className='gap-1.5'>
             <Edit3 size={14} /> Content
           </TabsTrigger>
+          <TabsTrigger value='photos' className='gap-1.5'>
+            <Images size={14} /> Photos
+          </TabsTrigger>
           <TabsTrigger value='bookings' className='gap-1.5'>
             <ClipboardList size={14} /> Bookings
           </TabsTrigger>
@@ -484,6 +516,11 @@ const MyWebsite = () => {
               </Card>
             </motion.div>
           ))}
+        </TabsContent>
+
+        {/* Photos Tab */}
+        <TabsContent value='photos'>
+          <WebsitePhotosEditor config={websiteData} isLoading={isLoading} />
         </TabsContent>
 
         {/* Bookings Tab */}
@@ -634,6 +671,12 @@ const MyWebsite = () => {
                           <option>{field.placeholder}</option>
                           {field.options?.map((o) => <option key={o}>{o}</option>)}
                         </select>
+                      ) : field.type === 'date' ? (
+                        // Mirrors the site's calendar picker rather than the browser's date box.
+                        <div className='flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground opacity-70'>
+                          {field.placeholder || 'Pick a date'}
+                          <CalendarIcon size={12} />
+                        </div>
                       ) : (
                         <Input
                           type={field.type}
@@ -708,6 +751,33 @@ const MyWebsite = () => {
                     />
                     <p className='mt-1 text-[10px] text-muted-foreground'>JPEG or PNG, max 5 MB</p>
                   </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className='space-y-2'>
+                <Label className='flex items-center gap-1.5 text-xs'>
+                  <Layout size={12} /> Website Template
+                </Label>
+                <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-4'>
+                  {SITE_TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type='button'
+                      onClick={() => setTemplate(t.id)}
+                      aria-pressed={template === t.id}
+                      className={`group overflow-hidden rounded-xl border text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                        template === t.id ? 'border-primary ring-2 ring-primary/40' : 'border-border'
+                      }`}
+                    >
+                      <TemplateThumb template={t.id} primary={primaryColor} secondary={secondaryColor} />
+                      <span className='block p-3'>
+                        <span className='block text-sm font-semibold'>{t.name}</span>
+                        <span className='mt-0.5 block text-[11px] leading-snug text-muted-foreground'>{t.description}</span>
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -790,9 +860,83 @@ const MyWebsite = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ConfirmModal
+        open={photosAtRisk.length > 0}
+        onOpenChange={(open) => !open && setPhotosAtRisk([])}
+        title='Delete service photos?'
+        description={`Renaming or removing ${photosAtRisk.join(', ')} will delete ${
+          photosAtRisk.length === 1 ? 'its photo' : 'their photos'
+        } from your website. You can upload new ones from the Photos tab.`}
+        confirmLabel='Save anyway'
+        onConfirm={() => {
+          setPhotosAtRisk([]);
+          void handleSaveSection('services', true);
+        }}
+      />
     </div>
   );
 };
+
+// ─── Template Thumbnail ───────────────────────────────────────────────────────
+
+/** A tiny animated sketch of each template, tinted with the current brand colours. */
+function TemplateThumb({ template, primary, secondary }: { template: SiteTemplate; primary: string; secondary: string }) {
+  const gradient = `linear-gradient(135deg, ${primary}, ${secondary})`;
+  switch (template) {
+    case 'bubbles':
+      return (
+        <span className='relative block h-24 overflow-hidden' style={{ background: `${primary}14` }}>
+          {[
+            [12, 14, 0],
+            [38, 22, 0.6],
+            [64, 10, 1.2],
+            [82, 18, 0.3],
+          ].map(([left, size, delay]) => (
+            <span
+              key={left}
+              className='absolute bottom-2 animate-bounce rounded-full border bg-white/60'
+              style={{ left: `${left}%`, width: size, height: size, borderColor: primary, animationDelay: `${delay}s` }}
+            />
+          ))}
+          <span className='absolute left-3 top-3 h-2 w-16 rounded-full' style={{ background: gradient }} />
+          <span className='absolute left-3 top-7 h-4 w-12 rounded-full bg-white shadow' />
+        </span>
+      );
+    case 'aurora':
+      return (
+        <span className='relative block h-24 overflow-hidden bg-[#06060c]'>
+          <span className='absolute -left-4 -top-6 h-20 w-28 animate-pulse rounded-full opacity-70 blur-xl' style={{ background: gradient }} />
+          <span className='absolute -right-4 bottom-0 h-14 w-20 animate-pulse rounded-full bg-cyan-400/40 blur-xl [animation-delay:1s]' />
+          <span className='absolute left-3 top-4 h-2 w-20 rounded-full bg-white/80' />
+          <span className='absolute bottom-3 left-3 h-6 w-14 rounded-md border border-white/20 bg-white/10' />
+          <span className='absolute bottom-3 left-20 h-6 w-14 rounded-md border border-white/20 bg-white/10' />
+        </span>
+      );
+    case 'kinetic':
+      return (
+        <span className='relative block h-24 overflow-hidden bg-[#f6f4ef]'>
+          <span className='absolute left-3 top-3 text-lg font-black uppercase leading-none tracking-tighter text-[#0b0b0f]'>BIG</span>
+          <span className='absolute left-3 top-8 text-lg font-black uppercase italic leading-none tracking-tighter' style={{ color: primary }}>
+            TYPE
+          </span>
+          <span className='absolute bottom-3 left-0 right-0 -rotate-3 py-1 text-[9px] font-black uppercase tracking-widest text-white' style={{ background: primary }}>
+            <span className='inline-block animate-pulse px-2'>Services • Booking • Services • Booking</span>
+          </span>
+          <span className='absolute right-3 top-3 h-8 w-8 animate-spin rounded-full border-2 border-dashed border-[#0b0b0f] [animation-duration:6s]' />
+        </span>
+      );
+    default:
+      return (
+        <span className='relative block h-24 overflow-hidden bg-white'>
+          <span className='absolute -left-4 -top-4 h-16 w-16 rounded-full opacity-25 blur-lg' style={{ background: primary }} />
+          <span className='absolute left-1/2 top-4 h-2 w-20 -translate-x-1/2 rounded-full bg-gray-800' />
+          <span className='absolute left-1/2 top-8 h-2 w-14 -translate-x-1/2 rounded-full' style={{ background: gradient }} />
+          <span className='absolute bottom-3 left-1/2 h-5 w-16 -translate-x-1/2 rounded-md' style={{ background: gradient }} />
+        </span>
+      );
+  }
+}
 
 // ─── Section Editor ───────────────────────────────────────────────────────────
 

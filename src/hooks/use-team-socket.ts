@@ -7,6 +7,7 @@ import {
   createSocketAuthHeaders,
   getSocketAuthPayload,
   SOCKET_BASE_URL,
+  socketAuth,
   type TeamMessage,
   type OnlineEmployee,
 } from '@/lib/api-client';
@@ -81,7 +82,7 @@ export function useTeamSocket(seenMessageIds: React.RefObject<Set<string>>) {
 
       const socket = io(`${SOCKET_BASE_URL}/chat`, {
         transports: ['websocket', 'polling'],
-        auth: authPayload,
+        auth: socketAuth(businessId),
         extraHeaders: headers,
         transportOptions: {
           polling: {

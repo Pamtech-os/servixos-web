@@ -9,7 +9,6 @@ import {
   Plus,
   Search,
   CheckCircle2,
-  Pencil,
   CalendarIcon,
   Trash2,
 } from 'lucide-react';
@@ -53,13 +52,10 @@ import { toast } from '@/components/ui/sonner';
 import { usePayments } from '@/hooks/queries/use-payments';
 import { useClients } from '@/hooks/queries/use-clients';
 import { useInvoices } from '@/hooks/queries/use-invoices';
-import {
-  useCreatePayment,
-  useUpdatePayment,
-  useDeletePayment,
-} from '@/hooks/mutations/use-payments';
+import { useCreatePayment, useDeletePayment } from '@/hooks/mutations/use-payments';
 import { getApiErrorMessage } from '@/common/network/http-client';
-import type { Payment, PaymentMode, PaymentStatus, UpdatePaymentInput } from '@/lib/api-client';
+import type { Payment, PaymentMode } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -71,27 +67,15 @@ const paymentModeLabels: Record<PaymentMode, string> = {
   mobile_money: 'Mobile Money',
 };
 
-const statusColor = (s: PaymentStatus) => {
-  switch (s) {
-    case 'completed':
-      return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
-    case 'partial':
-      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20';
-  }
-};
-
 const Payments = () => {
+  const money = useMoney();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<PaymentStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editPayment, setEditPayment] = useState<Payment | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
 
   const query = {
     search: search || undefined,
-    status: statusFilter !== 'all' ? statusFilter : undefined,
     page,
     limit: ITEMS_PER_PAGE,
   };
@@ -101,7 +85,6 @@ const Payments = () => {
   const { data: invoicesData } = useInvoices({ limit: 50, status: 'pending' });
 
   const createPayment = useCreatePayment();
-  const updatePayment = useUpdatePayment();
   const deletePayment = useDeletePayment();
 
   const paymentList = data?.data ?? [];
@@ -116,15 +99,7 @@ const Payments = () => {
   const [formDate, setFormDate] = useState<Date | undefined>(undefined);
   const [formMode, setFormMode] = useState<PaymentMode>('bank_transfer');
   const [formAmount, setFormAmount] = useState(0);
-  const [formStatus, setFormStatus] = useState<PaymentStatus>('completed');
   const [formNotes, setFormNotes] = useState('');
-
-  // Edit form state
-  const [editFormMode, setEditFormMode] = useState<PaymentMode>('bank_transfer');
-  const [editFormAmount, setEditFormAmount] = useState(0);
-  const [editFormStatus, setEditFormStatus] = useState<PaymentStatus>('completed');
-  const [editFormDate, setEditFormDate] = useState<Date | undefined>(undefined);
-  const [editFormNotes, setEditFormNotes] = useState('');
 
   const resetForm = () => {
     setFormClientId('');
@@ -132,18 +107,7 @@ const Payments = () => {
     setFormDate(undefined);
     setFormMode('bank_transfer');
     setFormAmount(0);
-    setFormStatus('completed');
     setFormNotes('');
-  };
-
-  const openEditDialog = (payment: Payment) => {
-    setEditPayment(payment);
-    setEditFormMode(payment.paymentMode);
-    setEditFormAmount(payment.amount);
-    setEditFormStatus(payment.status);
-    setEditFormDate(new Date(payment.paymentDate));
-    setEditFormNotes(payment.notes ?? '');
-    setEditDialogOpen(true);
   };
 
   const handleRecord = () => {
@@ -164,50 +128,18 @@ const Payments = () => {
         paymentDate: format(formDate, 'yyyy-MM-dd'),
         paymentMode: formMode,
         amount,
-        status: formStatus,
         notes: formNotes.trim() || undefined,
       },
       {
         onSuccess: () => {
           toast.success('Payment recorded', {
-            description: `$${amount.toLocaleString()} has been recorded.`,
+            description: `${money.format(amount)} has been recorded.`,
           });
           setDialogOpen(false);
           resetForm();
         },
         onError: (err) => {
           toast.error('Failed to record payment', { description: getApiErrorMessage(err) });
-        },
-      }
-    );
-  };
-
-  const handleEditSave = () => {
-    if (!editPayment || !editFormAmount) return;
-    const amount = editFormAmount;
-    if (amount < 0.01) {
-      toast.error('Invalid amount', { description: 'Amount must be at least 0.01.' });
-      return;
-    }
-
-    const input: UpdatePaymentInput = {
-      paymentMode: editFormMode,
-      amount,
-      status: editFormStatus,
-      paymentDate: editFormDate ? format(editFormDate, 'yyyy-MM-dd') : undefined,
-      notes: editFormNotes.trim() || undefined,
-    };
-
-    updatePayment.mutate(
-      { id: editPayment._id, input },
-      {
-        onSuccess: () => {
-          toast.success('Payment updated');
-          setEditDialogOpen(false);
-          setEditPayment(null);
-        },
-        onError: (err) => {
-          toast.error('Failed to update payment', { description: getApiErrorMessage(err) });
         },
       }
     );
@@ -310,7 +242,7 @@ const Payments = () => {
                   ) : (
                     <p className='text-lg font-bold'>
                       {card.currency
-                        ? `$${card.value.toLocaleString()}`
+                        ? money.format(card.value)
                         : card.value.toLocaleString()}
                     </p>
                   )}
@@ -342,22 +274,6 @@ const Payments = () => {
                   }}
                 />
               </div>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => {
-                  setStatusFilter(v as PaymentStatus | 'all');
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className='w-36'>
-                  <SelectValue placeholder='Status' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='all'>All statuses</SelectItem>
-                  <SelectItem value='completed'>Completed</SelectItem>
-                  <SelectItem value='partial'>Partial</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </CardHeader>
@@ -401,35 +317,24 @@ const Payments = () => {
                           <TableCell>{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
                           <TableCell>{paymentModeLabels[p.paymentMode]}</TableCell>
                           <TableCell className='text-right font-medium'>
-                            ${p.amount.toLocaleString()}
+                            {money.format(p.amount)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant='outline' className={statusColor(p.status)}>
-                              {p.status === 'completed' ? 'Completed' : 'Partial'}
+                            <Badge variant='outline' className='text-muted-foreground'>
+                              Recorded
                             </Badge>
                           </TableCell>
                           <TableCell className='text-right'>
                             <div className='flex items-center justify-end gap-1'>
-                              {p.status !== 'completed' && (
-                                <>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='h-8 w-8'
-                                    onClick={() => openEditDialog(p)}
-                                  >
-                                    <Pencil size={14} />
-                                  </Button>
-                                  <Button
-                                    variant='ghost'
-                                    size='icon'
-                                    className='h-8 w-8 text-destructive hover:text-destructive'
-                                    onClick={() => setDeleteTarget(p)}
-                                  >
-                                    <Trash2 size={14} />
-                                  </Button>
-                                </>
-                              )}
+                              <Button
+                                variant='ghost'
+                                size='icon'
+                                aria-label='Delete payment'
+                                className='h-8 w-8 text-destructive hover:text-destructive'
+                                onClick={() => setDeleteTarget(p)}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -459,7 +364,7 @@ const Payments = () => {
           if (!open) setDeleteTarget(null);
         }}
         title='Delete Payment'
-        description='Are you sure you want to delete this payment? This will reverse the corresponding invoice amount.'
+        description='Payments can’t be edited. Delete this payment to reverse it on its invoice, then record it again with the correct details.'
         confirmLabel='Delete'
         onConfirm={handleDelete}
         variant='destructive'
@@ -503,7 +408,7 @@ const Payments = () => {
                 <SelectContent>
                   {invoiceList.map((inv) => (
                     <SelectItem key={inv._id} value={inv._id}>
-                      {inv.invoiceNumber} — ${inv.totalAmount.toLocaleString()}
+                      {inv.invoiceNumber} — {money.format(inv.totalAmount)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -548,36 +453,22 @@ const Payments = () => {
               </div>
             </div>
 
-            <div className='grid grid-cols-2 gap-4'>
-              <div className='space-y-2'>
-                <Label>Payment Mode</Label>
-                <Select value={formMode} onValueChange={(v) => setFormMode(v as PaymentMode)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
-                      ([val, label]) => (
-                        <SelectItem key={val} value={val}>
-                          {label}
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className='space-y-2'>
-                <Label>Status</Label>
-                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as PaymentStatus)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='completed'>Completed</SelectItem>
-                    <SelectItem value='partial'>Partial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className='space-y-2'>
+              <Label>Payment Mode</Label>
+              <Select value={formMode} onValueChange={(v) => setFormMode(v as PaymentMode)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
+                    ([val, label]) => (
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className='space-y-2'>
@@ -608,115 +499,6 @@ const Payments = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Payment Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className='sm:max-w-md'>
-          <DialogHeader>
-            <DialogTitle>Edit Payment</DialogTitle>
-            <DialogDescription>Update payment details.</DialogDescription>
-          </DialogHeader>
-
-          <div className='space-y-4 py-2'>
-            <div className='space-y-2'>
-              <Label>Payment Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant='outline'
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !editFormDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className='mr-2 h-4 w-4' />
-                    {editFormDate ? format(editFormDate, 'PPP') : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className='w-auto p-0' align='start'>
-                  <Calendar
-                    mode='single'
-                    selected={editFormDate}
-                    onSelect={setEditFormDate}
-                    initialFocus
-                    className={cn('p-3 pointer-events-auto')}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className='grid grid-cols-2 gap-4'>
-              <div className='space-y-2'>
-                <Label>Payment Mode</Label>
-                <Select
-                  value={editFormMode}
-                  onValueChange={(v) => setEditFormMode(v as PaymentMode)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.entries(paymentModeLabels) as [PaymentMode, string][]).map(
-                      ([val, label]) => (
-                        <SelectItem key={val} value={val}>
-                          {label}
-                        </SelectItem>
-                      )
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className='space-y-2'>
-                <Label>Amount ($)</Label>
-                <PriceInput
-                  value={editFormAmount}
-                  onChange={setEditFormAmount}
-                  placeholder='0.00'
-                />
-              </div>
-            </div>
-
-            <div className='space-y-2'>
-              <Label>Status</Label>
-              <Select
-                value={editFormStatus}
-                onValueChange={(v) => setEditFormStatus(v as PaymentStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='completed'>Completed</SelectItem>
-                  <SelectItem value='partial'>Partial</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className='space-y-2'>
-              <Label>
-                Notes <span className='text-muted-foreground'>(optional)</span>
-              </Label>
-              <Textarea
-                value={editFormNotes}
-                onChange={(e) => setEditFormNotes(e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant='outline' onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleEditSave}
-              disabled={updatePayment.isPending}
-              className='gradient-bg text-primary-foreground'
-            >
-              {updatePayment.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

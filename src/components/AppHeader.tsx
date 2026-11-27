@@ -10,7 +10,10 @@ import {
   Users,
   Loader2,
   Bell,
+  CheckCheck,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useClock } from '@/contexts/ClockContext';
@@ -18,6 +21,15 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/contexts/AuthContext';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useNotifications, useUnreadNotificationCount } from '@/hooks/queries/use-notifications';
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+} from '@/hooks/mutations/use-notifications';
+import { getNotificationTarget } from '@/lib/notification-target';
+import type { NotificationView } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
 import { useOnlineEmployees } from '@/hooks/queries/use-employees';
 
 type OnlineTeamMember = {
@@ -113,48 +125,29 @@ const OnlineTeamSection = memo(
 );
 OnlineTeamSection.displayName = 'OnlineTeamSection';
 
-type NotificationItem = {
-  id: string;
-  title: string;
-  description: string;
-  time: string;
-  read: boolean;
-};
-
-// TODO: replace with a real-time notifications query once the API endpoint exists.
-const DUMMY_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'New booking request',
-    description: 'Jane Doe booked a haircut for 3:00 PM today.',
-    time: '5m ago',
-    read: false,
-  },
-  {
-    id: '2',
-    title: 'Payment received',
-    description: '$45.00 payment confirmed for invoice #1042.',
-    time: '1h ago',
-    read: false,
-  },
-  {
-    id: '3',
-    title: 'Shift reminder',
-    description: 'Your shift starts in 30 minutes.',
-    time: '2h ago',
-    read: true,
-  },
-];
-
 const NotificationBell = memo(() => {
-  const notifications = DUMMY_NOTIFICATIONS;
-  const unreadCount = notifications.filter((notification) => !notification.read).length;
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const { data: unreadCount = 0 } = useUnreadNotificationCount();
+  const { data, isLoading } = useNotifications(open);
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  const items = data?.data ?? [];
+
+  const openNotification = (notification: NotificationView) => {
+    if (!notification.readAt) markRead.mutate(notification.id);
+    const target = getNotificationTarget(notification);
+    if (target) {
+      setOpen(false);
+      target.open(router);
+    }
+  };
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          aria-label='Notifications'
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
           className='relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
         >
           <Bell size={18} />
@@ -168,32 +161,54 @@ const NotificationBell = memo(() => {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className='w-72 p-0' align='end'>
-        <div className='border-b border-border px-3 py-2'>
+      <PopoverContent className='w-80 p-0' align='end'>
+        <div className='flex items-center justify-between gap-2 border-b border-border px-3 py-2'>
           <p className='flex items-center gap-1.5 text-xs font-semibold'>
             <Bell size={12} /> Notifications
           </p>
-        </div>
-        <div className='max-h-[280px] overflow-y-auto'>
-          <div className='space-y-1 p-2'>
-            {notifications.map((notification) => (
-              <div
-                key={notification.id}
-                className='flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50'
+          <div className='flex items-center gap-1'>
+            {unreadCount > 0 && (
+              <button
+                type='button'
+                onClick={() => markAllRead.mutate()}
+                disabled={markAllRead.isPending}
+                className='flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60'
               >
-                {!notification.read && (
-                  <Circle size={6} className='mt-1.5 shrink-0 fill-primary text-primary' />
-                )}
-                <div className={notification.read ? 'ml-3.5' : ''}>
-                  <p className='text-xs font-medium'>{notification.title}</p>
-                  <p className='text-xs text-muted-foreground'>{notification.description}</p>
-                  <p className='mt-0.5 text-[10px] text-muted-foreground'>{notification.time}</p>
-                </div>
-              </div>
-            ))}
-            {notifications.length === 0 && (
-              <p className='px-2 py-4 text-center text-xs text-muted-foreground'>
-                No notifications yet.
+                <CheckCheck size={12} /> Mark all as read
+              </button>
+            )}
+          </div>
+        </div>
+        <div className='max-h-[360px] overflow-y-auto'>
+          <div className='space-y-1 p-2'>
+            {isLoading &&
+              Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className='h-12 w-full rounded-md' />)}
+            {items.map((notification) => {
+              const unread = !notification.readAt;
+              return (
+                <button
+                  key={notification.id}
+                  type='button'
+                  onClick={() => openNotification(notification)}
+                  className={cn(
+                    'flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60',
+                    unread && 'bg-primary/5'
+                  )}
+                >
+                  {unread && <Circle size={6} className='mt-1.5 shrink-0 fill-primary text-primary' />}
+                  <div className={unread ? '' : 'ml-3.5'}>
+                    <p className='text-xs font-medium'>{notification.title}</p>
+                    <p className='text-xs text-muted-foreground'>{notification.body}</p>
+                    <p className='mt-0.5 text-[10px] text-muted-foreground'>
+                      {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+            {!isLoading && items.length === 0 && (
+              <p className='px-2 py-6 text-center text-xs text-muted-foreground'>
+                No notifications yet. New bookings and signed contracts will show up here.
               </p>
             )}
           </div>
@@ -213,8 +228,7 @@ const AppHeader = () => {
     endBreak,
     clockedInAt,
     isActionPending,
-    trackingMode,
-    employeeMappingState,
+    isClockAvailable,
   } = useClock();
   const { auth } = useAuth();
   const onlineEmployeesQuery = useOnlineEmployees();
@@ -227,13 +241,6 @@ const AppHeader = () => {
   const userRoleLabel = auth.userRole ? toTitleCase(auth.userRole) : 'User';
   const clockStatusLabel =
     status === 'clocked_in' ? 'Clocked In' : status === 'on_break' ? 'On Break' : 'Clocked Out';
-  const clockSyncLabel =
-    trackingMode === 'api'
-      ? 'Employee linked'
-      : employeeMappingState === 'loading'
-      ? 'Checking employee link...'
-      : 'Employee not linked';
-  console.warn(clockSyncLabel);
 
   const onlineTeamMembers = useMemo(() => {
     const employees = Array.isArray(onlineEmployeesQuery.data) ? onlineEmployeesQuery.data : [];
@@ -275,7 +282,7 @@ const AppHeader = () => {
     <header className='sticky top-0 z-40 flex items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 backdrop-blur-sm sm:px-4 sm:py-3 md:px-6'>
       <div className='flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2'>
         <AnimatePresence mode='wait'>
-          {status === 'clocked_out' ? (
+          {!isClockAvailable ? null : status === 'clocked_out' ? (
             <motion.div
               key='clock-in'
               initial={{ opacity: 0, scale: 0.9 }}
@@ -372,7 +379,8 @@ const AppHeader = () => {
         <div className='hidden text-right sm:block'>
           <p className='text-sm font-semibold'>{displayName}</p>
           <p className='text-xs text-muted-foreground'>
-            {userRoleLabel} ({clockStatusLabel})
+            {userRoleLabel}
+            {isClockAvailable && ` (${clockStatusLabel})`}
           </p>
         </div>
         <div className='gradient-bg flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground'>

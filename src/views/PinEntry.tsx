@@ -97,8 +97,13 @@ const PinEntry = () => {
     }
     if (auth.user?.mustChangePassword) {
       router.replace('/complete-setup');
+      return;
     }
-  }, [auth.isLoggedIn, auth.user?.mustChangePassword, isHydrated, router]);
+    // Onboarding sessions can't verify a PIN until the business exists.
+    if (!auth.user?.businessId) {
+      router.replace('/onboarding');
+    }
+  }, [auth.isLoggedIn, auth.user?.mustChangePassword, auth.user?.businessId, isHydrated, router]);
 
   // Auto-submit when 4 digits entered.
   // verifyPinMutation.isPending is intentionally NOT a dependency — listing it
@@ -112,7 +117,8 @@ const PinEntry = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin.length]);
 
-  if (!isHydrated || !auth.isLoggedIn || auth.user?.mustChangePassword) return null;
+  if (!isHydrated || !auth.isLoggedIn || auth.user?.mustChangePassword || !auth.user?.businessId)
+    return null;
 
   return (
     <div className='relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto bg-background px-4 py-6 sm:items-center sm:py-8'>

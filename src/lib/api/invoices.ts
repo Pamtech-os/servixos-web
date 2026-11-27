@@ -107,9 +107,11 @@ export const invoices = {
   update: (businessId: string, id: string, input: UpdateInvoiceInput): Promise<Invoice> =>
     protectedRequest<Invoice>('PATCH', `/invoices/${id}`, businessId, input),
 
-  delete: (businessId: string, id: string): Promise<null> =>
-    protectedRequest<null>('DELETE', `/invoices/${id}`, businessId),
+  /** Also deletes every payment recorded against the invoice, in one transaction. */
+  delete: (businessId: string, id: string): Promise<{ deletedPayments: number }> =>
+    protectedRequest<{ deletedPayments: number }>('DELETE', `/invoices/${id}`, businessId),
 
-  send: (businessId: string, id: string): Promise<Invoice> =>
-    protectedRequest<Invoice>('POST', `/invoices/${id}/send`, businessId),
+  /** `queued` means accepted for delivery; `sentAt` appears on the invoice once the email is accepted. */
+  send: (businessId: string, id: string): Promise<{ invoiceId: string; queued: boolean }> =>
+    protectedRequest<{ invoiceId: string; queued: boolean }>('POST', `/invoices/${id}/send`, businessId),
 };

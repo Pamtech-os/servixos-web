@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { WebsitePublicData, BookingField, BookingFieldKey } from '../types';
 import { DEFAULT_BOOKING_FIELDS } from '../types';
 import { fetchJson } from '@/common/network/http-client';
+import BookingDatePicker from './booking-date-picker';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://api-dev.servixos.com/api';
 
@@ -40,11 +41,26 @@ export default function BookingFormClient({ data, subdomain }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const handleChange = (key: string, value: string) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [key]: value };
+      // yyyy-MM-dd strings sort as dates: drop an end date the new start date has passed.
+      if (key === 'requestedDate' && prev.requestedEndDate && prev.requestedEndDate < value) {
+        next.requestedEndDate = '';
+      }
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // The date picker is a button, so the browser's `required` check doesn't cover it.
+    const missingDate = fields.find(
+      (f) => f.required && INPUT_TYPE[f.key] === 'date' && !values[f.key],
+    );
+    if (missingDate) {
+      setError(`Please choose a date for "${missingDate.label}".`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -151,6 +167,16 @@ export default function BookingFormClient({ data, subdomain }: Props) {
                       </option>
                     ))}
                   </select>
+                ) : inputType === 'date' ? (
+                  <BookingDatePicker
+                    id={field.key}
+                    value={value}
+                    onChange={(next) => handleChange(field.key, next)}
+                    placeholder={field.placeholder}
+                    colorPrimary={colorPrimary}
+                    // An end date can't come before the chosen start date.
+                    min={field.key === 'requestedEndDate' ? values.requestedDate : undefined}
+                  />
                 ) : (
                   <input
                     id={field.key}
@@ -159,7 +185,6 @@ export default function BookingFormClient({ data, subdomain }: Props) {
                     placeholder={field.placeholder}
                     required={field.required}
                     value={value}
-                    min={inputType === 'date' ? new Date().toISOString().split('T')[0] : undefined}
                     onChange={(e) => handleChange(field.key, e.target.value)}
                     className='w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:ring-2'
                     style={{ '--tw-ring-color': colorPrimary } as React.CSSProperties}

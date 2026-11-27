@@ -1,8 +1,15 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { contracts, type CreateContractInput, type UpdateContractInput } from '@/lib/api-client';
+import {
+  contracts,
+  jobs,
+  type CreateContractInput,
+  type UpdateContractInput,
+} from '@/lib/api-client';
 import { useBusinessAuth } from '@/hooks/use-business-auth';
+import { AI_SUGGESTIONS_KEY } from '@/hooks/queries/use-ai-suggestions';
+import { JOB_WORKFLOW_KEY } from '@/hooks/queries/use-jobs';
 
 export function useCreateContract() {
   const { businessId } = useBusinessAuth();
@@ -41,15 +48,20 @@ export function useDeleteContract() {
   });
 }
 
-export function useSendContract() {
+/**
+ * Sends a job's contract with a signing link (POST /jobs/:id/contract/send). The contract is
+ * marked sent only once the mail provider accepts the email.
+ */
+export function useSendJobContract() {
   const { businessId } = useBusinessAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, clientEmail }: { id: string; clientEmail: string }) =>
-      contracts.send(businessId, id, clientEmail),
-    onSuccess: () => {
+    mutationFn: (jobId: string) => jobs.sendContract(businessId, jobId),
+    onSuccess: (_result, jobId) => {
       void queryClient.invalidateQueries({ queryKey: ['contracts', businessId] });
+      void queryClient.invalidateQueries({ queryKey: [JOB_WORKFLOW_KEY, businessId, jobId] });
+      void queryClient.invalidateQueries({ queryKey: [AI_SUGGESTIONS_KEY, businessId] });
     },
   });
 }

@@ -113,9 +113,9 @@ const priorityConfig: Record<TaskPriority, { label: string; class: string }> = {
   low: { label: 'Low', class: 'bg-muted text-muted-foreground border-border' },
 };
 
-const TasksTab = () => {
+const TasksTab = ({ initialTaskId = null }: { initialTaskId?: string | null }) => {
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [filterAssignee, setFilterAssignee] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterDueDate, setFilterDueDate] = useState('all');

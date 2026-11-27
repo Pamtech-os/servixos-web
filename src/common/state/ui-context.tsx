@@ -8,21 +8,33 @@ import {
   useReducer,
   type PropsWithChildren,
 } from 'react';
+import type { LearnSubject } from '@/lib/api-client';
+
+/** `id` changes on every open, so re-opening the same subject starts a fresh thread. */
+export type LearnThreadRequest = LearnSubject & { id: number };
 
 type UiState = {
   isMobileSidebarOpen: boolean;
   isAiSuggestionsOpen: boolean;
+  /** A suggestion whose Review & Execute dialog was requested from outside the panel. */
+  reviewSuggestionId: string | null;
+  learnThread: LearnThreadRequest | null;
 };
 
 type UiAction =
   | { type: 'SET_MOBILE_SIDEBAR'; payload: boolean }
   | { type: 'TOGGLE_MOBILE_SIDEBAR' }
   | { type: 'SET_AI_PANEL'; payload: boolean }
-  | { type: 'TOGGLE_AI_PANEL' };
+  | { type: 'TOGGLE_AI_PANEL' }
+  | { type: 'SET_REVIEW_SUGGESTION'; payload: string | null }
+  | { type: 'OPEN_LEARN'; payload: LearnSubject }
+  | { type: 'CLOSE_LEARN' };
 
 const initialState: UiState = {
   isMobileSidebarOpen: false,
   isAiSuggestionsOpen: false,
+  reviewSuggestionId: null,
+  learnThread: null,
 };
 
 function uiReducer(state: UiState, action: UiAction): UiState {
@@ -35,6 +47,15 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, isAiSuggestionsOpen: action.payload };
     case 'TOGGLE_AI_PANEL':
       return { ...state, isAiSuggestionsOpen: !state.isAiSuggestionsOpen };
+    case 'SET_REVIEW_SUGGESTION':
+      return { ...state, reviewSuggestionId: action.payload };
+    case 'OPEN_LEARN':
+      return {
+        ...state,
+        learnThread: { ...action.payload, id: (state.learnThread?.id ?? 0) + 1 },
+      };
+    case 'CLOSE_LEARN':
+      return state.learnThread ? { ...state, learnThread: null } : state;
     default:
       return state;
   }
@@ -46,6 +67,9 @@ const UiActionsContext = createContext<{
   toggleMobileSidebar: () => void;
   setAiSuggestionsOpen: (next: boolean) => void;
   toggleAiSuggestions: () => void;
+  setReviewSuggestionId: (id: string | null) => void;
+  openLearn: (subject: LearnSubject) => void;
+  closeLearn: () => void;
 } | null>(null);
 
 export function UiProvider({ children }: PropsWithChildren) {
@@ -67,14 +91,37 @@ export function UiProvider({ children }: PropsWithChildren) {
     dispatch({ type: 'TOGGLE_AI_PANEL' });
   }, []);
 
+  const setReviewSuggestionId = useCallback((id: string | null) => {
+    dispatch({ type: 'SET_REVIEW_SUGGESTION', payload: id });
+  }, []);
+
+  const openLearn = useCallback((subject: LearnSubject) => {
+    dispatch({ type: 'OPEN_LEARN', payload: subject });
+  }, []);
+
+  const closeLearn = useCallback(() => {
+    dispatch({ type: 'CLOSE_LEARN' });
+  }, []);
+
   const actions = useMemo(
     () => ({
       setMobileSidebarOpen,
       toggleMobileSidebar,
       setAiSuggestionsOpen,
       toggleAiSuggestions,
+      setReviewSuggestionId,
+      openLearn,
+      closeLearn,
     }),
-    [setAiSuggestionsOpen, setMobileSidebarOpen, toggleAiSuggestions, toggleMobileSidebar]
+    [
+      closeLearn,
+      openLearn,
+      setAiSuggestionsOpen,
+      setMobileSidebarOpen,
+      setReviewSuggestionId,
+      toggleAiSuggestions,
+      toggleMobileSidebar,
+    ]
   );
 
   return (

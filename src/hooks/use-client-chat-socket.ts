@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   requestMessages,
   SOCKET_BASE_URL,
+  socketAuth,
   getSocketAuthPayload,
   createSocketAuthHeaders,
   type RequestMessagePayload,
@@ -326,7 +327,7 @@ export function useClientChatSocket({
 
       const socket = io(`${SOCKET_BASE_URL}/chat`, {
         transports: ['websocket', 'polling'],
-        auth: authPayload,
+        auth: socketAuth(businessId),
         extraHeaders: headers,
         transportOptions: { polling: { extraHeaders: headers } },
         withCredentials: true,

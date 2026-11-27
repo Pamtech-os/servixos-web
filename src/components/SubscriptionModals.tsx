@@ -10,6 +10,7 @@ import WelcomePlanModal from '@/components/WelcomePlanModal';
 import { subscription as subscriptionApi } from '@/lib/api-client';
 import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
+import { fromMinorUnits } from '@/lib/money';
 
 // Lazy-load StripeCardModal so loadStripe() and Stripe's iframes only
 // initialize when a payment modal actually needs to open — not on every page.
@@ -113,7 +114,7 @@ const SubscriptionModals = () => {
         onOpenChange={(open) => { if (!open) setGracePeriodDismissed(true); }}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
-        renewalAmount={(sub?.pendingAmountDue ?? 0) / 100}
+        renewalAmount={fromMinorUnits(sub?.pendingAmountDue ?? 0, sub?.pendingCurrency ?? 'usd')}
         currency={sub?.pendingCurrency ?? 'usd'}
         daysRemaining={daysRemaining(sub?.gracePeriodEndsAt ?? null)}
         dueDate={formatDate(sub?.gracePeriodEndsAt ?? null)}
@@ -127,7 +128,7 @@ const SubscriptionModals = () => {
         open={isLocked && !isPaymentModalOpen && !isSetupModalOpen}
         planName={planLabel(sub?.plan ?? '')}
         billingCycle={billingLabel(sub?.billingInterval ?? 'monthly')}
-        renewalAmount={(sub?.pendingAmountDue ?? 0) / 100}
+        renewalAmount={fromMinorUnits(sub?.pendingAmountDue ?? 0, sub?.pendingCurrency ?? 'usd')}
         currency={sub?.pendingCurrency ?? 'usd'}
         lockedSince={formatDate(sub?.currentPeriodEnd ?? null)}
         fromTrial={sub?.gracePeriodEndsAt === null}

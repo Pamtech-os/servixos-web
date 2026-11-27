@@ -24,3 +24,16 @@ export function useJob(id: string) {
     enabled: isReady && !!id,
   });
 }
+
+export const JOB_WORKFLOW_KEY = 'job-workflow';
+
+export function useJobWorkflow(jobId: string | undefined) {
+  const { businessId, isReady } = useBusinessAuth();
+
+  return useQuery({
+    queryKey: [JOB_WORKFLOW_KEY, businessId, jobId],
+    queryFn: () => jobs.workflow(businessId, jobId!),
+    enabled: isReady && !!jobId,
+    staleTime: 0,
+  });
+}

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 interface TrialingBannerProps {
   trialEndsAt: string;
   planName: string;
+  hasPaymentMethod: boolean;
   onAddPaymentMethod?: () => void;
 }
 
@@ -56,8 +57,17 @@ const PARTICLES = Array.from({ length: 12 }, (_, i) => ({
   dur: 3 + (i % 3),
 }));
 
-const TrialingBanner = ({ trialEndsAt, planName, onAddPaymentMethod }: TrialingBannerProps) => {
+const TrialingBanner = ({
+  trialEndsAt,
+  planName,
+  hasPaymentMethod,
+  onAddPaymentMethod,
+}: TrialingBannerProps) => {
   const { d, h, m, s, diff } = useCountdown(trialEndsAt);
+  const trialEndDate = useMemo(
+    () => new Date(trialEndsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    [trialEndsAt]
+  );
   const isUrgent = diff < 3 * 86_400_000; // < 3 days
 
   return (
@@ -120,8 +130,12 @@ const TrialingBanner = ({ trialEndsAt, planName, onAddPaymentMethod }: TrialingB
               </motion.div>
               <p className='text-xs font-semibold text-white sm:text-sm'>
                 <span className='opacity-90'>Free trial active — </span>
-                <strong>{planName}</strong>
-                <span className='opacity-90'> plan. Add a card to keep access after trial ends.</span>
+                <strong className='capitalize'>{planName}</strong>
+                <span className='opacity-90'>
+                  {hasPaymentMethod
+                    ? ` plan. Your card on file will be charged on ${trialEndDate} unless you cancel.`
+                    : ' plan. Add a card to keep access after trial ends.'}
+                </span>
               </p>
             </div>
 
@@ -140,7 +154,7 @@ const TrialingBanner = ({ trialEndsAt, planName, onAddPaymentMethod }: TrialingB
                 </div>
               </div>
 
-              {onAddPaymentMethod && (
+              {onAddPaymentMethod && !hasPaymentMethod && (
                 <Button
                   size='sm'
                   onClick={onAddPaymentMethod}

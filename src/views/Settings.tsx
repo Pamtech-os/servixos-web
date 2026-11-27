@@ -14,10 +14,13 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import ConfirmModal from '@/components/ConfirmModal';
 import SubscriptionTab from '@/components/settings/SubscriptionTab';
+import AiLearningTab from '@/components/settings/AiLearningTab';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/sonner';
 import { HttpError } from '@/common/network/http-client';
-import { Building2, Bell, Shield, CreditCard, Loader2 } from 'lucide-react';
+import { Building2, Bell, Shield, CreditCard, Loader2, Volume2, Sparkles } from 'lucide-react';
+import { useSoundAlerts } from '@/hooks/use-sound-alerts';
+import { playNotificationSound, unlockAudio } from '@/lib/notification-sound';
 import { useBusinessProfileSettings, useNotificationPreferences } from '@/hooks/queries/use-settings';
 import {
   useUpdateBusinessProfileMutation,
@@ -144,13 +147,17 @@ const NotificationsTab = () => {
   const mutation = useUpdateNotificationsMutation();
   const [prefs, setPrefs] = useState<NotificationPreferences>({
     email: true,
+    inApp: true,
     newClient: true,
     payment: true,
   });
   const [savingKey, setSavingKey] = useState<keyof NotificationPreferences | null>(null);
 
+  const soundAlerts = useSoundAlerts();
+
   useEffect(() => {
-    if (notifData) setPrefs(notifData);
+    // Older responses have no inApp flag; the backend treats that as on.
+    if (notifData) setPrefs({ ...notifData, inApp: notifData.inApp ?? true });
   }, [notifData]);
 
   const handleToggle = async (key: keyof NotificationPreferences, value: boolean) => {
@@ -170,7 +177,14 @@ const NotificationsTab = () => {
     {
       key: 'email',
       label: 'Email Notifications',
-      description: 'Receive general updates and announcements via email.',
+      description:
+        'Receive updates, announcements and your morning priorities email. Turning this off stops all of them.',
+    },
+    {
+      key: 'inApp',
+      label: 'In-app notifications',
+      description:
+        'Pop-ups and the bell when a client books on your website. Turning this off stops them for everyone in your business.',
     },
     {
       key: 'newClient',
@@ -212,6 +226,27 @@ const NotificationsTab = () => {
             </div>
           </div>
         ))}
+
+        <Separator />
+        <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+          <div className='space-y-0.5'>
+            <Label>Sound alerts</Label>
+            <p className='text-sm text-muted-foreground'>
+              Play a sound when a new notification pops up. Saved on this device only.
+            </p>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => void unlockAudio().then(() => playNotificationSound('new_booking'))}
+              disabled={!soundAlerts.enabled}
+            >
+              <Volume2 size={14} /> Test sound
+            </Button>
+            <Switch checked={soundAlerts.enabled} onCheckedChange={soundAlerts.setEnabled} />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -390,12 +425,15 @@ const Settings = () => {
       </div>
 
       <Tabs defaultValue='business' className='space-y-6'>
-        <TabsList className='flex h-auto w-full min-h-0 flex-nowrap justify-start gap-1 overflow-x-auto p-1 lg:w-[520px]'>
+        <TabsList className='flex h-auto w-full min-h-0 flex-nowrap justify-start gap-1 overflow-x-auto p-1 lg:w-[600px]'>
           <TabsTrigger value='business' className='shrink-0 gap-1.5 px-3'>
             <Building2 size={16} /> Business
           </TabsTrigger>
           <TabsTrigger value='notifications' className='shrink-0 gap-1.5 px-3'>
             <Bell size={16} /> Notifications
+          </TabsTrigger>
+          <TabsTrigger value='ai' className='shrink-0 gap-1.5 px-3'>
+            <Sparkles size={16} /> AI
           </TabsTrigger>
           <TabsTrigger value='account' className='shrink-0 gap-1.5 px-3'>
             <Shield size={16} /> Account
@@ -411,6 +449,10 @@ const Settings = () => {
 
         <TabsContent value='notifications'>
           <NotificationsTab />
+        </TabsContent>
+
+        <TabsContent value='ai'>
+          <AiLearningTab />
         </TabsContent>
 
         <TabsContent value='account'>

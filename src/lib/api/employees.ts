@@ -80,6 +80,22 @@ export interface ClockStatusData {
   currentRecord?: ClockRecord | null;
 }
 
+/** GET /clock/me: the signed-in employee and their clock. */
+export interface ClockMe {
+  employee: {
+    id: string;
+    fullName: string;
+    email: string;
+    roleId: string;
+  };
+  clock: {
+    /** A break counts as clocked in. */
+    status: EmployeeClockStatus;
+    clockedInAt: string | null;
+    breakStartedAt: string | null;
+  };
+}
+
 // ─── Employees API ────────────────────────────────────────────────────────────
 
 export const employees = {
@@ -157,6 +173,12 @@ export const clock = {
       employeeId,
       breakDurationMinutes,
     }),
+
+  /** 404 for an owner or an account with no employee record. */
+  me: async (businessId: string): Promise<ClockMe> => {
+    const envelope = await protectedGet<ClockMe>('/clock/me', businessId);
+    return envelope.data;
+  },
 
   status: async (businessId: string, employeeId: string): Promise<ClockStatusData> => {
     const envelope = await protectedGet<ClockStatusData>(

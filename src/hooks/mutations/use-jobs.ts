@@ -4,6 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobs, type CreateJobInput, type UpdateJobInput, type Job } from '@/lib/api-client';
 import type { PaginationMeta } from '@/lib/pagination';
 import { useBusinessAuth } from '@/hooks/use-business-auth';
+import { AI_SUGGESTIONS_KEY } from '@/hooks/queries/use-ai-suggestions';
+import { JOB_WORKFLOW_KEY } from '@/hooks/queries/use-jobs';
 
 type JobsPage = { data: Job[]; meta: PaginationMeta };
 
@@ -38,8 +40,10 @@ export function useStartJob() {
 
   return useMutation({
     mutationFn: (id: string) => jobs.start(businessId, id),
-    onSuccess: () => {
+    onSuccess: (_job, id) => {
       void queryClient.invalidateQueries({ queryKey: ['jobs', businessId] });
+      void queryClient.invalidateQueries({ queryKey: [JOB_WORKFLOW_KEY, businessId, id] });
+      void queryClient.invalidateQueries({ queryKey: [AI_SUGGESTIONS_KEY, businessId] });
     },
   });
 }
@@ -50,8 +54,10 @@ export function useCompleteJob() {
 
   return useMutation({
     mutationFn: (id: string) => jobs.complete(businessId, id),
-    onSuccess: () => {
+    onSuccess: (_job, id) => {
       void queryClient.invalidateQueries({ queryKey: ['jobs', businessId] });
+      void queryClient.invalidateQueries({ queryKey: [JOB_WORKFLOW_KEY, businessId, id] });
+      void queryClient.invalidateQueries({ queryKey: [AI_SUGGESTIONS_KEY, businessId] });
     },
   });
 }

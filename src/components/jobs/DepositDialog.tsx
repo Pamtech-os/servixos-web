@@ -29,6 +29,7 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useCreatePayment } from '@/hooks/mutations/use-payments';
 import type { Job, PaymentMode } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 interface DepositDialogProps {
   open: boolean;
@@ -37,6 +38,7 @@ interface DepositDialogProps {
 }
 
 export default function DepositDialog({ open, onOpenChange, job }: DepositDialogProps) {
+  const money = useMoney();
   const [depositAmount, setDepositAmount] = useState(0);
   const [depositMode, setDepositMode] = useState<PaymentMode>('bank_transfer');
   const [depositDate, setDepositDate] = useState<Date>(new Date());
@@ -69,7 +71,7 @@ export default function DepositDialog({ open, onOpenChange, job }: DepositDialog
       {
         onSuccess: () => {
           toast.success('Deposit recorded', {
-            description: `$${depositAmount.toLocaleString()} deposit recorded for "${job.title}".`,
+            description: `${money.format(depositAmount)} deposit recorded for "${job.title}".`,
           });
           onOpenChange(false);
           resetForm();

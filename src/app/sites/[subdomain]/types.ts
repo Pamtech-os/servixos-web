@@ -1,3 +1,7 @@
+import type { SiteIllustrations, SiteProfile } from '@/lib/website/site-content';
+import type { SiteImages } from '@/lib/website/site-images';
+import type { SiteTemplate } from '@/lib/website/site-templates';
+
 export type BookingFieldKey =
   | 'clientName'
   | 'clientEmail'
@@ -28,6 +32,8 @@ export interface WebsitePublicData {
     colorPrimary: string;
     colorSecondary: string;
     font: string;
+    /** Missing on API versions that predate templates; treated as classic. */
+    template?: SiteTemplate;
     logoUrl?: string;
     aiContent?: {
       hero: {
@@ -50,12 +56,16 @@ export interface WebsitePublicData {
       contact: {
         callToAction: string;
       };
+      illustrations?: SiteIllustrations;
     };
     bookingForm?: {
       title: string;
       description?: string;
       fields: BookingField[];
     };
+    profile?: SiteProfile;
+    /** Resolved per section: the owner's photo wins over the AI illustration. */
+    images?: SiteImages;
   };
 }
 

@@ -100,6 +100,49 @@ export interface UpdateContractInput {
   signedAt?: string;
 }
 
+// ─── Workflow types ───────────────────────────────────────────────────────────
+
+export type JobWorkflowStage =
+  | 'needs_contract'
+  | 'contract_draft'
+  | 'awaiting_signature'
+  | 'needs_invoice'
+  | 'awaiting_payment'
+  | 'ready_to_start'
+  | 'notify_start'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'price_required';
+
+export type JobWorkflowStepKey =
+  | 'contract_generated'
+  | 'contract_sent'
+  | 'contract_signed'
+  | 'invoice_sent'
+  | 'deposit_paid'
+  | 'job_started'
+  | 'client_notified'
+  | 'job_completed';
+
+export interface JobWorkflowStep {
+  key: JobWorkflowStepKey;
+  done: boolean;
+  at: string | null;
+}
+
+export interface JobWorkflow {
+  jobId: string;
+  stage: JobWorkflowStage;
+  /** Server order is pipeline order. */
+  steps: JobWorkflowStep[];
+  contractId: string | null;
+  invoiceId: string | null;
+  price: number | null;
+  depositRequired: number | null;
+  paidTotal: number;
+}
+
 // ─── Jobs API ─────────────────────────────────────────────────────────────────
 
 export const jobs = {
@@ -142,6 +185,18 @@ export const jobs = {
 
   bulkDelete: (businessId: string, ids: string[]): Promise<BulkDeleteResult> =>
     protectedRequest<BulkDeleteResult>('DELETE', '/jobs', businessId, { ids }),
+
+  workflow: async (businessId: string, id: string): Promise<JobWorkflow> => {
+    const envelope = await protectedGet<JobWorkflow>(`/jobs/${id}/workflow`, businessId);
+    return envelope.data;
+  },
+
+  /**
+   * Emails the job's contract with a signing link; the contract is marked sent only once the
+   * mail provider accepts it.
+   */
+  sendContract: (businessId: string, jobId: string): Promise<{ queued: boolean }> =>
+    protectedRequest<{ queued: boolean }>('POST', `/jobs/${jobId}/contract/send`, businessId),
 };
 
 // ─── Contracts API ────────────────────────────────────────────────────────────
@@ -182,8 +237,6 @@ export const contracts = {
     return envelope.data;
   },
 
-  send: (businessId: string, id: string, clientEmail: string): Promise<{ queued: boolean }> =>
-    protectedRequest<{ queued: boolean }>('POST', `/contracts/${id}/send`, businessId, {
-      clientEmail,
-    }),
+  // No `send`: POST /contracts/:id/send marks the contract sent before emailing and its email
+  // has no signing link. Use `jobs.sendContract` or the AI panel's review card instead.
 };

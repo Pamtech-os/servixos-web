@@ -1,0 +1,249 @@
+'use client';
+
+import { useState } from 'react';
+import { Globe, ImagePlus, Loader2, MessageSquarePlus, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
+import type { WebsitePreview } from '@/lib/api-client';
+import { useRegeneratePreview } from '@/hooks/mutations/use-onboarding';
+import { HttpError, getApiErrorMessage } from '@/common/network/http-client';
+import { servicePrice } from '@/lib/website/site-content';
+import { indexByServiceName, nameKey, resolveSiteImages } from '@/lib/website/site-images';
+
+const MAX_INSTRUCTIONS_LENGTH = 1000;
+
+interface WebsitePreviewPanelProps {
+  preview: WebsitePreview | undefined;
+  isLoading: boolean;
+  /** Generation needs a drafted concept and brand. */
+  canGenerate: boolean;
+}
+
+const SitePreview = ({ preview }: { preview: WebsitePreview }) => {
+  const { business, website } = preview;
+  const content = website.aiContent;
+  const primary = website.colorPrimary;
+  const secondary = website.colorSecondary;
+  const services = content?.services.length
+    ? content.services
+    : business.services.map((name) => ({ name, description: '' }));
+  const testimonial = content?.testimonialPlaceholder;
+  const images = resolveSiteImages(website.images, content?.illustrations, business.name);
+  const serviceImages = indexByServiceName(images.services);
+  const profile = website.profile;
+
+  return (
+    <div
+      className='overflow-hidden rounded-xl border border-border bg-white text-slate-900'
+      style={{ fontFamily: website.font }}
+    >
+      {/* Browser chrome */}
+      <div className='flex items-center gap-1.5 border-b border-slate-200 bg-slate-100 px-3 py-2'>
+        {['#f87171', '#fbbf24', '#34d399'].map((c) => (
+          <span key={c} className='h-2.5 w-2.5 rounded-full' style={{ background: c }} />
+        ))}
+        <span className='ml-2 truncate text-[11px] text-slate-500'>{business.name}</span>
+      </div>
+
+      <section
+        className='px-6 py-10 text-white'
+        style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+      >
+        <p className='text-xs font-semibold uppercase tracking-wider opacity-80'>{business.name}</p>
+        <h3 className='mt-2 text-2xl font-bold leading-tight'>
+          {content?.hero.headline ?? `Welcome to ${business.name}`}
+        </h3>
+        <p className='mt-2 text-sm opacity-90'>
+          {content?.hero.subheadline ?? business.description ?? business.categoryName}
+        </p>
+        <span className='mt-4 inline-block rounded-full bg-white px-4 py-2 text-xs font-semibold' style={{ color: primary }}>
+          {content?.hero.ctaText ?? 'Book a Service'}
+        </span>
+        {images.hero && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={images.hero.url}
+            alt={images.hero.alt}
+            className='mt-6 w-full rounded-lg bg-white/90 shadow-lg animate-in fade-in duration-700'
+          />
+        )}
+      </section>
+
+      {(profile?.valueProposition || (profile?.targetCustomers.length ?? 0) > 0) && (
+        <section className='space-y-3 px-6 pt-6'>
+          {profile?.valueProposition && (
+            <p className='text-sm font-semibold' style={{ color: primary }}>
+              {profile.valueProposition}
+            </p>
+          )}
+          {(profile?.targetCustomers.length ?? 0) > 0 && (
+            <div className='flex flex-wrap gap-1.5'>
+              {profile!.targetCustomers.map((c) => (
+                <span key={c} className='rounded-full px-2.5 py-0.5 text-[11px] font-medium' style={{ color: primary, background: `${primary}14` }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {content?.about && (
+        <section className='px-6 py-6'>
+          <h4 className='text-base font-bold'>{content.about.title}</h4>
+          <p className='mt-1 text-sm text-slate-600'>{content.about.body}</p>
+          {images.about && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={images.about.url} alt={images.about.alt} className='mt-3 w-full rounded-lg border border-slate-100 animate-in fade-in duration-700' />
+          )}
+        </section>
+      )}
+
+      {services.length > 0 && (
+        <section className='bg-slate-50 px-6 py-6'>
+          <h4 className='text-base font-bold'>Services</h4>
+          <div className='mt-3 grid gap-2 sm:grid-cols-2'>
+            {services.map((s) => {
+              const image = serviceImages.get(nameKey(s.name));
+              const price = servicePrice(profile, s.name);
+              return (
+                <div key={s.name} className='overflow-hidden rounded-lg border border-slate-200 bg-white'>
+                  {image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={image.url} alt={image.alt} className='aspect-[4/3] w-full object-cover animate-in fade-in duration-700' />
+                  )}
+                  <div className='p-3'>
+                    <div className='flex items-start justify-between gap-2'>
+                      <p className='text-sm font-semibold' style={{ color: primary }}>
+                        {s.name}
+                      </p>
+                      {price && <span className='shrink-0 text-xs font-semibold text-slate-700'>{price}</span>}
+                    </div>
+                    {s.description && <p className='mt-1 text-xs text-slate-600'>{s.description}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {testimonial && (
+        <section className='px-6 py-6'>
+          {testimonial.isPlaceholder ? (
+            // Shown as a placeholder only; the public site hides it until replaced.
+            <div className='rounded-lg border-2 border-dashed border-slate-300 p-4 text-center'>
+              <MessageSquarePlus className='mx-auto h-5 w-5 text-slate-400' />
+              <p className='mt-1 text-xs font-semibold text-slate-500'>Add a real review</p>
+              <p className='mt-1 text-xs italic text-slate-400'>&ldquo;{testimonial.quote}&rdquo;</p>
+            </div>
+          ) : (
+            <blockquote className='rounded-lg bg-slate-50 p-4 text-sm italic text-slate-700'>
+              &ldquo;{testimonial.quote}&rdquo;
+              <footer className='mt-2 text-xs not-italic text-slate-500'>— {testimonial.author}</footer>
+            </blockquote>
+          )}
+        </section>
+      )}
+
+      {content?.contact && (
+        <section className='px-6 pb-8 pt-2 text-center'>
+          <p className='text-sm font-medium'>{content.contact.callToAction}</p>
+        </section>
+      )}
+    </div>
+  );
+};
+
+const WebsitePreviewPanel = ({ preview, isLoading, canGenerate }: WebsitePreviewPanelProps) => {
+  const [instructions, setInstructions] = useState('');
+  const regenerate = useRegeneratePreview();
+  const hasContent = Boolean(preview?.generatedAt);
+
+  const handleGenerate = async () => {
+    try {
+      await regenerate.mutateAsync(instructions.trim() || undefined);
+      setInstructions('');
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 503) {
+        toast.error('Website generation failed', { description: 'Please try again in a moment.' });
+      } else if (err instanceof HttpError && err.status === 429) {
+        toast.error('Too many previews', { description: 'Wait a minute before regenerating.' });
+      } else {
+        toast.error(getApiErrorMessage(err));
+      }
+    }
+  };
+
+  return (
+    <div className='space-y-3'>
+      <div className='flex gap-2'>
+        <Input
+          value={instructions}
+          maxLength={MAX_INSTRUCTIONS_LENGTH}
+          onChange={(e) => setInstructions(e.target.value)}
+          placeholder={hasContent ? 'e.g. a warmer hero, shorter about section' : 'Optional style notes'}
+          disabled={!canGenerate || regenerate.isPending}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void handleGenerate();
+          }}
+        />
+        <Button
+          onClick={() => void handleGenerate()}
+          disabled={!canGenerate || regenerate.isPending}
+          className='shrink-0'
+        >
+          {regenerate.isPending ? (
+            <Loader2 className='h-4 w-4 animate-spin' />
+          ) : hasContent ? (
+            <RefreshCw className='h-4 w-4' />
+          ) : (
+            <Wand2 className='h-4 w-4' />
+          )}
+          {hasContent ? 'Regenerate' : 'Generate'}
+        </Button>
+      </div>
+
+      {!canGenerate && (
+        <p className='text-xs text-muted-foreground'>
+          Your website preview unlocks once the AI has drafted your concept and brand.
+        </p>
+      )}
+
+      {preview?.illustrationStatus === 'pending' && !regenerate.isPending && (
+        <p className='flex items-center gap-1.5 text-xs text-muted-foreground'>
+          <Sparkles className='h-3.5 w-3.5 animate-pulse' />
+          Drawing custom illustrations for your site. They&apos;ll appear here in a minute or two.
+        </p>
+      )}
+
+      {isLoading || regenerate.isPending ? (
+        <Skeleton className='h-[420px] rounded-xl' />
+      ) : preview ? (
+        <SitePreview preview={preview} />
+      ) : (
+        <div className='flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-16 text-center'>
+          <Globe className='h-8 w-8 text-muted-foreground' />
+          <p className='text-sm text-muted-foreground'>Your website preview will appear here.</p>
+        </div>
+      )}
+
+      {hasContent && (
+        <p className='flex items-start gap-1.5 text-[11px] text-muted-foreground'>
+          <ImagePlus className='mt-px h-3.5 w-3.5 shrink-0' />
+          After you launch, you can swap any illustration for your own photos and add a gallery
+          in the Website Builder.
+        </p>
+      )}
+
+      <p className='text-[11px] text-muted-foreground'>
+        This is a preview. Your site is saved unpublished when you launch, and you can publish
+        it from the Website Builder.
+      </p>
+    </div>
+  );
+};
+
+export default WebsitePreviewPanel;

@@ -13,7 +13,8 @@ import { toast } from '@/components/ui/sonner';
 import { getApiErrorMessage } from '@/common/network/http-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLogin } from '@/hooks/mutations/use-auth';
-import { decodeJwt } from '@/lib/api-client';
+import { decodeJwt, onboarding } from '@/lib/api-client';
+import { pathForOnboardingStep } from '@/lib/onboarding-route';
 import servixLogo from '@/assets/servix-logo.png';
 // Light mode disabled — app is dark-only.
 // import ThemeToggle from '@/components/ThemeToggle';
@@ -30,13 +31,29 @@ const Login = () => {
   const hasNavigatedRef = useRef(false);
 
   const routeAfterAuth = useCallback(
-    (options: { mustChangePassword?: boolean; isPinVerified: boolean }) => {
+    async (options: {
+      mustChangePassword?: boolean;
+      isPinVerified: boolean;
+      hasBusiness: boolean;
+    }) => {
       if (hasNavigatedRef.current) return;
       hasNavigatedRef.current = true;
       setIsRedirecting(true);
 
       if (options.mustChangePassword) {
         router.replace('/complete-setup');
+        return;
+      }
+
+      // An owner who verified their email but has no business holds an onboarding
+      // session; the status endpoint says where they left off.
+      if (!options.hasBusiness) {
+        try {
+          const status = await onboarding.status();
+          router.replace(pathForOnboardingStep(status.nextStep));
+        } catch {
+          router.replace('/onboarding');
+        }
         return;
       }
 
@@ -47,14 +64,16 @@ const Login = () => {
 
   useEffect(() => {
     if (!isHydrated || !auth.isLoggedIn || hasNavigatedRef.current) return;
-    routeAfterAuth({
+    void routeAfterAuth({
       mustChangePassword: auth.user?.mustChangePassword,
       isPinVerified: auth.isPinVerified,
+      hasBusiness: Boolean(auth.user?.businessId),
     });
   }, [
     auth.isLoggedIn,
     auth.isPinVerified,
     auth.user?.mustChangePassword,
+    auth.user?.businessId,
     isHydrated,
     routeAfterAuth,
   ]);
@@ -84,14 +103,15 @@ const Login = () => {
       setSession(session);
       const pinVerified = (() => {
         try {
-          return decodeJwt(session.accessToken).pinVerified;
+          return decodeJwt(session.accessToken).pinVerified ?? false;
         } catch {
           return false;
         }
       })();
-      routeAfterAuth({
+      await routeAfterAuth({
         mustChangePassword: session.user.mustChangePassword,
         isPinVerified: pinVerified,
+        hasBusiness: Boolean(session.user.businessId),
       });
     } catch (err) {
       setIsRedirecting(false);
@@ -220,7 +240,9 @@ const Login = () => {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {fieldErrors.password && <p className='text-xs text-destructive'>{fieldErrors.password}</p>}
+              {fieldErrors.password && (
+                <p className='text-xs text-destructive'>{fieldErrors.password}</p>
+              )}
             </div>
 
             <div className='flex justify-end'>

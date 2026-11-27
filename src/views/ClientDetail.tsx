@@ -34,6 +34,7 @@ import { getApiErrorMessage } from '@/common/network/http-client';
 import ChatUI from '@/components/ChatUI';
 import { format } from 'date-fns';
 import type { JobStatus } from '@/lib/api-client';
+import { useMoney } from '@/hooks/use-money';
 
 const statusColors: Record<string, string> = {
   paid: 'bg-green-500/10 text-green-600 dark:text-green-400',
@@ -88,6 +89,7 @@ const formatDate = (value?: string | null) => {
 };
 
 const ClientDetail = () => {
+  const money = useMoney();
   const params = useParams<{ id: string }>();
   const id = typeof params?.id === 'string' ? params.id : '';
   const router = useRouter();
@@ -366,7 +368,7 @@ const ClientDetail = () => {
                         </div>
                         <div className='flex items-center gap-3'>
                           <span className='font-display font-semibold'>
-                            ${inv.price.toLocaleString()}
+                            {money.format(inv.price)}
                           </span>
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[inv.status]}`}
@@ -500,7 +502,7 @@ const ClientDetail = () => {
                         </div>
                         <div className='flex items-center gap-3'>
                           <span className='font-display font-semibold'>
-                            ${contract.amount.toLocaleString()}
+                            {money.format(contract.amount)}
                           </span>
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColors[contract.status]}`}

@@ -21,6 +21,8 @@ export interface UpdateBusinessProfileInput {
 
 export interface NotificationPreferences {
   email: boolean;
+  /** Pop-ups and the bell, for the whole business. */
+  inApp: boolean;
   newClient: boolean;
   payment: boolean;
 }
