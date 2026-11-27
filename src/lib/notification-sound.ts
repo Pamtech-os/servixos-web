@@ -79,8 +79,6 @@ interface ToneOptions {
   start: number;
   duration: number;
   gain: number;
-  /** Semitone pitch bend over the note, for a rising "zing". */
-  bend?: number;
   detune?: number;
 }
 
@@ -90,7 +88,6 @@ function tone(ctx: AudioContext, out: AudioNode, o: ToneOptions) {
   osc.type = o.type;
   osc.detune.value = o.detune ?? 0;
   osc.frequency.setValueAtTime(o.freq, o.start);
-  if (o.bend) osc.frequency.exponentialRampToValueAtTime(o.freq * 2 ** (o.bend / 12), o.start + o.duration);
   // Fast attack, exponential decay: a plucked, bell-like envelope.
   env.gain.setValueAtTime(0.0001, o.start);
   env.gain.exponentialRampToValueAtTime(o.gain, o.start + 0.012);
@@ -100,30 +97,8 @@ function tone(ctx: AudioContext, out: AudioNode, o: ToneOptions) {
   osc.stop(o.start + o.duration + 0.05);
 }
 
-/** Filtered white noise swept upwards: the "whoosh" that opens the booking sound. */
-function whoosh(ctx: AudioContext, out: AudioNode, start: number, duration: number, gain: number) {
-  const length = Math.ceil(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-  const samples = buffer.getChannelData(0);
-  for (let i = 0; i < length; i++) samples[i] = Math.random() * 2 - 1;
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.Q.value = 1.4;
-  filter.frequency.setValueAtTime(300, start);
-  filter.frequency.exponentialRampToValueAtTime(6000, start + duration);
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0.0001, start);
-  env.gain.exponentialRampToValueAtTime(gain, start + duration * 0.7);
-  env.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  source.connect(filter).connect(env).connect(out);
-  source.start(start);
-}
-
 function masterBus(ctx: AudioContext, volume: number) {
-  // The compressor keeps the stacked layers loud without clipping.
+  // The compressor keeps stacked notes from clipping.
   const compressor = ctx.createDynamicsCompressor();
   compressor.threshold.value = -14;
   compressor.ratio.value = 6;
@@ -135,40 +110,48 @@ function masterBus(ctx: AudioContext, volume: number) {
 
 // ─── Sounds ───────────────────────────────────────────────────────────────────
 
-/** Loud and celebratory: whoosh, a racing major arpeggio, a shimmering chord and sparkles. */
+/** A felt-mallet note: the fundamental plus soft, fast-fading overtones, like a vibraphone. */
+function mallet(ctx: AudioContext, out: AudioNode, note: number, start: number, duration: number, gain: number) {
+  const freq = midiToHz(note);
+  tone(ctx, out, { type: 'sine', freq, start, duration, gain });
+  tone(ctx, out, { type: 'sine', freq: freq * 2, start, duration: duration * 0.45, gain: gain * 0.25 });
+  tone(ctx, out, { type: 'sine', freq: freq * 4, start, duration: 0.12, gain: gain * 0.06 });
+}
+
+/** A short, soft echo that gives the booking sound a sense of room. */
+function room(ctx: AudioContext, out: AudioNode): AudioNode {
+  const input = ctx.createGain();
+  const delay = ctx.createDelay();
+  delay.delayTime.value = 0.17;
+  const feedback = ctx.createGain();
+  feedback.gain.value = 0.28;
+  const damp = ctx.createBiquadFilter();
+  damp.type = 'lowpass';
+  damp.frequency.value = 2200;
+  const wet = ctx.createGain();
+  wet.gain.value = 0.22;
+  input.connect(out);
+  input.connect(delay).connect(damp).connect(feedback).connect(delay);
+  damp.connect(wet).connect(out);
+  return input;
+}
+
+/** Warm and unhurried: a rolled Ab major 9 chord on mallets over a low root, with a little room. */
 function playBookingSound(ctx: AudioContext) {
-  const out = masterBus(ctx, 0.9);
+  const master = masterBus(ctx, 0.75);
+  // Takes the edge off the overtones so nothing sounds bright or toy-like.
+  const lowpass = ctx.createBiquadFilter();
+  lowpass.type = 'lowpass';
+  lowpass.frequency.value = 3200;
+  lowpass.connect(master);
+  const out = room(ctx, lowpass);
   const t = ctx.currentTime + 0.02;
 
-  whoosh(ctx, out, t, 0.35, 0.5);
-
-  // C major arpeggio up two octaves, doubled with a detuned saw for width.
-  const arpeggio = [72, 76, 79, 84, 88, 91];
-  arpeggio.forEach((note, i) => {
-    const start = t + 0.22 + i * 0.065;
-    tone(ctx, out, { type: 'square', freq: midiToHz(note), start, duration: 0.18, gain: 0.22 });
-    tone(ctx, out, { type: 'sawtooth', freq: midiToHz(note), start, duration: 0.16, gain: 0.1, detune: 12 });
+  // Ab4, C5, Eb5, G5: each note rings on under the next.
+  [68, 72, 75, 79].forEach((note, i) => {
+    mallet(ctx, out, note, t + i * 0.11, 1.6 - i * 0.15, 0.26);
   });
-
-  // Final chord with an upward bend, held long enough to ring out.
-  const chordStart = t + 0.22 + arpeggio.length * 0.065;
-  [84, 88, 91, 96].forEach((note, i) => {
-    tone(ctx, out, { type: 'triangle', freq: midiToHz(note), start: chordStart, duration: 1.1, gain: 0.32, bend: 0.3 });
-    tone(ctx, out, { type: 'sine', freq: midiToHz(note + 12), start: chordStart + i * 0.01, duration: 0.8, gain: 0.12 });
-  });
-  // Sub thump under the chord.
-  tone(ctx, out, { type: 'sine', freq: midiToHz(48), start: chordStart, duration: 0.45, gain: 0.5, bend: -12 });
-
-  // Sparkles: quick random high pings over the tail.
-  for (let i = 0; i < 10; i++) {
-    tone(ctx, out, {
-      type: 'sine',
-      freq: 2200 + Math.random() * 2600,
-      start: chordStart + 0.08 + i * 0.06,
-      duration: 0.12,
-      gain: 0.08,
-    });
-  }
+  tone(ctx, out, { type: 'sine', freq: midiToHz(44), start: t, duration: 1.4, gain: 0.18 });
 }
 
 /** Quiet two-note chime for any other notification type. */
