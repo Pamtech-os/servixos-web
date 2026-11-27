@@ -671,6 +671,12 @@ const MyWebsite = () => {
                           <option>{field.placeholder}</option>
                           {field.options?.map((o) => <option key={o}>{o}</option>)}
                         </select>
+                      ) : field.type === 'date' ? (
+                        // Mirrors the site's calendar picker rather than the browser's date box.
+                        <div className='flex w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground opacity-70'>
+                          {field.placeholder || 'Pick a date'}
+                          <CalendarIcon size={12} />
+                        </div>
                       ) : (
                         <Input
                           type={field.type}
