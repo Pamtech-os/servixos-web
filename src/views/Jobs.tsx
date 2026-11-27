@@ -718,7 +718,8 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {contractSigned && (
+                {/* Billing happens before the job starts; once it's under way the deposit is settled. */}
+                {contractSigned && viewJob.status === 'pending' && (
                   <Button
                     variant='outline'
                     onClick={handleCreateInvoice}
@@ -734,7 +735,7 @@ const Jobs = () => {
                   </Button>
                 )}
 
-                {contractSigned && (
+                {contractSigned && viewJob.status === 'pending' && (
                   <Button
                     variant='outline'
                     onClick={() => setDepositDialogOpen(true)}

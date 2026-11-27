@@ -88,9 +88,14 @@ export default function ContractReviewDialog({
           <div className='flex-1 space-y-3 overflow-y-auto py-2'>
             <p className='text-sm font-medium'>{contract.title}</p>
             {contract.html ? (
-              <div
-                className='max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed'
-                dangerouslySetInnerHTML={{ __html: contract.html }}
+              // The contract html is styled for a white page (it's what the PDF renders), so it
+              // goes in a sandboxed iframe: the app's dark theme can't fade its text and its
+              // styles can't leak into the app. sandbox='' also blocks any scripts in it.
+              <iframe
+                title={contract.title}
+                sandbox=''
+                srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#fff;color:#111;color-scheme:light;font:14px/1.6 system-ui,sans-serif}body{padding:20px}</style></head><body>${contract.html}</body></html>`}
+                className='h-[55dvh] w-full rounded-lg border bg-white'
               />
             ) : contract.pdfUrl ? (
               <a
