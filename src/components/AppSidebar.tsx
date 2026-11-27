@@ -17,7 +17,6 @@ import {
   // Moon,
   // Sun,
   Activity,
-  BarChart3,
   Inbox,
   Sparkles,
   Bot,
@@ -94,7 +93,8 @@ const navEntries: NavEntry[] = [
     label: 'Insights & AI',
     icon: Brain,
     items: [
-      { label: 'Analytics', href: '/analytics', icon: BarChart3, accessKey: 'canViewAnalytics' },
+      // Hidden for now; the /analytics page still exists.
+      // { label: 'Analytics', href: '/analytics', icon: BarChart3, accessKey: 'canViewAnalytics' },
       { label: 'AI Insights', href: '/ai-insights', icon: Sparkles, accessKey: 'canViewAiInsights' },
       { label: 'AI Advisor', href: '/ai-advisor', icon: Bot, accessKey: 'canViewAiAdvisor' },
     ],
